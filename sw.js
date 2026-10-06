@@ -3,12 +3,12 @@
    Bilder und Musik kommen zuerst aus dem Speicher. Ihre Adressen tragen eine Prüfsumme (js/assets.js),
    deshalb bleiben sie über Updates hinweg gespeichert, und nur geänderte Dateien werden neu geladen.
    originale/, neue-bilder/, docs/ und tools/ werden nie gespeichert. */
-const CACHE = "flaggschiff-1791304908";
+const CACHE = "flaggschiff-1791306574";
 const MEDIA = "flaggschiff-medien";
 importScripts("js/assets.js");
 const CORE = ["./", "./index.html", "./css/style.css", "./js/assets.js", "./js/pwa.js", "./js/world.js", "./js/mapdata.js",
-  "./js/i18n.js", "./js/engine.js", "./js/ui.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png",
-  "./icon-maskable-512.png", "./apple-touch-icon.png"];
+  "./js/i18n.js", "./js/engine.js", "./js/ui.js", "./manifest.webmanifest", "./icon-192.png", "./apple-touch-icon.png"];
+// icon-512.png und icon-maskable-512.png braucht nur das Betriebssystem beim Installieren, deshalb nicht im Speicher
 const MEDIA_URLS = new Set(Object.values(self.ASSETS).map(u => new URL(u, location.href).href));
 const BASE = new URL("./", location.href).pathname;
 

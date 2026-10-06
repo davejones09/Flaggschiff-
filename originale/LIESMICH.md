@@ -310,6 +310,10 @@ Museumshalle als Einzelbild (Alternative zu `mus_halle`).
 - `mk_reise` – unten links
 - `mk_reklame` – oben links
 
+## App-Icon
+
+`icon/app-icon.png` ist das Original des App-Icons (1254 × 1254, Goldrahmen mit runden Ecken auf weißem Grund, seit v4.4.3). `python3 tools/icons.py` erzeugt daraus `apple-touch-icon.png` (iPhone, mit Rahmen, Ecken golden), `icon-192.png` und `icon-512.png` (mit Rahmen, Ecken durchsichtig) sowie `icon-maskable-512.png` (Android, ohne Rahmen, auf 88 % verkleinert).
+
 ## Musik
 
 | Spiel | Titel | Datei |
