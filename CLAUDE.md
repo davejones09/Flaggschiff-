@@ -2,7 +2,7 @@
 
 ## Das Projekt
 - Reederei-Managementspiel: eine Reederei für Personenschifffahrt ab 1880 durch die Jahrzehnte führen.
-- Läuft als Web-App (PWA) über GitHub Pages, gespielt auf iPhone und am PC. Aktueller Stand: v4.4.
+- Läuft als Web-App (PWA) über GitHub Pages, gespielt auf iPhone und am PC. Aktueller Stand: v4.4.2.
 - Sprachen: Deutsch (Original), Englisch, Spanisch über das eigene Übersetzungssystem (I18N_CORE, I18N_EN, I18N_ES). Neue Texte immer in allen drei Sprachen pflegen.
 - Heimathäfen Hamburg, Liverpool, London. Bei britischem Heimathafen Pfund statt Mark (die Währung hängt am Heimathafen, nicht an der Sprache).
 - Hausstil: Nachtblau und Messing, weißer achtzackiger Stern. Grafik vollwertig 2D in hoher Auflösung, keine Pixelart, kein 3D.
@@ -16,6 +16,7 @@
 - `originale/`: hochauflösende Bildbögen und Musik-Originale samt `LIESMICH.md` mit der Zuordnung Bildbogen → Spielbild. Nur als Quelle zum Neu-Zuschneiden, nicht in `sw.js` cachen.
 - `neue-bilder/`: hier lädt David neue Bilder hoch. Nach der Übernahme nach `originale/` verschieben.
 - `docs/`: Updatelog (`updatelog.md`, `Updatelog.pdf`, `Updatelog_Emil.pdf`).
+- `tools/`: Hilfsskripte (Python). `assets.py` erzeugt `js/assets.js` (nach jeder Änderung in `assets/` ausführen), `bilder.py` schneidet die Spielbilder aus `originale/` (Rahmen in `tools/zuschnitt.json`), `musik.py` komprimiert die Musik, `updatelog_pdf.py` baut aus `docs/updatelog.md` beide PDFs.
 
 ## Ablauf bei Updates
 1. Bevor gebaut wird: sagen, welche neuen Bilder gebraucht werden (Motiv, Format, Dateiname).
@@ -26,6 +27,7 @@
 5. Versionsnummer erhöhen und den CACHE-Namen in `sw.js` ändern, damit die App das Update holt.
 6. Updatelog fortschreiben (`docs/updatelog.md`) und als PDF ausgeben (`docs/Updatelog.pdf`): alle Versionen, neueste am Ende.
    Dazu jedes Mal eine Tester-Ausgabe für Emil (`docs/Updatelog_Emil.pdf`), in der alles zum Easter Egg um Kapitän Emil geschwärzt ist.
+   Emil-Stellen in der md zwischen `<!--emil-->` und `<!--/emil-->` setzen, dann `python3 tools/updatelog_pdf.py`.
 7. Am Ende einen Pull Request auf `main` erstellen. David merged selbst.
 
 ## Kommunikation
