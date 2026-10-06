@@ -350,7 +350,7 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Fähren-Konfigurator: Die vier Antriebe stehen in einer Zeile, „Motor“ rutscht nicht mehr allein in die zweite Zeile.
 - Die acht Bilder britischer Häfen und Ereignisse aus v4.2 fehlten im Spiel. Jetzt sind sie da: Liverpool, Dover, Douglas, Queenstown, Clyde, Holyhead, Manchester-Schiffskanal und Dockstreik.
 
-## v4.4.2 · Schärfere Bilder, bessere Musik · aktuell
+## v4.4.2 · Schärfere Bilder, bessere Musik
 
 *Mehr Qualität, ohne dass die App langsamer startet.*
 
@@ -360,6 +360,18 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Augusta Victoria und City of Paris: Das Schiff ist im Bild jetzt etwas größer.
 - Musik neu aus den Originalen komprimiert, mit 96 statt 36 kbit/s und so laut wie bisher. Sie spielt schon, während sie noch lädt.
 - Trotz größerer Dateien startet die App so schnell wie vorher: Bilder und Musik kommen erst, wenn sie gebraucht werden; der Rest wird im Hintergrund gespeichert.
+
+## v4.4.3 · Neues App-Icon · aktuell
+
+*Flaggschiff bekommt ein eigenes Gesicht auf dem Home-Bildschirm.*
+
+**NEU**
+
+- Neues App-Icon: ein Ozeandampfer mit den Sternschornsteinen der Reederei vor einer Kompassrose, im Messingrahmen. Auf Android und am PC erscheint es von selbst. Auf dem iPhone erst, wenn die Web-App neu zum Home-Bildschirm hinzugefügt wird – vorher im Kontor den Spielstand exportieren und danach wieder importieren.
+
+**GEÄNDERT**
+
+- Die großen Icons werden nicht mehr bei jedem Update neu geladen.
 
 ## Als Nächstes geplant
 
