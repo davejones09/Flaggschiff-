@@ -1,6 +1,6 @@
 # Updatelog
 
-*Alle Versionen des spielbaren Prototyps · Stand 28. September 2026*
+*Alle Versionen des spielbaren Prototyps · Stand 6. Oktober 2026*
 
 Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spielstände werden beim Update automatisch übernommen.
 
@@ -315,7 +315,7 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Im Linienmenü sind Vergnügungsreisen, Kundengruppen, Werbung, Flachwasser-Hinweis und Kapitänsschwerpunkte übersetzt.
 - Alle Fehlermeldungen und Kurzhinweise (zum Beispiel „Zu weit für diesen Schiffstyp“) sowie die Musiktitel gibt es jetzt auch auf Englisch.
 
-## v4.4 · Español · aktuell
+## v4.4 · Español
 
 *Flaggschiff spricht jetzt drei Sprachen.*
 
@@ -331,7 +331,26 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Der Begrüßungshinweis im leeren Kontor wird jetzt auch auf Englisch und Spanisch vollständig übersetzt.
 - Neue Entwürfe im Fähren-Konfigurator heißen je nach Sprache „Entwurf“, „Design“ oder „Diseño“.
 
+## v4.4.1 · Feinschliff, britische Bilder, PC-Layout · aktuell
+
+*Kleine Fehler behoben – und das PC-Layout gehört jetzt zur Hauptversion.*
+
+**NEU**
+
+- PC-Layout ab 1100 px Breite: links die Bereiche mit den wichtigsten Kennzahlen, rechts Seekarte und Zeitung, der Maschinentelegraf sitzt oben. Steuerung auch per Tastatur: Leertaste hält die Zeit an oder lässt sie weiterlaufen, 0 bis 3 stellen den Telegrafen, K, L, F, W, M und B wechseln die Bereiche, 1 bis 9 wählen bei Ereignissen die Antwort, Esc schließt Fenster. Auf dem Handy bleibt alles wie gewohnt.
+
+**GEÄNDERT**
+
+- Bilder und Musik liegen als eigene Dateien neben dem Spiel statt alle in einer großen Datei. Geladen wird nur, was gerade gebraucht wird; der Rest kommt still im Hintergrund in den Speicher, damit alles offline läuft. Nach einem Update lädt die App nur Dateien neu, die sich geändert haben.
+
+**BEHOBEN**
+
+- Einführung: „Linie eröffnen“ war auf Englisch und Spanisch noch deutsch – jetzt „Open line“ bzw. „Abrir línea“.
+- Flotte: Beim Umschalter Schiffe/Museum ist der aktive Reiter jetzt hervorgehoben.
+- Fähren-Konfigurator: Die vier Antriebe stehen in einer Zeile, „Motor“ rutscht nicht mehr allein in die zweite Zeile.
+- Die acht Bilder britischer Häfen und Ereignisse aus v4.2 fehlten im Spiel. Jetzt sind sie da: Liverpool, Dover, Douglas, Queenstown, Clyde, Holyhead, Manchester-Schiffskanal und Dockstreik.
+
 ## Als Nächstes geplant
 
-- Restliche Musik (Hafenkneipe, Seebad-Sommer, Ostsee-Winter, Seenot, Auswanderer-Abschied, Salon, Nordlandfahrt, Mittelmeer, Schiffstaufe-Fanfare), sobald Suno Premium da ist – dafür wird die Musik aus der Hauptdatei ausgelagert.
+- Restliche Musik (Hafenkneipe, Seebad-Sommer, Ostsee-Winter, Seenot, Auswanderer-Abschied, Salon, Nordlandfahrt, Mittelmeer, Schiffstaufe-Fanfare), sobald Suno Premium da ist.
 - Später: echte App-Version für App Store bzw. Desktop mit Claude Code am PC, wie im Konzept vorgesehen.

@@ -1,0 +1,10 @@
+{
+  "gb_clyde": {"bogen": "C6400F6A", "rahmen": [15, 11, 742, 491]},
+  "gb_douglas": {"bogen": "D31C83D3", "rahmen": [16, 517, 742, 494]},
+  "gb_dover": {"bogen": "D31C83D3", "rahmen": [778, 10, 744, 493]},
+  "gb_holyhead": {"bogen": "C6400F6A", "rahmen": [777, 10, 746, 491]},
+  "gb_kanal": {"bogen": "C6400F6A", "rahmen": [16, 517, 741, 493]},
+  "gb_liverpool": {"bogen": "D00DCE21", "rahmen": [0, 0, 1536, 1024]},
+  "gb_queenstown": {"bogen": "D31C83D3", "rahmen": [777, 516, 743, 494]},
+  "gb_streik": {"bogen": "C6400F6A", "rahmen": [777, 516, 745, 493]}
+}

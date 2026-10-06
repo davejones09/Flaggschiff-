@@ -903,7 +903,8 @@
   function designSheet() {
     const d = draft, bases = E.designBases(S), y = E.yearOf(S); if (!bases.includes(d.base)) d.base = bases[0]; d.year = y;
     const t = E.designType(d), price = Math.round(t.price * S.pidx / 1000) * 1000;
-    const seg = (key, opts) => '<div class="seg" role="group">' + opts.map(([v, n, dis]) => '<button data-act="dset" data-k="' + key + '" data-v="' + v + '" aria-pressed="' + (String(d[key]) === String(v)) + '"' + (dis ? " disabled" : "") + ">" + n + "</button>").join("") + "</div>";
+    const four = opts => opts.length === 4; // vier Knöpfe (Antrieb) in einer Zeile, wie bei der Werbung
+    const seg = (key, opts) => '<div class="seg" role="group"' + (four(opts) ? ' style="grid-template-columns:repeat(4,1fr)"' : "") + ">" + opts.map(([v, n, dis]) => '<button data-act="dset" data-k="' + key + '" data-v="' + v + '" aria-pressed="' + (String(d[key]) === String(v)) + '"' + (dis ? " disabled" : "") + (four(opts) ? ' style="font-size:13.5px"' : "") + ">" + n + "</button>").join("") + "</div>";
     let h = '<div class="veil" data-act="close"><div class="sheet" role="dialog" aria-modal="true"><div class="kicker">Fähren-Konfigurator</div><h3>Eigenen Entwurf zeichnen</h3>' + kitHTML(d, true, "big");
     h += '<label class="field" for="dbase">Grundtyp</label><select id="dbase" data-act="dbase">' + bases.map(k => '<option value="' + k + '"' + (k === d.base ? " selected" : "") + ">" + E.TYPES[k].name + " (" + E.TYPES[k].cls + ")</option>").join("") + "</select>";
     h += '<label class="field">Rumpf</label>' + seg("hull", [["schlank", "Schlank"], ["normal", "Normal"], ["bauchig", "Bauchig"]]);
