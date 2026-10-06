@@ -2,7 +2,7 @@
 
 ## Das Projekt
 - Reederei-Managementspiel: eine Reederei für Personenschifffahrt ab 1880 durch die Jahrzehnte führen.
-- Läuft als Web-App (PWA) über GitHub Pages, gespielt auf iPhone und am PC. Aktueller Stand: v4.4.1.
+- Läuft als Web-App (PWA) über GitHub Pages, gespielt auf iPhone und am PC. Aktueller Stand: v4.4.2.
 - Sprachen: Deutsch (Original), Englisch, Spanisch über das eigene Übersetzungssystem (I18N_CORE, I18N_EN, I18N_ES). Neue Texte immer in allen drei Sprachen pflegen.
 - Heimathäfen Hamburg, Liverpool, London. Bei britischem Heimathafen Pfund statt Mark (die Währung hängt am Heimathafen, nicht an der Sprache).
 - Hausstil: Nachtblau und Messing, weißer achtzackiger Stern. Grafik vollwertig 2D in hoher Auflösung, keine Pixelart, kein 3D.
@@ -16,7 +16,7 @@
 - `originale/`: hochauflösende Bildbögen und Musik-Originale samt `LIESMICH.md` mit der Zuordnung Bildbogen → Spielbild. Nur als Quelle zum Neu-Zuschneiden, nicht in `sw.js` cachen.
 - `neue-bilder/`: hier lädt David neue Bilder hoch. Nach der Übernahme nach `originale/` verschieben.
 - `docs/`: Updatelog (`updatelog.md`, `Updatelog.pdf`, `Updatelog_Emil.pdf`).
-- `tools/`: Hilfsskripte (Python). `assets.py` erzeugt `js/assets.js` (nach jeder Änderung in `assets/` ausführen), `updatelog_pdf.py` baut aus `docs/updatelog.md` beide PDFs.
+- `tools/`: Hilfsskripte (Python). `assets.py` erzeugt `js/assets.js` (nach jeder Änderung in `assets/` ausführen), `bilder.py` schneidet die Spielbilder aus `originale/` (Rahmen in `tools/zuschnitt.json`), `musik.py` komprimiert die Musik, `updatelog_pdf.py` baut aus `docs/updatelog.md` beide PDFs.
 
 ## Ablauf bei Updates
 1. Bevor gebaut wird: sagen, welche neuen Bilder gebraucht werden (Motiv, Format, Dateiname).

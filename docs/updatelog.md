@@ -331,7 +331,7 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Der Begrüßungshinweis im leeren Kontor wird jetzt auch auf Englisch und Spanisch vollständig übersetzt.
 - Neue Entwürfe im Fähren-Konfigurator heißen je nach Sprache „Entwurf“, „Design“ oder „Diseño“.
 
-## v4.4.1 · Feinschliff, britische Bilder, PC-Layout · aktuell
+## v4.4.1 · Feinschliff, britische Bilder, PC-Layout
 
 *Kleine Fehler behoben – und das PC-Layout gehört jetzt zur Hauptversion.*
 
@@ -349,6 +349,17 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Flotte: Beim Umschalter Schiffe/Museum ist der aktive Reiter jetzt hervorgehoben.
 - Fähren-Konfigurator: Die vier Antriebe stehen in einer Zeile, „Motor“ rutscht nicht mehr allein in die zweite Zeile.
 - Die acht Bilder britischer Häfen und Ereignisse aus v4.2 fehlten im Spiel. Jetzt sind sie da: Liverpool, Dover, Douglas, Queenstown, Clyde, Holyhead, Manchester-Schiffskanal und Dockstreik.
+
+## v4.4.2 · Schärfere Bilder, bessere Musik · aktuell
+
+*Mehr Qualität, ohne dass die App langsamer startet.*
+
+**GEÄNDERT**
+
+- Alle Bilder neu aus den Originalbögen geschnitten: in der vollen Auflösung der Vorlagen und viel schwächer komprimiert – schärfer und ohne Kompressionsflecken. Das Titelbild hat jetzt 1024 × 1536 Pixel, die Porträts fast 500 × 500.
+- Augusta Victoria und City of Paris: Das Schiff ist im Bild jetzt etwas größer.
+- Musik neu aus den Originalen komprimiert, mit 96 statt 36 kbit/s und so laut wie bisher. Sie spielt schon, während sie noch lädt.
+- Trotz größerer Dateien startet die App so schnell wie vorher: Bilder und Musik kommen erst, wenn sie gebraucht werden; der Rest wird im Hintergrund gespeichert.
 
 ## Als Nächstes geplant
 
