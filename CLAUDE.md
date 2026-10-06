@@ -16,6 +16,7 @@
 - `originale/`: hochauflösende Bildbögen und Musik-Originale samt `LIESMICH.md` mit der Zuordnung Bildbogen → Spielbild. Nur als Quelle zum Neu-Zuschneiden, nicht in `sw.js` cachen.
 - `neue-bilder/`: hier lädt David neue Bilder hoch. Nach der Übernahme nach `originale/` verschieben.
 - `docs/`: Updatelog (`updatelog.md`, `Updatelog.pdf`, `Updatelog_Emil.pdf`).
+- `tools/`: Hilfsskripte (Python). `assets.py` erzeugt `js/assets.js` (nach jeder Änderung in `assets/` ausführen), `updatelog_pdf.py` baut aus `docs/updatelog.md` beide PDFs.
 
 ## Ablauf bei Updates
 1. Bevor gebaut wird: sagen, welche neuen Bilder gebraucht werden (Motiv, Format, Dateiname).
@@ -26,6 +27,7 @@
 5. Versionsnummer erhöhen und den CACHE-Namen in `sw.js` ändern, damit die App das Update holt.
 6. Updatelog fortschreiben (`docs/updatelog.md`) und als PDF ausgeben (`docs/Updatelog.pdf`): alle Versionen, neueste am Ende.
    Dazu jedes Mal eine Tester-Ausgabe für Emil (`docs/Updatelog_Emil.pdf`), in der alles zum Easter Egg um Kapitän Emil geschwärzt ist.
+   Emil-Stellen in der md zwischen `<!--emil-->` und `<!--/emil-->` setzen, dann `python3 tools/updatelog_pdf.py`.
 7. Am Ende einen Pull Request auf `main` erstellen. David merged selbst.
 
 ## Kommunikation
