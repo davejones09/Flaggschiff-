@@ -1,6 +1,6 @@
 # Updatelog
 
-*Alle Versionen des spielbaren Prototyps · Stand 6. Oktober 2026*
+*Alle Versionen des spielbaren Prototyps · Stand 18. Oktober 2026*
 
 Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spielstände werden beim Update automatisch übernommen.
 
@@ -361,7 +361,7 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Musik neu aus den Originalen komprimiert, mit 96 statt 36 kbit/s und so laut wie bisher. Sie spielt schon, während sie noch lädt.
 - Trotz größerer Dateien startet die App so schnell wie vorher: Bilder und Musik kommen erst, wenn sie gebraucht werden; der Rest wird im Hintergrund gespeichert.
 
-## v4.4.3 · Neues App-Icon · aktuell
+## v4.4.3 · Neues App-Icon
 
 *Flaggschiff bekommt ein eigenes Gesicht auf dem Home-Bildschirm.*
 
@@ -372,6 +372,33 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 **GEÄNDERT**
 
 - Die großen Icons werden nicht mehr bei jedem Update neu geladen.
+
+## v4.5 · Kohle und Küche · aktuell
+
+*Kohle wird zur Stellschraube – und was an Bord gegessen wird, spricht sich herum.*
+
+**NEU**
+
+- Kohlepreis sichtbar: ein Index in Prozent mit Pfeil im Kontor und am PC in der linken Leiste. Er schwankt jeden Monat um bis zu 3 %. Kontor → Statistik → Kohle zeigt den Verlauf der letzten zehn Jahre und die Kohlekosten je Jahr. In den Tabellen für Schiffe und Linien gibt es eine sortierbare Spalte „Kohle“, die Schiffsansicht zeigt Kohlekosten und ihren Anteil an den Kosten.
+- Historische Kohlekrisen: Ruhrstreik 1889, britische Aussperrung 1893, großer Ruhrstreik 1905, britischer Kohlestreik 1912, Ruhrbesetzung 1923 und britischer Bergarbeiterstreik 1926 – je nach Heimathafen trifft es Sie stärker oder schwächer.
+- Fahrstufen in der Flotte: Sparfahrt (Tempo −15 %, Kohle je Fahrt −28 %), Normal und Volldampf (Tempo +8 %, Kohle je Fahrt +17 %). Sparfahrt kostet Fahrten, Einnahmen und mehr Mahlzeiten an Bord, Volldampf nutzt die Schiffe schneller ab. Die Reederei-Fahrstufe gilt für alle Schiffe, einzelne Schiffe lassen sich ausnehmen und sind in der Liste markiert. Postverträge mit Mindestgeschwindigkeit werden geprüft.
+- Kohle-Lieferverträge im neuen Bereich Kontor → Einkauf: 1, 3 oder 5 Jahre zum heutigen Preis mit Aufschlag, für die Hälfte oder den ganzen Verbrauch. Mindestabnahme 80 %, höchstens zwei Verträge, die Kündigung kostet ein Viertel der Restsumme. Streiks oder Grubenunglücke beim Lieferanten können die Lieferung für ein bis drei Monate unterbrechen.
+- Verpflegung pro Klasse: einfach (25 % billiger), ordentlich (wie bisher) oder fein (60 % teurer), für die ganze Reederei und auf Wunsch je Schiff. Neue Erfahrung „Küche“ neben Komfort, Service und Sicherheit: In der 1. Klasse zählt sie viel, im Zwischendeck wenig, bei Vergnügungsreisen bringt gute Küche mehr Buchungen.
+- Eigene Bordküche (10 % billiger) oder Caterer mit festem Preis für ein oder drei Jahre: Billiganbieter, solider Caterer, Hotel-Caterer und ab 1905 ein Restaurant à la carte für die 1. Klasse – mit eigenen Namen in Hamburg, Liverpool und London.
+- Drei neue Stellen mit Lohnstufe: Maschineninspektor (stellt die Fahrstufe nach Ihrer Regel um), Kohleneinkäufer (kleinerer Aufschlag, warnt und verlängert Verträge) und Proviantmeister (führt die eigene Küche). Wer knapp bezahlt wird, macht mehr Fehler.
+- Vorschau vor jeder Entscheidung: Bei Fahrstufe, Verpflegung, Caterern und Verträgen rechnet das Spiel den Vormonat mit der neuen Einstellung nach und zeigt Ersparnis und Wirkung auf die Fahrgäste.
+- Neue Ereignisse: verdorbener Proviant, Krankheit an Bord mit Quarantäne, Lob für die Küche, ein berühmter Koch, Pleite des Caterers, Preiserhöhung beim Verlängern und Lieferausfall bei der Kohle.
+- 14 neue Bilder für Kohle, Fahrstufen, Küche und die neuen Stellen.
+- Balance-Simulation: Bots spielen jede Linienart 40 Jahre mit verschiedenen Strategien. Ergebnis: Keine Fahrstufe und keine Verpflegung ist überall die beste, Lieferverträge lohnen sich nur manchmal. Alles Nähere im Konzept (docs/konzept-v4.5.md).
+
+**GEÄNDERT**
+
+- Wer nichts Neues anfasst, spielt wie bisher: Fahrstufe Normal, Verpflegung ordentlich, keine Verträge. Die Nachricht „Kohle wird teuer“ kommt etwas seltener, damit die Kohlekrisen im Schnitt nicht teurer werden.
+- Die Marktforschung zeigt jetzt auch die Küche als Grund, warum Fahrgäste kommen oder gehen.
+
+**BEHOBEN**
+
+- Sortierte Spalten in den Statistiken waren auf Englisch und Spanisch nicht übersetzt, ebenso einige ältere Hinweise (abgelaufene Fristen mehrerer Schiffe, verchartertes Schiff, hohe Sinkgefahr, Zinsen).
 
 ## Als Nächstes geplant
 
