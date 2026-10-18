@@ -694,8 +694,8 @@
     const cur = S.fahrt || "normal", st = E.staff(S), ex = S.ships.filter(x => !x.museum && x.fahrt).length;
     let h = '<div class="item fahrt">' + (cur !== "normal" ? img(cur === "spar" ? "fs_sparfahrt" : "fs_volldampf", "banner", E.FAHRT[cur].name) : "") + '<div class="row"><h3>Reederei-Fahrstufe</h3><span class="meta">Kohlepreis ' + E.coalIdx(S) + " % " + coalArrow() + "</span></div>";
     h += '<div class="seg lv" role="group" aria-label="Reederei-Fahrstufe">' + E.FAHRT_ORDER.map(k => '<button data-act="fahrtSet" data-v="' + k + '" aria-pressed="' + (cur === k) + '">' + E.FAHRT[k].name + "<small>" + fsNote(k) + "</small></button>").join("") + "</div>";
-    h += '<div class="meta" style="margin-top:6px">Gilt für alle Schiffe ohne eigene Fahrstufe' + (ex ? " – " + ex + (ex > 1 ? " Schiffe fahren" : " Schiff fährt") + " anders, sie sind in der Liste markiert" : "") + ". Sparfahrt spart Kohle, kostet aber Fahrten, Zeit und Einnahmen. Volldampf schafft mehr Fahrten, braucht mehr Kohle und nutzt die Schiffe schneller ab.</div>";
-    if (st.mi >= 0) h += '<div class="meta">' + (st.miAuto ? "Ihr Maschineninspektor stellt um: Sparfahrt ab " + st.miSpar + " %, Volldampf unter " + st.miVoll + " % Kohlepreis" + (st.miPlan ? " – " + E.FAHRT[st.miPlan.stage].name + " ab " + E.dateStr(st.miPlan.at) : "") + "." : "Die Regel des Maschineninspektors ist ausgeschaltet.") + "</div>";
+    h += '<div class="meta" style="margin-top:6px">Gilt für alle Schiffe ohne eigene Fahrstufe' + (ex ? "; " + ex + (ex > 1 ? " Ausnahmen sind" : " Ausnahme ist") + " in der Liste markiert" : "") + ". Sparfahrt spart Kohle, kostet aber Fahrten, Zeit und Einnahmen. Volldampf schafft mehr Fahrten, braucht mehr Kohle und nutzt die Schiffe schneller ab.</div>";
+    if (st.mi >= 0) h += '<div class="meta">' + (st.miAuto ? "Ihr Maschineninspektor stellt um: Sparfahrt ab " + st.miSpar + " %, Volldampf unter " + st.miVoll + " % Kohlepreis." + (st.miPlan ? " Geplant: " + E.FAHRT[st.miPlan.stage].name + " ab " + E.dateStr(st.miPlan.at) + "." : "") : "Die Regel des Maschineninspektors ist ausgeschaltet.") + "</div>";
     return h + "</div>";
   }
   function shipFahrtBox(sh) {
@@ -800,9 +800,9 @@
           '<tr class="sum"><td><b>' + (p.net >= 0 ? "Ersparnis im Monat" : "Mehrkosten im Monat") + '</b></td><td class="' + (p.net >= 0 ? "pos" : "neg") + '"><b>' + M(Math.abs(p.net)) + "</b></td></tr>" +
           "<tr><td>Fahrgäste</td><td>" + (p.pax > 0 ? "+" : "") + E.fmt(p.pax) + " (" + pctSign(p.paxPct) + ")</td></tr></table>";
       }
-      if (p && p.post && p.post.length) h += '<div class="hint bad">Achtung Postvertrag: ' + p.post.map(n => "„" + esc(n) + "“").join(", ") + " wäre zu langsam. Dann zahlt die Post nicht, und es drohen Vertragsstrafen.</div>";
-      if (p && p.lower && p.lower.length) h += '<div class="hint">' + esc(E.catName(S, P.k)) + " liefert nicht „fein“ – in der " + p.lower.map(c => ["1. Klasse", "2. Klasse", "3. Klasse"][c]).join(" und ") + " gibt es dann „ordentlich“.</div>";
-      if (p && p.upper && p.upper.length) h += '<div class="hint">' + esc(E.catName(S, P.k)) + " liefert nicht „einfach“ – in der " + p.upper.map(c => ["1. Klasse", "2. Klasse", "3. Klasse"][c]).join(" und ") + " gibt es dann „ordentlich“.</div>";
+      if (p && p.post && p.post.length) h += '<div class="hint bad">' + p.post.map(n => "„" + esc(n) + "“").join(", ") + (p.post.length > 1 ? " wären" : " wäre") + " zu langsam für den Postvertrag. Dann zahlt die Post nicht, und es drohen Vertragsstrafen.</div>";
+      if (p && p.lower && p.lower.length) h += '<div class="hint">' + esc(E.catName(S, P.k)) + " liefert nicht „fein“ – dort gibt es dann „ordentlich“.</div>";
+      if (p && p.upper && p.upper.length) h += '<div class="hint">' + esc(E.catName(S, P.k)) + " liefert nicht „einfach“ – dort gibt es dann „ordentlich“.</div>";
       if (P.what === "cat" && E.catOn(S, K.cat) && P.k !== "luxus") h += '<div class="hint">Es läuft schon ein Caterer-Vertrag. Kündigen Sie ihn zuerst.</div>';
       if (P.what === "eigen" && P.v && E.staff(S).pm === 0) h += '<div class="meta">Ihr Proviantmeister ist knapp bezahlt: „fein“ gelingt nicht ganz, und der Proviant verdirbt öfter.</div>';
       if (P.what === "kq" && P.v === 0) h += '<div class="meta">Bei einfacher Kost erkranken häufiger Fahrgäste – dann drohen Quarantäne und Entschädigungen.</div>';
@@ -829,7 +829,7 @@
   function sortTable(key, cols, rows) {
     const [sk, dir] = statSort[key] || [cols[0].k, 1];
     rows.sort((a, b) => { const x = a[sk], y = b[sk]; return (typeof x === "string" ? String(x).localeCompare(String(y), "de") : (x || 0) - (y || 0)) * dir; });
-    let h = '<div class="tblwrap"><table class="stat"><thead><tr>' + cols.map(c => '<th data-act="sort" data-t="' + key + '" data-k="' + c.k + '" class="' + (c.num ? "n" : "") + (sk === c.k ? " on" : "") + '">' + c.n + (sk === c.k ? (dir > 0 ? " ▲" : " ▼") : "") + "</th>").join("") + "</tr></thead><tbody>";
+    let h = '<div class="tblwrap"><table class="stat"><thead><tr>' + cols.map(c => '<th data-act="sort" data-t="' + key + '" data-k="' + c.k + '" class="' + (c.num ? "n" : "") + (sk === c.k ? " on" : "") + '">' + c.n + (sk === c.k ? "<span> " + (dir > 0 ? "▲" : "▼") + "</span>" : "") + "</th>").join("") + "</tr></thead><tbody>";
     for (const r of rows) h += "<tr>" + cols.map(c => '<td class="' + (c.num ? "n" : "") + '">' + (c.f ? c.f(r) : esc(r[c.k])) + "</td>").join("") + "</tr>";
     return h + "</tbody></table></div>";
   }
