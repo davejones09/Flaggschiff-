@@ -454,6 +454,8 @@
     if (PORTS.fue) PORTS.fue.name = yearOf(s) >= 1956 ? "Puerto del Rosario (Fuerteventura)" : "Puerto de Cabras (Fuerteventura)";
     for (const sh of s.ships) { if (sh.emil && !caps(s).some(c => c.sp === "emil")) specialCaptain(s, "emil").ship = sh.id; if (!capOf(s, sh)) captainFor(s, sh, 1 + Math.min(4, Math.floor((sh.age || 0) / 36))); }
     if (!s.exp) s.exp = { k: 50, s: 50, si: 50 }; if (!s.expHit) s.expHit = { si: 0, k: 0 }; if (!s.years) s.years = {};
+    if (s.exp.ku == null) s.exp.ku = 50; if (s.expHit.ku == null) s.expHit.ku = 0;
+    if (!FAHRT[s.fahrt]) s.fahrt = "normal"; kueche(s); staff(s); s.coalK = s.coalK || []; s.coalHist = s.coalHist || []; s.coalUse = s.coalUse || [];
     if (s.t == null) { let t = 0; for (let m = 0; m < s.m; m++) t += dim(m); s.t = t + s.day - 1; }
     if (s.m > 0 && !s.flags.hadFounder) s.flags.hadFounder = true;
     s.ships.forEach((sh, i) => { if (sh.repair != null) { if (sh.repair >= s.m) sh.dockUntil = s.t + 10; delete sh.repair; } if (sh.survey == null) sh.survey = s.t + 120 + (i * 337) % 1300; initShip(s, sh); });
@@ -710,8 +712,8 @@
     }
     return f;
   }
-  function tripsOf(s, sh, info) {
-    const t = TYPES[sh.type], spd = (t.speed + (sh.spd || 0)) * (0.85 + 0.15 * sh.cond / 100) * SPD_LV[staff(s).maschine] * capFx(s, sh).spd;
+  function tripsOf(s, sh, info, fz) {
+    const t = TYPES[sh.type], spd = (t.speed + (sh.spd || 0)) * (0.85 + 0.15 * sh.cond / 100) * SPD_LV[staff(s).maschine] * capFx(s, sh).spd * (fz != null ? fz : fahrtF(s, sh));
     const rt = 2 * info.dist / (spd * 24) + info.turn;
     return { trips: 30.4 / rt, spd, rt };
   }
@@ -722,7 +724,7 @@
     if (mk.ag.ausw) agency *= 1 + .12 * (sh.ausw || 0);
     if (mk.ag.reise) agency *= 1 + .12 * ((sh.tour || 0) + (sh.bath || 0));
     if (mk.ag.bahn) agency *= 1 + .08 * ((sh.transit || 0) + (sh.local || 0) + (sh.gen || 0));
-    return info.D0 * info.season[mo] * s.konj * (r.demMult || 1) * modFactor(s, r, info, "demand") * (1 + .025 * s.m / 12) * agency * (r.adOn ? 1.12 : 1) * cruiseBonus(s, r);
+    return info.D0 * info.season[mo] * s.konj * (r.demMult || 1) * modFactor(s, r, info, "demand") * (1 + .025 * s.m / 12) * agency * (r.adOn ? 1.12 : 1) * cruiseBonus(s, r) * (r.cruise ? 1 + KU_CRUISE * ((s.exp && s.exp.ku != null ? s.exp.ku : 50) - 50) / 50 : 1);
   }
   function cruiseBonus(s, r) { if (!r.cruise) return 1; return (s.ships.some(x => (x.type === "augusta" || TYPES[x.type].cruiseB) && x.line === r.id) ? 1.3 : 1) * (s.ships.some(x => x.type === "traum" && x.line === r.id) ? 2 : 1); }
   function mkBonus(s, r, info) {
@@ -736,7 +738,7 @@
     return u;
   }
   function dayTick(s) {
-    const mo = cal(s.m).mo, winter = WINTER.includes(mo), fd = 1 / dim(s.m), cur = s.cur, pid = s.pidx, st = staff(s), myEx = myExp(s);
+    const mo = cal(s.m).mo, winter = WINTER.includes(mo), fd = 1 / dim(s.m), cur = s.cur, pid = s.pidx, st = staff(s), myEx = myExp(s), kuX = ((s.exp && s.exp.ku != null ? s.exp.ku : 50) - 50) / 50;
     let dRev = 0, dCost = 0;
     const add = (k, v) => { cur.cost[k] = (cur.cost[k] || 0) + v; dCost += v; };
     cur.days += 1;
@@ -749,14 +751,17 @@
       acc.rp = acc.rp || {}; acc.fixed = acc.fixed || 0;
       const ships = s.ships.filter(sh => active(s, sh) && sh.line === r.id);
       if (ships.length) r.used = true;
-      const capC = [0, 0, 0]; let capT = 0, deps = 0, spdW = 0, comW = 0, firstB = 0;
+      const capC = [0, 0, 0], kCw = [0, 0, 0], kSw = [0, 0, 0]; let capT = 0, deps = 0, spdW = 0, comW = 0, firstB = 0, seaW = 0, seaX = 0;
       const per = ships.map(sh => {
-        const t = TYPES[sh.type], tr = tripsOf(s, sh, info), mul = (info.cruise ? 1 : 2) * tr.trips * fd, c = t.sb.map(x => x * mul), ct = c[0] + c[1] + c[2];
-        for (let i = 0; i < 3; i++) capC[i] += c[i];
+        const fz = fahrtF(s, sh), t = TYPES[sh.type], tr = tripsOf(s, sh, info, fz), mul = (info.cruise ? 1 : 2) * tr.trips * fd, c = t.sb.map(x => x * mul), ct = c[0] + c[1] + c[2];
+        for (let i = 0; i < 3; i++) { capC[i] += c[i]; if (c[i]) { const q = kqEff(s, sh, i); kCw[i] += c[i] * (kCostF(s, q, i) - 1); kSw[i] += c[i] * (Math.min(100, kScore(s, q, i) + (i === 0 && s.chef && s.chef.ship === sh.id ? 20 : 0)) - 50); } }
         const cf = capFx(s, sh);
-        capT += ct; deps += tr.trips; spdW += tr.spd * ct; comW += (t.comfort * (0.7 + 0.3 * sh.cond / 100) + cf.com) * ct; if (cf.first) firstB = Math.max(firstB, cf.first);
-        return { sh, tr, c, ct, cf };
+        capT += ct; deps += tr.trips; spdW += tr.spd * (1 + FAHRT_SPD * (fz - 1)) / fz * ct; comW += (t.comfort * (0.7 + 0.3 * sh.cond / 100) + cf.com) * ct; if (cf.first) firstB = Math.max(firstB, cf.first);
+        seaW += ct * (1 / fz - 1); seaX += ct * Math.max(0, 1 / fz - 1);
+        return { sh, tr, c, ct, cf, fz };
       });
+      const kCost = [0, 1, 2].map(o => 1 + (capC[o] ? kCw[o] / capC[o] : 0)), kSc = [0, 1, 2].map(o => 50 + (capC[o] ? kSw[o] / capC[o] : 0));
+      const seaF = 1 + (capT ? seaW / capT : 0), pen = [0, 1, 2].map(o => info.cruise ? 0 : SEA_REV * (capT ? seaX / capT : 0) * (o === 0 ? 2 : 1)), meal = info.cruise || info.dist >= 40 ? 1 : 0;
       const nLegs = info.multi ? info.legs.length : 1, ods = odsOf(info), mainRef = info.refC;
       const compMod = modFactor(s, r, info, "comp"), myBonusBase = ((r.b === "ny" || r.a === "ny") && s.stats.band ? .3 : 0) + mkBonus(s, r, info);
       const spd0 = capT ? spdW / capT : 0, com = capT ? comW / capT + SVC_LV[st.service] : 0;
@@ -781,7 +786,7 @@
           if (capT > 0) {
             const bonus = myBonusBase + expU(oi, myEx);
             let best = -Infinity;
-            for (let o = 0; o < 3; o++) { if (capC[o] <= 0) continue; const u = w.p * CLS_WP[c] * (1 - price[o] / (oi.refC[c] * pid)) + base(spd, com, s.rep, c) - (o > c ? (.7 + 1.0 * CLS_T(oi.dist)) * (o - c) : 0) + bonus + (c === 0 ? firstB : 0); if (u > best) { best = u; bo = o; } }
+            for (let o = 0; o < 3; o++) { if (capC[o] <= 0) continue; const u = w.p * CLS_WP[c] * (1 - price[o] / (oi.refC[c] * pid)) + base(spd, com, s.rep, c) - (o > c ? (.7 + 1.0 * CLS_T(oi.dist)) * (o - c) : 0) + bonus + (c === 0 ? firstB : 0) + (meal ? KU_W * KU_CLS[c] * (.5 * (kSc[o] - 50) / 50 + .5 * kuX) : 0); if (u > best) { best = u; bo = o; } }
             if (bo >= 0) my = capC[bo] * Math.exp(best);
           }
           const den = my + them + KAPPA * Dc;
@@ -792,17 +797,19 @@
       // Platz auf jeder Teilstrecke begrenzt die Buchungen
       const fac = Array.from({ length: nLegs }, () => [1, 1, 1]);
       for (let L = 0; L < nLegs; L++) for (let o = 0; o < 3; o++) { let load = 0; for (let q = 0; q < ods.length; q++) if (ods[q].legs.includes(L)) load += want[q][o]; fac[L][o] = load > capC[o] ? capC[o] / load : 1; }
-      const served = [0, 0, 0]; let pax = 0, rev = 0, cater = 0, legPax = 0;
+      const served = [0, 0, 0], catC = [0, 0, 0]; let pax = 0, rev = 0, cater = 0, legPax = 0;
       for (let q = 0; q < ods.length; q++) for (let o = 0; o < 3; o++) {
         const f = Math.min(...ods[q].legs.map(L => fac[L][o])), sv = want[q][o] * f; if (!sv) continue;
-        served[o] += sv; pax += sv; rev += sv * odPrice[q][o]; cater += sv * ods[q].info.caterC[o]; legPax += sv * ods[q].legs.length;
+        const cc = sv * ods[q].info.caterC[o] * kCost[o];
+        served[o] += sv; pax += sv; rev += sv * odPrice[q][o] * (1 - pen[o]); cater += cc; catC[o] += cc; legPax += sv * ods[q].legs.length;
+        if (meal && cc > 0) { cur.kuS = (cur.kuS || 0) + sv * KU_CLS[o] * (kSc[o] - 50); cur.kuW = (cur.kuW || 0) + sv * KU_CLS[o]; if (kSc[o] >= 75) cur.fine = true; }
       }
-      cater *= s.wage;
+      cater *= s.wage * seaF; for (let o = 0; o < 3; o++) catC[o] *= s.wage * seaF;
       let cost = 0;
       if (cater) { add("Verpflegung", cater); cost += cater; }
       for (const p of per) {
         const t = TYPES[p.sh.type], size = Math.max(.15, t.seats / 500);
-        const coal = t.coal * .85 * 2 * info.dist * p.tr.trips * fd * s.coal * (p.sh.majLate && p.sh.majLate.kessel ? 1.1 : 1) * COAL_LV[st.maschine] * p.cf.coal;
+        const coal = coalPrice(s, cur, t.coal * .85 * 2 * info.dist * p.tr.trips * fd * s.coal * (p.sh.majLate && p.sh.majLate.kessel ? 1.1 : 1) * COAL_LV[st.maschine] * p.cf.coal * p.fz * p.fz * (st.mi === 3 ? .97 : 1));
         const fees = ((info.fee * Math.min(1, .25 + info.dist / nLegs / 40) + 60 * Math.min(1, info.dist / nLegs / 100) * Math.sqrt(s.sizeM || 1)) * 2 * nLegs + 120 * 2 * (nLegs - 1)) * p.tr.trips * fd * size * s.feeMult * s.wage;
         let shipRev = 0;
         if (t.trajekt && info.rail) { const x = 250 * pid * 2 * p.tr.trips * fd; rev += x; shipRev += x; }
@@ -810,10 +817,12 @@
         if (t.cars && !info.cruise && info.dist < 700) { const cr = t.cars * (60 + 1.5 * info.dist) * pid * s.konj * 2 * p.tr.trips * fd; rev += cr; shipRev += cr; cur.freight = (cur.freight || 0) + cr; }
         add("Kohle", coal); add("Hafengebühren", fees); cost += coal + fees;
         const share = capT ? p.ct / capT : 0, sp = pax * share;
-        let tick = 0; for (let q = 0; q < ods.length; q++) for (let o = 0; o < 3; o++) if (capC[o] > 0) { const f = Math.min(...ods[q].legs.map(L => fac[L][o])); tick += want[q][o] * f * odPrice[q][o] * p.c[o] / capC[o]; }
+        let tick = 0; for (let q = 0; q < ods.length; q++) for (let o = 0; o < 3; o++) if (capC[o] > 0) { const f = Math.min(...ods[q].legs.map(L => fac[L][o])); tick += want[q][o] * f * odPrice[q][o] * p.c[o] / capC[o] * (1 - pen[o] * (seaX ? Math.max(0, 1 / p.fz - 1) * capT / seaX : 0)); }
         shipRev += tick;
         const sc = p.sh.cur || (p.sh.cur = { pax: 0, cap: 0, rev: 0, cost: 0 });
         sc.pax += sp; sc.cap += p.ct; sc.rev = (sc.rev || 0) + shipRev; sc.cost = (sc.cost || 0) + coal + fees + cater * share;
+        sc.coal = (sc.coal || 0) + coal; sc.cater = (sc.cater || 0) + cater * share; acc.coal = (acc.coal || 0) + coal;
+        sc.catC = sc.catC || [0, 0, 0]; for (let o = 0; o < 3; o++) if (capC[o] > 0) sc.catC[o] += catC[o] * p.c[o] / capC[o];
       }
       s.stats.pax += pax;
       acc.pax += pax; acc.cap += capT * nLegs; acc.rev += rev; acc.cost += cost; acc.D += Dsum; acc.ships = Math.max(acc.ships, ships.length);
@@ -842,17 +851,17 @@
       if (sh.line && !sh.laid) { const rr = s.routes.find(x => x.id === sh.line); if (rr && rr.cur) rr.cur.fixed = (rr.cur.fixed || 0) + fixed; }
       if (act && info) {
         const late = sh.majLate || {}, emil = sh.emil ? .5 : 1;
-        sh.cond -= (info.wear[winter ? 1 : 0] * .6 * MAINT[sh.maint].wear * (t.wear || 1) * (late.rumpf ? 1.3 : 1) * ageWear(sh)) * fd;
+        sh.cond -= (info.wear[winter ? 1 : 0] * .6 * MAINT[sh.maint].wear * (t.wear || 1) * (late.rumpf ? 1.3 : 1) * ageWear(sh)) * fd * (fahrtOf(s, sh) === "voll" ? VOLL_WEAR : 1);
         if (late.rumpf) sh.cond = Math.min(sh.cond, 70);
         const p = info.risk[winter ? 1 : 0] * (1 + 3 * Math.pow(1 - sh.cond / 100, 2)) * modFactor(s, routeOf(s, sh), info, "risk") * (t.safe || 1) * (late.kessel ? 1.4 : 1) * (late.rumpf ? 1.2 : 1) * (sh.defects && sh.defects.includes("maschine") ? 1.15 : 1) * emil * RISK_LV[st.deck] * cfx.risk * (winter ? cfx.winter : 1) * fd * (t.hydro && winter ? 1.6 : 1) * (sh.eq.radar ? .8 : 1) * (t.ice && winter ? .5 : 1);
-        if (rnd(s) < p) incident(s, sh);
+        if (!s.sim && rnd(s) < p) incident(s, sh);
       } else if (!inDock(s, sh)) sh.cond -= .15 * fd;
       if (s.ships.includes(sh)) sh.cond = clamp(sh.cond, 5, 100);
-      if (inDock(s, sh) && sh.dockUntil - s.t > 1 && rnd(s) < .025 && !s.pending.some(p => p.ship === sh.id)) werftEvent(s, sh);
+      if (!s.sim && inDock(s, sh) && sh.dockUntil - s.t > 1 && rnd(s) < .025 && !s.pending.some(p => p.ship === sh.id)) werftEvent(s, sh);
     }
     for (const k of Object.keys(s.contracts)) {
       const c = s.contracts[k];
-      if (s.ships.some(sh => { if (!active(s, sh)) return false; const r = routeOf(s, sh); return r && ((r.a === c.a && r.b === c.b) || (r.a === c.b && r.b === c.a)) && TYPES[sh.type].speed >= (c.minSpeed || 0); })) { c.served = (c.served || 0) + 1; income(s, "Postverträge", c.sub * fd); }
+      if (s.ships.some(sh => { if (!active(s, sh)) return false; const r = routeOf(s, sh); return r && ((r.a === c.a && r.b === c.b) || (r.a === c.b && r.b === c.a)) && TYPES[sh.type].speed * fahrtF(s, sh) >= (c.minSpeed || 0); })) { c.served = (c.served || 0) + 1; income(s, "Postverträge", c.sub * fd); }
     }
     const mkCost = MK_BUDGET[s.mk.budget].cost + Object.keys(s.mk.ag).filter(k => s.mk.ag[k]).reduce((a, k) => a + MK_AGENCY[k].cost, 0);
     const adCost = s.routes.filter(r => r.adOn).reduce((a, r) => a + campaignCost(s, r), 0);
@@ -869,12 +878,12 @@
     const rep = { m: s.m, lines: {}, rev: cur.rev + exSum, tickets: cur.rev - (cur.freight || 0), freight: cur.freight || 0, extra: Object.assign({}, ex), cost: Object.assign({}, cur.cost), profit: 0, events: [] };
     for (const r of s.routes) {
       const a = r.cur; if (!a) { r.last = null; continue; }
-      r.last = { pax: Math.round(a.pax), cap: Math.round(a.cap), share: a.D ? a.pax / a.D : 0, load: a.cap ? (a.legPax || a.pax) / a.cap : 0, rev: Math.round(a.rev), cost: Math.round(a.cost), ships: a.ships, D: Math.round(a.D), m: s.m,
+      r.last = { pax: Math.round(a.pax), cap: Math.round(a.cap), share: a.D ? a.pax / a.D : 0, load: a.cap ? (a.legPax || a.pax) / a.cap : 0, rev: Math.round(a.rev), cost: Math.round(a.cost), ships: a.ships, D: Math.round(a.D), m: s.m, coal: Math.round(a.coal || 0),
         cls: [0, 1, 2].map(o => ({ pax: Math.round(a.cp[o]), cap: Math.round(a.cc[o]), dem: Math.round(a.dem[o]) })), fixed: Math.round(a.fixed || 0), riv: Object.fromEntries(Object.entries(a.rp || {}).map(([k, v]) => [k, Math.round(v)])) };
       rep.lines[r.id] = r.last; r.cur = null;
     }
     rep.pax = s.routes.reduce((x, r) => x + (r.last ? r.last.pax : 0), 0);
-    for (const sh of s.ships) if (sh.cur) { sh.lastPax = Math.round(sh.cur.pax); sh.lastLoad = sh.cur.cap ? sh.cur.pax / sh.cur.cap : 0; sh.last = { rev: Math.round(sh.cur.rev || 0), cost: Math.round(sh.cur.cost || 0), pax: Math.round(sh.cur.pax), load: sh.lastLoad, m: s.m }; sh.cur = null; }
+    for (const sh of s.ships) if (sh.cur) { sh.lastPax = Math.round(sh.cur.pax); sh.lastLoad = sh.cur.cap ? sh.cur.pax / sh.cur.cap : 0; sh.last = { rev: Math.round(sh.cur.rev || 0), cost: Math.round(sh.cur.cost || 0), pax: Math.round(sh.cur.pax), load: sh.lastLoad, m: s.m, coal: Math.round(sh.cur.coal || 0), cater: Math.round(sh.cur.cater || 0), catC: (sh.cur.catC || [0, 0, 0]).map(Math.round) }; sh.cur = null; }
     return rep;
   }
   function simulateMonth(s) {
@@ -907,6 +916,7 @@
       }
       c.served = 0;
     }
+    coalMonthEnd(s, add); kitchenMonthEnd(s, add);
     rep.profit = rep.rev - Object.values(rep.cost).reduce((a, b) => a + b, 0);
     rep.principal = principal;
     if (s.cash < 0) s.negMonths += 1; else s.negMonths = 0;
@@ -990,14 +1000,260 @@
     service: { name: "Service", who: "Stewards und Köche", share: .2, img: "pers_service", fx: ["Fahrgäste fühlen sich schlecht umsorgt", "normal", "spürbar mehr Komfort", "erstklassiger Service"] } };
   const RISK_LV = [1.25, 1, .85, .7], SPD_LV = [.98, 1, 1.02, 1.04], COAL_LV = [1.06, 1, .95, .9], SVC_LV = [-.4, 0, .3, .6], SEENOT_LV = [-.05, 0, .05, .1];
   const INSP_PAY = 450, MARKT_PAY = 600;
-  function staff(s) { return s.staff || (s.staff = { deck: 1, maschine: 1, service: 1, insp: false, inspMin: 60, markt: false }); }
+  function staff(s) {
+    const st = s.staff || (s.staff = { deck: 1, maschine: 1, service: 1, insp: false, inspMin: 60, markt: false });
+    if (st.mi == null) Object.assign(st, { mi: -1, miAuto: true, miSpar: 125, miVoll: 90, miPlan: null, ke: -1, keRenew: 95, pm: -1 });
+    return st;
+  }
+
+  /* ---------- Kohle und Küche (v4.5) ---------- */
+  const FAHRT = { spar: { f: .85, name: "Sparfahrt" }, normal: { f: 1, name: "Normal" }, voll: { f: 1.08, name: "Volldampf" } };
+  const FAHRT_ORDER = ["spar", "normal", "voll"];
+  const SEA_REV = .15, VOLL_WEAR = 1.5, FAHRT_SPD = .5; // Erlösabschlag je längerer Seezeit, Verschleiß bei Volldampf, Anteil des Tempos, den die Fahrgäste merken
+  const KQ = [{ name: "einfach", cost: .75, score: 30 }, { name: "ordentlich", cost: 1, score: 50 }, { name: "fein", cost: 1.6, score: 78 }, { name: "à la carte", cost: 2.24, score: 95 }];
+  const KU_CLS = [1.2, .6, .2], KU_W = 1, KU_CRUISE = .4; // Gewicht der Küche je Klasse; Ruf der Küche wirkt bei Vergnügungsreisen auch auf die Nachfrage
+  const MI_PAY = 500, KE_PAY = 400, PM_PAY = 450, CHEF_PAY = 700;
+  const COAL_SURCH = { 1: .03, 3: .06, 5: .1 };
+  const CATERERS = {
+    billig: { cost: .9, levels: [0, 1], fail: .6, names: { ham: "Hafenküche Billwerder", lpl: "Dockside Victualling Company", lon: "Wapping Galley Works" }, note: "Billiganbieter: nur einfach und ordentlich, 10 % billiger, die Qualität schwankt" },
+    solide: { cost: 1, levels: [0, 1, 2], fail: .15, names: { ham: "Hanseatische Proviant-Gesellschaft", lpl: "Mersey Provision Company", lon: "Thames Provision Company" }, note: "Solider Caterer: alle Stufen zum Normalpreis" },
+    hotel: { cost: 1.05, levels: [1, 2], fail: .1, names: { ham: "Alster-Hotel-Gesellschaft", lpl: "Wellington Hotel Company", lon: "Strand Hotel Company" }, note: "Hotel-Caterer: ordentlich und fein, 5 % teurer, feine Küche bringt Ansehen" },
+    luxus: { cost: 1, levels: [3], first: true, from: 1905, fail: .1, names: { ham: "Restaurant-Gesellschaft Imperial", lpl: "Restaurant Excelsior", lon: "Restaurant Monarch" }, note: "Luxus-Restaurant: nur 1. Klasse, à la carte, 40 % teurer als fein, bringt Prestige" } };
+  const CAT_ORDER = ["billig", "solide", "hotel", "luxus"];
+  function catName(s, k) { return CATERERS[k].names[s.home || "ham"] || CATERERS[k].names.ham; }
+  function postNeed(s, sh) {
+    const r = routeOf(s, sh); if (!r) return 0;
+    let m = 0;
+    for (const k of Object.keys(s.contracts || {})) { const c = s.contracts[k]; if ((r.a === c.a && r.b === c.b) || (r.a === c.b && r.b === c.a)) m = Math.max(m, c.minSpeed || 0); }
+    return m;
+  }
+  function postSlow(s, sh, stage) { const need = postNeed(s, sh); return need > 0 && TYPES[sh.type].speed * FAHRT[stage].f < need; }
+  function fahrtOf(s, sh) {
+    if (sh.fahrt && FAHRT[sh.fahrt]) return sh.fahrt;
+    const f = FAHRT[s.fahrt] ? s.fahrt : "normal";
+    if (f === "spar" && staff(s).mi >= 1 && postSlow(s, sh, "spar")) return "normal";
+    return f;
+  }
+  function fahrtF(s, sh) { return FAHRT[fahrtOf(s, sh)].f; }
+  function setFahrt(s, stage) {
+    if (!FAHRT[stage]) return "Unbekannte Fahrstufe.";
+    const st = staff(s); s.fahrt = stage;
+    if (st.mi >= 0 && st.miAuto) { st.miAuto = false; st.miPlan = null; return "Von Hand gestellt – die Regel des Maschineninspektors ist ausgeschaltet."; }
+    return null;
+  }
+  function setShipFahrt(s, id, stage) { const sh = s.ships.find(x => x.id === id); if (!sh) return; if (stage && FAHRT[stage]) sh.fahrt = stage; else delete sh.fahrt; }
+  function fahrtAuto(s) {
+    const st = staff(s); if (st.mi < 0 || !st.miAuto) { st.miPlan = null; return; }
+    const idx = s.coal * 100, want = idx >= st.miSpar ? "spar" : idx < st.miVoll ? "voll" : "normal";
+    if (want === (s.fahrt || "normal")) { st.miPlan = null; return; }
+    if (!st.miPlan || st.miPlan.stage !== want) st.miPlan = { stage: want, at: s.m + [2, 1, 0, 0][st.mi] };
+    if (s.m >= st.miPlan.at) {
+      s.fahrt = want; st.miPlan = null;
+      s.log.unshift({ m: s.m, head: "Die Flotte fährt jetzt " + FAHRT[want].name, text: "Ihr Maschineninspektor stellt die Reederei-Fahrstufe um – der Kohlepreis steht bei " + Math.round(idx) + " %.", kind: "own", img: want === "spar" ? "fs_sparfahrt" : want === "voll" ? "fs_volldampf" : "pers_maschineninspektor" });
+    }
+  }
+  function kueche(s) { return s.kueche || (s.kueche = { q: [1, 1, 1], eigen: false, cat: null, lux: null, notUntil: -1, wob: 0 }); }
+  const catOn = (s, c) => !!(c && c.start <= s.m && c.until >= s.m);
+  function kqOf(s, sh, c) { const o = sh && sh.kq ? sh.kq[c] : null; return o != null ? o : kueche(s).q[c]; }
+  function kqEff(s, sh, c) {
+    const K = kueche(s);
+    if (K.notUntil >= s.m) return 0;
+    if (c === 0 && catOn(s, K.lux)) return 3;
+    let q = kqOf(s, sh, c);
+    if (catOn(s, K.cat)) { const L = CATERERS[K.cat.k].levels; q = clamp(q, L[0], L[L.length - 1]); }
+    return q;
+  }
+  function kScore(s, q, c) {
+    const K = kueche(s), st = staff(s); let v = KQ[q].score;
+    if (q === 3) return v;
+    if (catOn(s, K.cat)) { if (K.cat.k === "billig") v += K.wob || 0; if (K.cat.k === "hotel" && q === 2) v += 4; }
+    else if (K.eigen && st.pm >= 0) { if (q === 2 && st.pm === 0) v -= 8; v += [0, 0, 3, 6][st.pm]; }
+    return clamp(v, 5, 100);
+  }
+  function kCostF(s, q, c) {
+    const K = kueche(s), f = KQ[q].cost;
+    if (q === 3) return f * (K.lux ? K.lux.wage / s.wage : 1);
+    if (catOn(s, K.cat)) return f * CATERERS[K.cat.k].cost * K.cat.wage / s.wage;
+    if (K.eigen && staff(s).pm >= 0) return f * .9;
+    return f;
+  }
+  function setKq(s, c, q) { if (c < 0 || c > 2 || q < 0 || q > 2) return; kueche(s).q[c] = q; }
+  function setShipKq(s, id, c, q) {
+    const sh = s.ships.find(x => x.id === id); if (!sh) return;
+    sh.kq = sh.kq || [null, null, null]; sh.kq[c] = q == null || q < 0 ? null : clamp(q, 0, 2);
+    if (sh.kq.every(x => x == null)) delete sh.kq;
+  }
+  function setEigen(s, on) {
+    const K = kueche(s);
+    if (on && staff(s).pm < 0) return "Für eine eigene Küche brauchen Sie einen Proviantmeister.";
+    if (on && catOn(s, K.cat)) return "Solange ein Caterer-Vertrag läuft, gibt es keine eigene Küche.";
+    K.eigen = !!on; return null;
+  }
+  function catOffers(s) { const y = yearOf(s); return CAT_ORDER.filter(k => !CATERERS[k].from || y >= CATERERS[k].from).map(k => ({ k, name: catName(s, k), note: CATERERS[k].note, levels: CATERERS[k].levels, first: !!CATERERS[k].first })); }
+  function signCaterer(s, k, years) {
+    const C = CATERERS[k]; if (!C) return "Unbekannter Caterer.";
+    if (C.from && yearOf(s) < C.from) return "Diesen Caterer gibt es erst ab " + C.from + ".";
+    const K = kueche(s); years = years === 3 ? 3 : 1;
+    if (C.first ? catOn(s, K.lux) : catOn(s, K.cat)) return "Es läuft schon ein solcher Vertrag.";
+    const c = { k, start: s.m, until: s.m + years * 12 - 1, years, wage: s.wage };
+    if (C.first) K.lux = c; else { K.cat = c; K.eigen = false; }
+    s.log.unshift({ m: s.m, head: "Vertrag mit " + catName(s, k), text: (years === 1 ? "Ein Jahr" : "Drei Jahre") + " fester Preis pro Fahrgast" + (C.first ? " für die 1. Klasse" : "") + ".", kind: "own", img: C.first ? "kue_alacarte" : "kue_caterer" });
+    return null;
+  }
+  function catCancelFee(s, c) {
+    if (!c) return 0;
+    const v = s.ships.reduce((a, sh) => a + (sh.last && sh.last.catC ? (CATERERS[c.k].first ? sh.last.catC[0] : sh.last.catC[0] + sh.last.catC[1] + sh.last.catC[2]) : 0), 0);
+    return Math.round(Math.max(0, c.until - s.m + 1) * v * .25);
+  }
+  function cancelCaterer(s, which) {
+    const K = kueche(s), c = which === "lux" ? K.lux : K.cat; if (!catOn(s, c)) return "Kein laufender Vertrag.";
+    const fee = catCancelFee(s, c); expense(s, "Sonderausgaben", fee);
+    if (which === "lux") K.lux = null; else K.cat = null;
+    s.log.unshift({ m: s.m, head: "Vertrag mit " + catName(s, c.k) + " gekündigt", text: "Die Kündigung kostet " + fmt(fee) + " Mark – ein Viertel der Restsumme.", kind: "own", img: "kue_caterer" });
+    return null;
+  }
+  function coalIdx(s) { return Math.round(s.coal * 100); }
+  function coalTrend(s) { const h = s.coalHist || [], p = h.length ? h[h.length - 1].c : s.coal; return s.coal > p + .004 ? 1 : s.coal < p - .004 ? -1 : 0; }
+  function coalActive(s) { return (s.coalK || []).filter(k => k.start <= s.m && k.until >= s.m); }
+  function coalBase(s) { const u = (s.coalUse || []).slice(-3); return u.length ? u.reduce((a, b) => a + b, 0) / u.length : 0; }
+  function coalPrice(s, cur, mkt) {
+    const n = mkt / s.coal; cur.coalN = (cur.coalN || 0) + n;
+    const ks = coalActive(s).filter(k => !(k.stop >= s.m));
+    if (!ks.length) return mkt;
+    const qty = ks.reduce((a, k) => a + k.qty, 0), p = ks.reduce((a, k) => a + k.qty * k.price, 0) / qty;
+    const cov = Math.min(Math.max(0, qty - (cur.kUsed || 0)), n);
+    cur.kUsed = (cur.kUsed || 0) + cov;
+    return cov * p + (n - cov) * s.coal;
+  }
+  function coalOffer(s, years, share) {
+    years = COAL_SURCH[years] != null ? +years : 1; share = share >= 1 ? 1 : .5;
+    const st = staff(s), red = st.ke >= 0 ? (st.ke + 1) / 100 : 0, act = coalActive(s), used = act.reduce((a, k) => a + k.share, 0);
+    const base = coalBase(s), qty = Math.round(base * share), surch = COAL_SURCH[years] - red, price = Math.round(s.coal * (1 + surch) * 1000) / 1000;
+    const why = act.length >= 2 ? "Höchstens zwei Verträge gleichzeitig." : used + share > 1.001 ? "Zusammen höchstens 100 % des Verbrauchs." : qty < 100 ? "Noch kein nennenswerter Kohleverbrauch in den letzten drei Monaten." : "";
+    return { years, share, qty, price, surch, months: years * 12, total: Math.round(qty * price * years * 12), now: Math.round(qty * (price - s.coal)), ok: !why, why };
+  }
+  function signCoal(s, years, share, renew) {
+    const o = coalOffer(s, years, share); if (!o.ok) return o.why;
+    s.coalK = s.coalK || [];
+    s.coalK.push({ id: uid(s), start: s.m, until: s.m + o.months - 1, years: o.years, share: o.share, qty: o.qty, price: o.price, stop: -1, warned: false });
+    s.log.unshift({ m: s.m, head: renew ? "Kohle-Liefervertrag verlängert" : "Kohle-Liefervertrag geschlossen", text: (o.years === 1 ? "Ein Jahr" : o.years + " Jahre") + ", " + Math.round(o.share * 100) + " % des Verbrauchs zu " + Math.round(o.price * 100) + " % des Normalpreises.", kind: "own", img: "ev_kohlevertrag" });
+    return null;
+  }
+  function coalCancelFee(s, k) { return Math.round(Math.max(0, k.until - s.m + 1) * k.qty * k.price * .25); }
+  function cancelCoal(s, id) {
+    const k = (s.coalK || []).find(x => x.id === id); if (!k) return "Vertrag nicht gefunden.";
+    const fee = coalCancelFee(s, k); expense(s, "Sonderausgaben", fee); s.coalK = s.coalK.filter(x => x !== k);
+    s.log.unshift({ m: s.m, head: "Kohle-Liefervertrag gekündigt", text: "Die Kündigung kostet " + fmt(fee) + " Mark – ein Viertel der Restsumme.", kind: "own", img: "ev_kohlevertrag" });
+    return null;
+  }
+  function coalShock(s, de, gb, months) {
+    s.coal = clamp(s.coal * ((s.country || "de") === "gb" ? gb : de), .75, 1.8);
+    if (months) s.coalFloor = { until: s.m + months - 1, min: Math.round(s.coal * .95 * 1000) / 1000 };
+  }
+  function coalMonthEnd(s, add) {
+    const cur = s.cur, st = staff(s);
+    s.coalUse = (s.coalUse || []).concat([Math.round(cur.coalN || 0)]).slice(-6);
+    s.coalHist = (s.coalHist || []).concat([{ m: s.m, c: Math.round(s.coal * 1000) / 1000 }]).slice(-120);
+    const run = coalActive(s).filter(k => !(k.stop >= s.m));
+    if (run.length) {
+      const qty = run.reduce((a, k) => a + k.qty, 0), p = run.reduce((a, k) => a + k.qty * k.price, 0) / qty, used = cur.kUsed || 0;
+      if (used < qty * .8) {
+        const fee = Math.round((qty * .8 - used) * p); add("Kohle", fee); s.cash -= fee;
+        s.log.unshift({ m: s.m, head: "Mindestabnahme Kohle", text: "Ihre Schiffe haben weniger Kohle verbraucht als vereinbart. Für den Rest bis zur Mindestabnahme von 80 % zahlen Sie " + fmt(fee) + " Mark.", kind: "bad", img: "ev_kohlevertrag" });
+      }
+    }
+    for (const k of (s.coalK || []).slice()) {
+      if (k.until === s.m + 3 && st.ke >= 0 && !k.warned) {
+        k.warned = true;
+        if (st.ke > 0 || rnd(s) > .35) s.log.unshift({ m: s.m, head: "Kohlevertrag läuft in drei Monaten aus", text: "Ihr Kohleneinkäufer erinnert Sie: Der Vertrag über " + Math.round(k.share * 100) + " % des Verbrauchs endet im " + dateStr(k.until) + ". " + (s.coal * 100 < st.keRenew ? "Bei heutigem Preis würde er verlängern." : "Bei heutigem Preis würde er nicht verlängern."), kind: "own", img: "pers_einkaeufer" });
+      }
+      if (k.until <= s.m) {
+        s.coalK = s.coalK.filter(x => x !== k);
+        if (st.ke >= 0 && s.coal * 100 < st.keRenew && !signCoal(s, k.years, k.share, true)) continue;
+        s.log.unshift({ m: s.m, head: "Kohle-Liefervertrag ausgelaufen", text: "Ab jetzt bunkern Ihre Schiffe wieder zum Marktpreis.", kind: "own", img: "ev_bunkern" });
+      }
+    }
+  }
+  function kitchenMonthEnd(s, add) {
+    const cur = s.cur, K = kueche(s);
+    s.kuMonth = cur.kuW ? 50 + cur.kuS / cur.kuW : null;
+    if (catOn(s, K.cat) && K.cat.k === "billig") K.wob = Math.round((rnd(s) - .5) * 16);
+    if (catOn(s, K.cat) && K.cat.k === "hotel" && cur.fine) up(s, "rep", .3);
+    if (catOn(s, K.lux) && cur.fine) { s.prestige = (s.prestige || 0) + .2; s.mk.brand = clamp(s.mk.brand + .2, 0, 100); }
+    for (const w of ["cat", "lux"]) {
+      const c = K[w]; if (!c || c.until !== s.m) continue;
+      const raise = Math.round(3 + rnd(s) * 9);
+      s.pending.push({ id: "catverl", which: w, k: c.k, years: c.years, raise, day: 2, img: CATERERS[c.k].first ? "kue_alacarte" : "kue_caterer", head: catName(s, c.k) + " will verlängern",
+        text: "Der Vertrag läuft aus. " + catName(s, c.k) + " bietet die Verlängerung um " + (c.years === 1 ? "ein Jahr" : "drei Jahre") + " an – " + raise + " % teurer als bisher." });
+    }
+    if (s.chef && !s.ships.some(x => x.id === s.chef.ship)) {
+      const sh = mealShips(s).filter(x => TYPES[x.type].sb[0] > 0).sort((a, b) => TYPES[b.type].sb[0] - TYPES[a.type].sb[0])[0];
+      if (sh) s.chef.ship = sh.id; else { s.log.unshift({ m: s.m, head: "Der Meisterkoch geht von Bord", text: "Ohne Schiff mit 1. Klasse auf langer Strecke sucht er sich eine neue Stelle.", kind: "own", img: "ev_koch" }); s.chef = null; }
+    }
+  }
+  function mealShips(s) { return s.ships.filter(sh => { if (!active(s, sh)) return false; const i = infoOf(s, sh); return i && (i.cruise || i.dist >= 40); }); }
+  function usesLevel(s, q) { const K = kueche(s); return K.q.includes(q) || s.ships.some(sh => sh.kq && sh.kq.includes(q)); }
+  function provRisk(s) {
+    const K = kueche(s), st = staff(s); let r = 0;
+    if (catOn(s, K.cat) && K.cat.k === "billig") r += .9;
+    if (usesLevel(s, 0)) r += .35;
+    if (K.eigen && st.pm >= 0 && !catOn(s, K.cat)) r += [.5, .22, .14, .08][st.pm];
+    return r;
+  }
+  function sickness(s, sh) {
+    const n = Math.max(5, Math.round(aboard(s, sh) * (.05 + rnd(s) * .1))), sum = Math.round(n * 60 * (s.pidx || 1) / 100) * 100;
+    sh.offUntil = Math.max(sh.offUntil || 0, s.t) + 14; expense(s, "Entschädigungen", sum); up(s, "rep", -3);
+    const hit = s.expHit || (s.expHit = { si: 0, k: 0 }); hit.ku = (hit.ku || 0) + 15;
+    s.log.unshift({ m: s.m, head: "Krankheit an Bord der „" + sh.name + "“", text: n + " Fahrgäste sind nach dem Essen erkrankt. Das Schiff liegt 14 Tage in Quarantäne, die Reederei zahlt " + fmt(sum) + " Mark Entschädigung.", kind: "bad", img: "ev_cholera" });
+  }
+  function chefShips(s) { return mealShips(s).filter(sh => TYPES[sh.type].sb[0] > 0 && kqEff(s, sh, 0) >= 2); }
+  function fineServed(s) { return mealShips(s).filter(sh => [0, 1, 2].some(c => kqEff(s, sh, c) >= 2 && TYPES[sh.type].sb[c] > 0)); }
+  // Vorschau: Der letzte Monat wird zweimal nachgerechnet – wie gespielt und mit der neuen Einstellung, ohne Zufälle
+  function simRun(x) {
+    const n = dim(x.m); for (let i = 0; i < n; i++) dayTick(x);
+    const ku = x.cur.kuW ? 50 + x.cur.kuS / x.cur.kuW : null, rep = finalize(x);
+    rep.profit = rep.rev - Object.values(rep.cost).reduce((a, b) => a + b, 0); rep.ku = ku; return rep;
+  }
+  function whatIf(s, apply, kitchen) {
+    const json = JSON.stringify(Object.assign({}, s, { log: [], pending: [] }));
+    const mk = () => { const x = JSON.parse(json); x.sim = true; if (x.m > 0) x.m -= 1; const h = x.coalHist || []; if (h.length) x.coal = h[h.length - 1].c; x.cur = newCur(x); for (const sh of x.ships) sh.cur = null; for (const r of x.routes) r.cur = null; return x; };
+    const A = mk(), B = mk(); apply(B);
+    const a = simRun(A); let b = simRun(B);
+    // Küche: Die Fahrgäste merken sich das Essen – auf Dauer zählt auch die Erfahrung „Küche“
+    if (kitchen && a.ku != null && b.ku != null && Math.abs(b.ku - a.ku) > .5) { const C = mk(); apply(C); C.exp.ku = clamp((C.exp.ku != null ? C.exp.ku : 50) + b.ku - a.ku, 5, 95); b = simRun(C); }
+    const d = k => Math.round((b.cost[k] || 0) - (a.cost[k] || 0));
+    return { coal: d("Kohle"), cater: d("Verpflegung"), rev: Math.round(b.rev - a.rev), pax: Math.round(b.pax - a.pax), paxPct: a.pax ? (b.pax - a.pax) / a.pax : 0, net: Math.round(b.profit - a.profit),
+      base: { coal: Math.round(a.cost.Kohle || 0), cater: Math.round(a.cost.Verpflegung || 0), rev: Math.round(a.rev), pax: a.pax }, m: s.m - 1 };
+  }
+  function prevFahrt(s, stage, shipId) {
+    const r = whatIf(s, x => { if (shipId) setShipFahrt(x, shipId, stage); else x.fahrt = stage; });
+    const S = shipId ? s : Object.assign({}, s, { fahrt: stage });
+    r.post = s.ships.filter(sh => (!shipId || sh.id === shipId) && postNeed(s, sh) > 0).filter(sh => {
+      const nsh = shipId ? Object.assign({}, sh, { fahrt: stage || undefined }) : sh, now = fahrtOf(s, sh), next = fahrtOf(S, nsh);
+      return postSlow(s, sh, next) && !postSlow(s, sh, now);
+    }).map(sh => sh.name);
+    return r;
+  }
+  function prevKq(s, c, q, shipId) { return whatIf(s, x => { if (shipId) setShipKq(x, shipId, c, q); else setKq(x, c, q); }, true); }
+  function prevCat(s, k, years) {
+    const C = CATERERS[k], r = whatIf(s, x => { x.log = []; signCaterer(x, k, years); }, true);
+    r.lower = []; r.upper = [];
+    if (!C.first) for (let c = 0; c < 3; c++) { const q = kueche(s).q[c]; if (q < C.levels[0]) r.upper.push(c); if (q > C.levels[C.levels.length - 1]) r.lower.push(c); }
+    return r;
+  }
+  function prevEigen(s, on) { return whatIf(s, x => { kueche(x).eigen = !!on; }, true); }
   function crewCost(s, t) { const st = staff(s); return t.crew * (DEPT.deck.share * STAFF_PAY[st.deck] + DEPT.maschine.share * STAFF_PAY[st.maschine] + DEPT.service.share * STAFF_PAY[st.service]); }
   function setStaff(s, k, v) {
     const st = staff(s);
     if (DEPT[k]) st[k] = clamp(v | 0, 0, 3);
     else if (k === "insp") st.insp = !!v; else if (k === "inspMin") st.inspMin = clamp(v | 0, 40, 80); else if (k === "markt") st.markt = !!v;
+    else if (k === "mi" || k === "ke" || k === "pm") { st[k] = clamp(v | 0, -1, 3); if (k === "pm" && st.pm < 0) kueche(s).eigen = false; if (k === "mi") { st.miPlan = null; if (st.mi >= 0) st.miAuto = true; } }
+    else if (k === "miAuto") { st.miAuto = !!v; st.miPlan = null; } else if (k === "miSpar") st.miSpar = clamp(v | 0, 100, 150); else if (k === "miVoll") st.miVoll = clamp(v | 0, 60, 100); else if (k === "keRenew") st.keRenew = clamp(v | 0, 70, 150);
   }
-  function staffMonthly(s) { const st = staff(s); return ((st.insp ? INSP_PAY : 0) + (st.markt ? MARKT_PAY : 0)) * s.wage; }
+  function staffMonthly(s) {
+    const st = staff(s), lv = (k, pay) => st[k] >= 0 ? pay * STAFF_PAY[st[k]] : 0;
+    return ((st.insp ? INSP_PAY : 0) + (st.markt ? MARKT_PAY : 0) + lv("mi", MI_PAY) + lv("ke", KE_PAY) + lv("pm", PM_PAY) + (s.chef ? CHEF_PAY : 0)) * s.wage;
+  }
   function inspectorDay(s) {
     const st = staff(s); if (!st.insp) return;
     for (const sh of s.ships) {
@@ -1053,6 +1309,8 @@
     const tK = clamp(52 + (avgCom - 3) * 8 + SVC_LV[st.service] * 15 - hit.k, 5, 95), tS = clamp(50 + (st.service - 1) * 15 + (s.mk.hallen ? 3 : 0), 5, 95), tSi = clamp(50 + (st.deck - 1) * 8 + eqShare * 15 - hit.si, 5, 95);
     x.k += (tK - x.k) * .08; x.s += (tS - x.s) * .08; x.si += (tSi - x.si) * .08;
     hit.si *= .9; hit.k *= .9;
+    if (x.ku == null) x.ku = 50;
+    const tKu = clamp((s.kuMonth != null ? s.kuMonth : 50) - (hit.ku || 0), 5, 95); x.ku += (tKu - x.ku) * .08; hit.ku = (hit.ku || 0) * .9;
   }
   function rivalMonthly(s) {
     for (const k of RIV_ORDER) { const st = rivState(s, k); st.modern += k === "brandt" ? .004 : 0; st.comBoost = Math.max(0, st.comBoost - .002); }
@@ -1078,12 +1336,15 @@
     const info = rInfo(s, r); if (!info) return null;
     const c = info.mix.indexOf(Math.max.apply(null, info.mix)), w = info.w, cs = info.comp, pid = s.pidx;
     const mine = s.ships.filter(x => x.line === r.id && x.ready <= s.m);
-    const row = (spd, com, rep, pf, eu, br) => ({ Preis: w.p * CLS_WP[c] * (1 - pf), Tempo: w.s * 4 * (spd / cs.speed - 1), Komfort: w.c * CLS_WC[c] * .5 * (com - 3), Ruf: w.r * (rep - 50) / 50, Erfahrungen: eu, Bekanntheit: br });
+    const meal = info.cruise || info.dist >= 40;
+    const row = (spd, com, rep, pf, eu, br, ku) => ({ Preis: w.p * CLS_WP[c] * (1 - pf), Tempo: w.s * 4 * (spd / cs.speed - 1), Komfort: w.c * CLS_WC[c] * .5 * (com - 3), Ruf: w.r * (rep - 50) / 50, Erfahrungen: eu, Bekanntheit: br, "Küche": ku || 0 });
     let me = null;
     if (mine.length) {
-      const t0 = mine.map(x => TYPES[x.type]); const spd = mine.reduce((a, x) => a + (TYPES[x.type].speed + (x.spd || 0)) * SPD_LV[staff(s).maschine], 0) / mine.length;
+      const t0 = mine.map(x => TYPES[x.type]); const spd = mine.reduce((a, x) => a + (TYPES[x.type].speed + (x.spd || 0)) * SPD_LV[staff(s).maschine] * (1 + FAHRT_SPD * (fahrtF(s, x) - 1)), 0) / mine.length;
       const com = t0.reduce((a, t) => a + t.comfort, 0) / t0.length + SVC_LV[staff(s).service];
-      me = row(spd, com, s.rep, r.price[c] / (info.refC[c] * pid), expU(info, myExp(s)), mkBonus(s, r, info));
+      const kc = mine.filter(x => TYPES[x.type].sb[c] > 0), kSc = kc.length ? kc.reduce((a, x) => a + Math.min(100, kScore(s, kqEff(s, x, c), c) + (c === 0 && s.chef && s.chef.ship === x.id ? 20 : 0)), 0) / kc.length : 50;
+      const ku = meal ? KU_W * KU_CLS[c] * (.5 * (kSc - 50) / 50 + .5 * ((s.exp && s.exp.ku != null ? s.exp.ku : 50) - 50) / 50) : 0;
+      me = row(spd, com, s.rep, r.price[c] / (info.refC[c] * pid), expU(info, myExp(s)), mkBonus(s, r, info), ku);
     }
     const riv = rivalsOf(s, r, info).map(x => { const q = rivalStats(s, r, info, x.k); return { k: x.k, name: RIV[x.k].name, img: RIV[x.k].img, row: row(q.spd, q.com, q.rep, q.pf * modFactor(s, r, info, "comp"), q.eu, 0) }; });
     const last = r.last || {}, D = last.D || 0;
@@ -1280,6 +1541,23 @@
   const ownRoutesWithComp = s => s.routes.filter(r => { const i = rInfo(s, r); return i && compDepsOf(s, r, i) > 0; });
 
   const EVENTS = {
+    proviant: { when: s => provRisk(s) > 0 && mealShips(s).length > 0, w: s => provRisk(s), cd: 8, img: "ev_proviant",
+      make: s => { const sh = pick(s, mealShips(s)), cost = Math.round(Math.max(2000, (sh.last && sh.last.cater || 0) * .6) / 100) * 100; return { ship: sh.id, cost, head: "Verdorbener Proviant auf der „" + sh.name + "“", text: "Beim Bunkern merkt der Koch: Ein Teil der Vorräte ist verdorben. Was soll geschehen?" }; },
+      opts: [
+        { t: "Alles ersetzen", h: (s, ev) => fmt(ev.cost) + " Mark, kein Risiko", f: (s, ev) => { expense(s, "Sonderausgaben", ev.cost); const hit = s.expHit || (s.expHit = { si: 0, k: 0 }); hit.ku = (hit.ku || 0) + 3; return "Frische Vorräte kommen an Bord."; } },
+        { t: "Aussortieren und weiterfahren", h: "billig, aber Fahrgäste könnten krank werden", f: (s, ev) => { const sh = s.ships.find(x => x.id === ev.ship); const hit = s.expHit || (s.expHit = { si: 0, k: 0 }); if (sh && rnd(s) < .4) { sickness(s, sh); return "Das ging schief."; } hit.ku = (hit.ku || 0) + 6; return "Die Fahrgäste murren über das Essen, aber alle bleiben gesund."; } },
+      ] },
+    koch: { when: s => yearOf(s) >= 1885 && !s.chef && chefShips(s).length > 0, w: .4, cd: 120, img: "ev_koch", ok: (s, ev) => [s.cash >= ev.fee, true],
+      make: s => { const sh = chefShips(s).sort((a, b) => TYPES[b.type].sb[0] - TYPES[a.type].sb[0])[0], fee = Math.round(5000 * (s.pidx || 1) / 100) * 100; return { ship: sh.id, fee, head: "Ein berühmter Koch will an Bord", text: "Ein Meisterkoch aus den besten Häusern der Stadt möchte die Küche der „" + sh.name + "“ übernehmen. Er ist teuer – aber die 1. Klasse würde von nichts anderem mehr reden." }; },
+      opts: [
+        { t: "Anstellen", h: (s, ev) => "Handgeld " + fmt(ev.fee) + " Mark, dazu " + fmt(Math.round(CHEF_PAY * s.wage)) + " Mark im Monat", f: (s, ev) => { expense(s, "Sonderausgaben", ev.fee); s.chef = { ship: ev.ship, since: s.m }; s.mk.brand = clamp(s.mk.brand + 3, 0, 100); return "Ab sofort kocht er in der 1. Klasse."; } },
+        { t: "Ablehnen", h: "er sucht sich eine andere Reederei", f: s => "Er zieht weiter." },
+      ] },
+    catverl: { when: () => false, w: 0, img: "kue_caterer",
+      opts: [
+        { t: "Verlängern", h: (s, ev) => ev.raise + " % teurer", f: (s, ev) => { const K = kueche(s), c = { k: ev.k, start: s.m, until: s.m + ev.years * 12 - 1, years: ev.years, wage: s.wage * (1 + ev.raise / 100) }; if (CATERERS[ev.k].first) K.lux = c; else { K.cat = c; K.eigen = false; } return "Der Vertrag läuft weiter."; } },
+        { t: "Auslaufen lassen", h: "zurück zur eigenen Verpflegung", f: s => "Ab jetzt verpflegen Sie wieder selbst." },
+      ] },
     eis: { when: s => monthIn(s, [2, 3, 4]) && inArea(s, "atlantic").length > 0, w: 3, img: "ev_eis",
       head: "Eiswarnung auf dem Nordatlantik", text: "Ihre Kapitäne melden Treibeis auf der nördlichen Route. Wie sollen sie fahren?",
       opts: [
@@ -1471,7 +1749,7 @@
     preis: { when: s => ownRoutesWithComp(s).length > 0, w: 1.3, f: s => { const r = pick(s, ownRoutesWithComp(s)), i = rInfo(s, r), k = mainRival(s, r, i); s.mods.push({ route: r.id, key: "comp", f: .8, until: s.m + 6 }); return ["Preiskampf auf " + i.name, RIV[k].name + " senkt dort die Fahrpreise um 20 % – vorerst für ein halbes Jahr.", RIV[k].img]; } },
     kaiser: { when: s => monthIn(s, [3, 4, 5]), w: 1, img: "line_helgo", f: s => { s.mods.push({ port: "hel", key: "demand", f: 1.5, until: s.m + 2 }); return ["Kaiserbesuch auf Helgoland angekündigt", "Die Insel erwartet einen Ansturm von Schaulustigen."]; } },
     konk: { when: s => ownRoutesWithComp(s).length > 0, w: 1, f: s => { const r = pick(s, ownRoutesWithComp(s)), i = rInfo(s, r), k = mainRival(s, r, i); r.compMult = (r.compMult || 1) * 1.3; r.compSpeedAdd = (r.compSpeedAdd || 0) + .5; return [RIV[k].name + " verstärkt die Flotte", "Mehr Abfahrten und schnellere Schiffe auf " + i.name + ".", RIV[k].img]; } },
-    kohle: { when: s => s.coal < 1.15, w: 1, img: "ev_kohle", f: s => { s.coal = 1.3; return ["Kohle wird teuer", "Streiks in den Zechen treiben den Kohlepreis um 30 % nach oben."]; } },
+    kohle: { when: s => s.coal < 1.15, w: .7, img: "ev_kohle", f: s => { s.coal = 1.3; return ["Kohle wird teuer", "Streiks in den Zechen treiben den Kohlepreis um 30 % nach oben."]; } },
     verzug: { when: s => s.ships.some(sh => sh.ready > s.m + 1), w: 1.5, f: s => { const sh = pick(s, s.ships.filter(x => x.ready > s.m + 1)); sh.ready += 2; return ["Bauverzug bei der Werft", "Die Ablieferung der „" + sh.name + "“ verschiebt sich auf " + dateStr(sh.ready) + "."]; } },
     rabatt: { when: s => !(s.discount && s.discount.until >= s.m), w: .8, f: s => { s.discount = { f: .9, until: s.m + 3 }; return ["Werft bietet Sonderkonditionen", "Freie Hellingplätze: 10 % Rabatt auf alle Neubauten, die bis " + dateStr(s.m + 3) + " bestellt werden."]; } },
     sturmflut: { when: s => monthIn(s, [9, 10, 11, 0, 1, 2]), w: .8, img: "ev_sturmflut", f: s => { const cost = Math.round(8000 + fleetValue(s) * .003); expense(s, "Sonderausgaben", cost); const hh = onPort(s, s.home || "ham"); if (hh.length) { const sh = pick(s, hh); sh.cond = Math.max(5, sh.cond - 8); } return ["Sturmflut im Hamburger Hafen", "Das Wasser steht über den Kais. Schäden an Anlegern und Schiffen kosten Sie " + fmt(cost) + " Mark."]; } },
@@ -1486,6 +1764,11 @@
     epidemie: { when: s => s.routes.some(r => ["rio", "bue", "sha", "ale"].includes(r.a) || ["rio", "bue", "sha", "ale"].includes(r.b)), w: .6, f: s => { const p = pick(s, ["rio", "bue", "sha", "ale"].filter(x => s.routes.some(r => r.a === x || r.b === x))); s.mods.push({ port: p, key: "demand", f: .6, until: s.m + 4 }); return ["Gelbfieber in " + PORTS[p].name, "Die Behörden raten von Reisen ab. Die Buchungen gehen für einige Monate deutlich zurück."]; } },
   };
   Object.assign(NEWS, {
+    lieferausfall: { when: s => coalActive(s).some(k => !(k.stop >= s.m)), w: .5, img: "ev_bunkern", f: s => { const k = pick(s, coalActive(s).filter(k => !(k.stop >= s.m))), n = 1 + Math.floor(rnd(s) * 3); k.stop = s.m + n - 1; return [rnd(s) < .5 ? "Streik bei Ihrem Kohlenlieferanten" : "Grubenunglück bei Ihrem Kohlenlieferanten", "Der Lieferant kann " + (n === 1 ? "einen Monat" : n + " Monate") + " lang nicht liefern. Bis dahin bunkern Ihre Schiffe zum Marktpreis."]; } },
+    kuechenlob: { when: s => fineServed(s).length > 0, w: s => .3 + .1 * Math.min(5, fineServed(s).length), img: "ev_presse", f: s => { const sh = pick(s, fineServed(s)); s.mk.brand = clamp(s.mk.brand + 3, 0, 100); up(s, "rep", 2); const hit = s.expHit || (s.expHit = { si: 0, k: 0 }); hit.ku = (hit.ku || 0) - 6; return ["Lob für Ihre Küche", "Die Zeitung schwärmt vom Essen an Bord der „" + sh.name + "“. Reisende fragen gezielt nach Ihrer Reederei."]; } },
+    krankheit: { when: s => mealShips(s).length > 0 && (usesLevel(s, 0) || (catOn(s, kueche(s).cat) && kueche(s).cat.k === "billig")), w: .15, img: "ev_cholera", f: s => { sickness(s, pick(s, mealShips(s))); return null; } },
+    caterpleite: { when: s => catOn(s, kueche(s).cat), w: s => CATERERS[kueche(s).cat.k].fail * .5, img: "kue_caterer", f: s => { const K = kueche(s), n = catName(s, K.cat.k); K.cat = null; K.notUntil = s.m; return [n + " ist pleite", "Ihr Caterer hat Konkurs angemeldet. Diesen Monat gibt es an Bord nur Notverpflegung, danach verpflegen Sie wieder selbst."]; } },
+    kochweg: { when: s => s.chef && s.m - s.chef.since >= 12, w: .25, img: "ev_koch", f: s => { s.chef = null; const st = rivState(s, "kopen"); st.comBoost += .15; return ["Ihr Meisterkoch wird abgeworben", "Die Kopenhagener Salonlinie bietet ihm mehr Geld. Er geht – und nimmt seine Rezepte mit."]; } },
     brief: { when: s => true, w: .7, img: "ev_brief", f: s => { const k = pick(s, [["Eine alte Schuld wird beglichen", "Ein Geschäftspartner, von dem Sie nichts mehr erwartet hatten, zahlt ein altes Darlehen zurück."], ["Beitragsrückerstattung", "Die Seeversicherung erstattet Ihnen einen Teil der Prämien – wegen guter Führung."], ["Ein Vermächtnis", "Ein alter Kapitän hat Ihrer Reederei in seinem Testament eine Summe vermacht."]]); const c = Math.round((3000 + rnd(s) * 9000) * s.pidx / 100) * 100; income(s, "Sonstige Einnahmen", c); return [k[0], k[1] + " " + fmt(c) + " Mark gehen auf Ihrem Konto ein."]; } },
     kohlebillig: { when: s => s.coal > .9, w: .9, img: "ev_kohle", f: s => { s.coal = .75; return ["Kohle so billig wie lange nicht", "Neue Zechen an der Ruhr fördern mehr als je zuvor. Der Kohlepreis fällt um ein Viertel."]; } },
     orden: { when: s => s.ships.length > 0, w: .6, img: "ev_orden", f: s => { const sh = pick(s, s.ships); up(s, "rep", 4); s.mk.brand = clamp(s.mk.brand + 5, 0, 100); s.prestige += 2; return ["Orden für einen Ihrer Kapitäne", "Der Kapitän der „" + sh.name + "“ erhält auf dem Kai die Rettungsmedaille. Ganz Hamburg applaudiert Ihrer Reederei."]; } },
@@ -1499,6 +1782,12 @@
   const HISTORY = [
     { y: 1882, mo: 4, key: "irland82", img: "gb_queenstown", f: s => { s.mods.push({ port: "que", key: "demand", f: 1.4, until: s.m + 12 }); return ["Auswanderungswelle aus Irland", "Missernten und Not treiben Zehntausende nach Amerika. In Queenstown drängen sich die Auswanderer an den Tendern."]; } },
     { y: 1886, mo: 4, key: "tilbury86", img: "gb_dover", f: s => { s.pmVer++; return ["Die Tilbury Docks eröffnen", "Unterhalb von London entstehen neue, tiefe Docks. Die Bahn bringt Reisende bis an die Schiffe – Tilbury wird zum Fährbahnhof."]; } },
+    { y: 1889, mo: 4, key: "kohle89", img: "ev_bunkern", f: s => { coalShock(s, 1.25, 1.1, 3); return ["Bergarbeiterstreik an der Ruhr", "Zehntausende Bergleute legen die Arbeit nieder. Kohle wird knapp und teuer."]; } },
+    { y: 1893, mo: 7, key: "kohle93", img: "ev_bunkern", f: s => { coalShock(s, 1.1, 1.3, 4); return ["Aussperrung im britischen Kohlenbergbau", "Die Grubenbesitzer sperren Hunderttausende Bergleute aus. Britische Kohle wird knapp und teuer."]; } },
+    { y: 1905, mo: 0, key: "kohle05", img: "ev_bunkern", f: s => { coalShock(s, 1.2, 1.05, 2); return ["Großer Bergarbeiterstreik an der Ruhr", "Der größte Streik seit 1889 legt die Zechen still. Die Reedereien bunkern teure Auslandskohle."]; } },
+    { y: 1912, mo: 2, key: "kohle12", img: "ev_bunkern", f: s => { coalShock(s, 1.15, 1.4, 2); return ["Britischer Kohlestreik", "Fast eine Million Bergleute streiken für einen Mindestlohn. In britischen Häfen liegen Schiffe ohne Kohle fest."]; } },
+    { y: 1923, mo: 0, key: "kohle23", img: "ev_bunkern", f: s => { coalShock(s, 1.4, 1.1, 6); return ["Ruhrbesetzung", "Französische und belgische Truppen besetzen das Ruhrgebiet. Deutsche Kohle wird knapp, die Reedereien kaufen in England."]; } },
+    { y: 1926, mo: 4, key: "kohle26", img: "ev_bunkern", f: s => { coalShock(s, 1.1, 1.45, 7); return ["Britischer Bergarbeiterstreik", "Nach dem Generalstreik bleiben die Bergleute monatelang den Zechen fern. Kohle wird knapp und teuer."]; } },
     { y: 1889, mo: 8, key: "dockstrike89", img: "gb_streik", f: s => { s.mods.push({ port: "lon", key: "demand", f: .6, until: s.m + 1 }); return ["Großer Hafenstreik in London", "Zehntausende Dockarbeiter kämpfen um sechs Pence Stundenlohn. Der Londoner Hafen steht fast einen Monat still."]; } },
     { c: "gb", y: 1894, mo: 4, key: "shipcanal94", img: "gb_kanal", f: s => { s.mods.push({ port: "lpl", key: "demand", seg: "bath", f: 1.15, until: s.m + 12 }); s.mods.push({ port: "lpl", key: "demand", seg: "biz", f: .95, until: s.m + 24 }); return ["Der Manchester-Schiffskanal ist eröffnet", "Große Schiffe fahren jetzt bis nach Manchester. Liverpool verliert etwas Handel – aber Ausflüge durch den neuen Kanal sind der Renner des Sommers."]; } },
     { y: 1911, mo: 5, key: "lplstrike11", img: "gb_streik", f: s => { s.mods.push({ port: "lpl", key: "demand", f: .5, until: s.m + 2 }); return ["Generalstreik im Liverpooler Hafen", "Hafenarbeiter, Seeleute und Eisenbahner legen die Arbeit nieder. Zwei Monate lang geht im Liverpooler Hafen fast nichts."]; } },
@@ -1693,7 +1982,8 @@
   function world(s) {
     s.konj += (1 - s.konj) * .04 + (rnd(s) - .5) * .03; s.konj = clamp(s.konj, .6, 1.3);
     s.shipIdx += (Math.pow(s.konj, 1.2) - s.shipIdx) * .05; s.shipIdx = clamp(s.shipIdx, .75, 1.2);
-    s.coal += (1 - s.coal) * .07 + (rnd(s) - .5) * .02; s.coal = clamp(s.coal, .8, 1.5);
+    s.coal += (1 - s.coal) * .07 + (rnd(s) - .5) * .06; s.coal = clamp(s.coal, .75, 1.6);
+    if (s.coalFloor && s.coalFloor.until >= s.m) s.coal = Math.max(s.coal, s.coalFloor.min);
     s.base += (4.5 - s.base) * .03 + (rnd(s) - .5) * .1; s.base = clamp(s.base, 3, 8);
     s.mods = s.mods.filter(md => md.until >= s.m);
     if (s.flags.insUntil && s.flags.insUntil < s.m) { s.insMult = 1; s.flags.insUntil = 0; }
@@ -1731,6 +2021,7 @@
     s.m += 1; s.day = 1; s.cur = newCur(s);
     if (s.musDue) { s.musDue = false; museumMonthly(s); }
     world(s);
+    fahrtAuto(s);
     for (const sh of s.ships) applyPlan(s, sh);
     majorCheck(s);
     seasonCheck(s);
@@ -2063,7 +2354,10 @@
   const api = { MONTHS, TYPES, TYPE_ORDER, SPECIAL_ORDER, TYPE_NOTE, MAINT, EQUIP, MK_BUDGET, MK_AGENCY, FIN, PORTS, REGIONS, HOME, SEG, World: W,
     cal, dateStr, fmt, newGame, migrate, nextMonth, resolve, eventOptions, buyNew, buyUsed, rename, randomName, openRoute, closeRoute, routeInfo, canServe, routePrice,
     survey, setLine, setPrice, setMaint, setInsured, equip, equipCost, dock, sellShip, repay, quote, newPrice, shipValue, fleetValue, debt, equity, rating, loanRate,
-    tripsOf, active, score, compDepsOf, GEN_TYPES, typeGroup, factoryEqOptions, factoryEqCost, DES, designBases, designType, saveDesign, seriesFactor, EXHIBITS, partsFor, partCost, scrapValue, scrapShip, donateShip, MUS_PRICE, museumUnlocked, museumCost, hallSlots, hallCost, buildMuseum, expandHall, toMuseum, restoreCost, restoreDays, museumMode, museumFest, museumDraw, bankruptReport, avgPct, CAP_NAMES: { first: CAP_FIRST.concat(CAP_FIRST_GB), last: CAP_LAST.concat(CAP_LAST_GB) }, stopInfo, HOMES, homeName, applyCountry, CAP_SPEC, CAP_XP, SPECIAL_CAPS, caps, capOf, capLevel, capPay, capFx, assignCaptain, hireCaptain, dismissCaptain, lineOf, STAFF_LV, STAFF_PAY, DEPT, INSP_PAY, MARKT_PAY, staff, setStaff, crewCost, RIV, RIV_ORDER, rivalsOf, rivState, rivalNames, marketResearch, myExp, setPlan, planTarget, brandtPrice, ACH, stepPrice, alignPrices, pricePct, refNow, maintCost, ageY, fristInfo, renewFrist, reportInfo, isEmil, tourOpen, rInfo, advanceDay, duePending, dim, dayStr, clsName, CLS_K, inDock, offDuty, detained, dateAfter, dockDays, dockInfo, majorRepair, majorCost, MAJOR, shipFixed, simulateMonth, typeOpen, setBudget, setAgency, campaign, campaignCost, buildHallen, pressTrip, riskOf, suggest, distressOdds, routeOf, infoOf, yearOf };
+    tripsOf, active, score, compDepsOf, GEN_TYPES, typeGroup, factoryEqOptions, factoryEqCost, DES, designBases, designType, saveDesign, seriesFactor, EXHIBITS, partsFor, partCost, scrapValue, scrapShip, donateShip, MUS_PRICE, museumUnlocked, museumCost, hallSlots, hallCost, buildMuseum, expandHall, toMuseum, restoreCost, restoreDays, museumMode, museumFest, museumDraw, bankruptReport, avgPct, CAP_NAMES: { first: CAP_FIRST.concat(CAP_FIRST_GB), last: CAP_LAST.concat(CAP_LAST_GB) }, stopInfo, HOMES, homeName, applyCountry, CAP_SPEC, CAP_XP, SPECIAL_CAPS, caps, capOf, capLevel, capPay, capFx, assignCaptain, hireCaptain, dismissCaptain, lineOf, STAFF_LV, STAFF_PAY, DEPT, INSP_PAY, MARKT_PAY, staff, setStaff, crewCost, RIV, RIV_ORDER, rivalsOf, rivState, rivalNames, marketResearch, myExp, setPlan, planTarget, brandtPrice, ACH, stepPrice, alignPrices, pricePct, refNow, maintCost, ageY, fristInfo, renewFrist, reportInfo, isEmil, tourOpen, rInfo, advanceDay,
+    FAHRT, FAHRT_ORDER, KQ, CATERERS, CAT_ORDER, KU_CLS, MI_PAY, KE_PAY, PM_PAY, CHEF_PAY, COAL_SURCH, fahrtOf, setFahrt, setShipFahrt, postNeed, postSlow,
+    kueche, kqOf, kqEff, kScore, setKq, setShipKq, setEigen, catOffers, catName, signCaterer, cancelCaterer, catCancelFee, catOn,
+    coalIdx, coalTrend, coalActive, coalBase, coalOffer, signCoal, cancelCoal, coalCancelFee, prevFahrt, prevKq, prevCat, prevEigen, mealShips, duePending, dim, dayStr, clsName, CLS_K, inDock, offDuty, detained, dateAfter, dockDays, dockInfo, majorRepair, majorCost, MAJOR, shipFixed, simulateMonth, typeOpen, setBudget, setAgency, campaign, campaignCost, buildHallen, pressTrip, riskOf, suggest, distressOdds, routeOf, infoOf, yearOf };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Engine = api;
 })(this);
 

@@ -339,6 +339,7 @@
     h += '<h2>Kontor</h2><p class="sub">' + yr + ". Geschäftsjahr · Reederei-Index " + E.fmt(E.score(S)) + "</p>";
     h += '<div class="kv"><div><b>' + M(eq) + '</b><span>Eigenkapital</span></div><div><b>' + rt.grade + "</b><span>Bonität bei der Bank</span></div>" +
       "<div><b>" + Math.round(S.rep) + '</b><span>Ruf (50 ist Durchschnitt)</span></div><div><b>' + Math.round(S.mk.brand) + "</b><span>Bekanntheit</span></div></div>";
+    h += coalBar();
     if (!DESK) h += mapSVG();
     h += ledger2();
     const got = E.ACH.filter(a => S.ach && S.ach[a.id]);
@@ -357,6 +358,7 @@
       "<li>Jeder Hafen hat seine Kundschaft: Badegäste auf den Inseln, Bahnreisende an den Fährhäfen, Kaufleute in den großen Städten, Auswanderer nach Übersee.</li>" +
       "<li>Vergnügungsreisen (ab 1891/92) sind eine eigene Linienart: Nordland im Sommer, Mittelmeer und Orient im Winter.</li>" +
       "<li><b>Werbung</b> macht Sie bekannter und bringt mehr Fahrgäste – laufende Anzeigen, Agenturen, Kampagnen für einzelne Linien.</li>" +
+      "<li>Unter Kontor → Einkauf kaufen Sie Kohle auf Vertrag und bestimmen die Verpflegung an Bord. In der Flotte wählen Sie die Fahrstufe: Sparfahrt spart Kohle, Volldampf schafft mehr Fahrten.</li>" +
       "<li>Auf See droht Seenot. Dann entscheiden Sie: aufgeben, pumpen oder Hilfe rufen. Rettungsboote, Schotten und Funk verbessern die Aussichten.</li>" +
       "<li>Das Spiel läuft endlos. Löhne, Preise und Reisende nehmen über die Jahrzehnte zu, neue Technik und Bahnverbindungen verändern die Märkte.</li></ul></details>";
     h += '<div class="toggles"><button class="btn" data-act="snd">' + (Snd.on ? "Ton ausschalten" : "Ton einschalten") + '</button><button class="btn" data-act="music" ' + (Snd.on && Snd.hasMusic ? "" : "disabled") + ">" +
@@ -525,7 +527,8 @@
       for (const k of ["kessel", "rumpf"]) if (sh.majLate && sh.majLate[k]) h += '<div class="hint bad">' + E.MAJOR[k].name + " aufgeschoben – " + (k === "kessel" ? "höhere Havariegefahr, mehr Kohle." : "schnellerer Verschleiß, Zustand höchstens 70 %.") + '<div class="actions"><button class="btn" data-act="major" data-id="' + sh.id + '" data-k="' + k + '">Jetzt erneuern (' + M(E.majorCost(S, sh, k)) + ", " + E.dockDays(sh.type, k) + " Tage)</button></div></div>";
       if (sh.line && sh.lastPax != null && E.active(S, sh)) h += '<div class="meta">Letzter Monat: ' + E.fmt(sh.lastPax) + " Fahrgäste, " + Math.round((sh.lastLoad || 0) * 100) + " % Auslastung</div>";
       if (sh.last && sh.last.m === S.m - 1) h += '<div class="meta">Ergebnis im Vormonat: ' + signed(sh.last.rev - sh.last.cost) + " Mark (Umsatz " + E.fmt(sh.last.rev) + ")</div>";
-      h += capBox(sh) + '<label class="field" for="l' + sh.id + '">Linie</label>' + lineSelect(sh) + planBox(sh);
+      if (sh.last && sh.last.m === S.m - 1 && sh.last.coal != null) h += '<div class="meta">Kohle im Vormonat: ' + E.fmt(sh.last.coal) + " Mark, " + Math.round(sh.last.coal / Math.max(1, sh.last.cost) * 100) + " % der Kosten" + (sh.last.cater ? " · Verpflegung " + E.fmt(sh.last.cater) + " Mark" : "") + "</div>";
+      h += capBox(sh) + '<label class="field" for="l' + sh.id + '">Linie</label>' + lineSelect(sh) + planBox(sh) + shipFahrtBox(sh);
       h += '<label class="field">Wartung</label><div class="seg maint" role="group">' + E.MAINT.map((mm, i) => '<button data-act="maint" data-id="' + sh.id + '" data-v="' + i + '" aria-pressed="' + (sh.maint === i) + '">' + mm.name + "<small>" + M(E.maintCost(S, sh, i)) + "/Monat</small></button>").join("") + "</div>" + (E.ageY(sh) >= 10 ? '<div class="meta">Mit ' + Math.floor(E.ageY(sh)) + " Jahren ist das Schiff schwerer instand zu halten: Wartung wirkt schwächer und kostet mehr.</div>" : "");
       h += '<label class="field">Sicherheit</label><div>';
       for (const k of Object.keys(E.EQUIP)) {
@@ -548,6 +551,7 @@
     const ships = S.ships.filter(x => !x.museum);
     h += '<h2>Flotte</h2><p class="sub">' + (ships.length ? ships.length + " Schiff" + (ships.length > 1 ? "e" : "") + " · " : "") + (DESK ? "Klicken" : "Tippen") + " Sie auf ein Schiff, um es aufzuklappen.</p>";
     if (!ships.length) return h + '<div class="hint">Noch keine Schiffe. Die Werft wartet auf Ihren Auftrag.</div>';
+    h += fahrtBox();
     h += '<div class="actions" style="margin-bottom:8px"><button class="btn" data-act="shipsAll" data-v="1">Alle aufklappen</button><button class="btn" data-act="shipsAll" data-v="0">Alle zuklappen</button></div>';
     const groups = [["bau", "Im Bau", ships.filter(x => x.ready > S.m)]].concat([0, 1, 2].map(g => ["g" + g, GROUP_NAME[g], ships.filter(x => x.ready <= S.m && E.typeGroup(x.type) === g)]));
     for (const [id, title, list] of groups) {
@@ -556,7 +560,7 @@
       let b = "";
       for (const sh of list) {
         const [st, cls] = shipStatus(sh), t = E.TYPES[sh.type];
-        b += '<details class="shipd" data-ship="' + sh.id + '"' + (openShip.has(sh.id) ? " open" : "") + '><summary>' + img("ship_" + sh.type, "mini", t.name, sh) + '<span class="sn"><b>„' + esc(sh.name) + '“</b><span class="meta">' + t.name + (sh.ready <= S.m ? " · " + Math.round(sh.cond) + " %" : "") + '</span></span><span class="st ' + cls + '">' + esc(st) + "</span></summary>" + shipCard(sh) + "</details>";
+        b += '<details class="shipd" data-ship="' + sh.id + '"' + (openShip.has(sh.id) ? " open" : "") + '><summary>' + img("ship_" + sh.type, "mini", t.name, sh) + '<span class="sn"><b>„' + esc(sh.name) + '“</b><span class="meta">' + t.name + (sh.ready <= S.m ? " · " + Math.round(sh.cond) + " %" : "") + '</span>' + shipTags(sh) + '</span><span class="st ' + cls + '">' + esc(st) + "</span></summary>" + shipCard(sh) + "</details>";
       }
       h += sec("fl" + id, title, list.length, b);
     }
@@ -643,6 +647,169 @@
     return h;
   }
 
+  /* ---------- Kohle und Küche ---------- */
+  let coalYears = 3, coalShare = .5;
+  const KQ_NAME = ["einfach", "ordentlich", "fein"];
+  const pctSign = x => { const r = Math.round(x * 100); return (r > 0 ? "+" : r < 0 ? "−" : "±") + Math.abs(r) + " %"; };
+  const plusM = v => (v > 0 ? "+" : "") + E.fmt(v) + " M";
+  const coalArrow = () => { const t = E.coalTrend(S); return t > 0 ? '<span class="cup" title="steigt">▲</span>' : t < 0 ? '<span class="cdown" title="fällt">▼</span>' : '<span class="cflat" title="unverändert">◆</span>'; };
+  const fsNote = k => { const f = E.FAHRT[k].f; return k === "normal" ? "wie gewohnt" : "Tempo " + pctSign(f - 1) + " · Kohle " + pctSign(f * f - 1); };
+  const kqNote = q => q === 1 ? "wie gewohnt" : "Kosten " + pctSign(E.KQ[q].cost - 1);
+  function spark(H, W, Ht) {
+    if (!H || H.length < 2) return "";
+    const v = H.map(x => x.c), mn = Math.min(.9, ...v), mx = Math.max(1.1, ...v), xs = i => 2 + i * (W - 4) / (v.length - 1), ys = c => Ht - 2 - (c - mn) / (mx - mn) * (Ht - 4);
+    return '<svg class="spark" viewBox="0 0 ' + W + " " + Ht + '" preserveAspectRatio="none" aria-hidden="true"><line x1="2" x2="' + (W - 2) + '" y1="' + ys(1).toFixed(1) + '" y2="' + ys(1).toFixed(1) + '" stroke="var(--rule)" stroke-dasharray="2 2" vector-effect="non-scaling-stroke"/><path d="' + v.map((c, i) => (i ? "L" : "M") + xs(i).toFixed(1) + "," + ys(c).toFixed(1)).join(" ") + '" fill="none" stroke="var(--brass-2)" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>';
+  }
+  function coalBar() {
+    const H = (S.coalHist || []).slice(-24).concat([{ m: S.m, c: S.coal }]), n = E.coalActive(S).length;
+    return '<button class="coalbar" data-act="coalGo"><span class="cl">Kohlepreis</span><b>' + E.coalIdx(S) + " % " + coalArrow() + "</b>" + spark(H, 120, 30) + '<span class="cr">' + (n ? n + (n > 1 ? " Lieferverträge" : " Liefervertrag") : "Einkauf") + " ›</span></button>";
+  }
+  function coalChart(H) {
+    const W = 340, Ht = 150, v = H.map(x => x.c * 100), mn = Math.min(70, Math.floor(Math.min(...v) / 10) * 10), mx = Math.max(130, Math.ceil(Math.max(...v) / 10) * 10);
+    const xs = i => 42 + i * (W - 50) / Math.max(1, H.length - 1), ys = c => 8 + (mx - c) / (mx - mn) * (Ht - 30);
+    let o = '<svg class="chart coalchart" viewBox="0 0 ' + W + " " + Ht + '" role="img" aria-label="Verlauf des Kohlepreises">';
+    for (const g of [mn, 100, mx]) o += '<line x1="42" x2="' + (W - 8) + '" y1="' + ys(g).toFixed(1) + '" y2="' + ys(g).toFixed(1) + '" stroke="var(--rule)"' + (g === 100 ? ' stroke-dasharray="4 3"' : "") + '/><text x="38" y="' + (ys(g) + 4).toFixed(1) + '" font-size="10" fill="var(--muted)" text-anchor="end">' + g + " %</text>";
+    let lastY = -9;
+    H.forEach((x, i) => { const c = E.cal(x.m); if (c.mo === 0 && c.y - lastY >= (H.length > 60 ? 2 : 1)) { lastY = c.y; o += '<line x1="' + xs(i).toFixed(1) + '" x2="' + xs(i).toFixed(1) + '" y1="' + (Ht - 22) + '" y2="' + (Ht - 18) + '" stroke="var(--muted)"/><text x="' + xs(i).toFixed(1) + '" y="' + (Ht - 6) + '" font-size="10" fill="var(--muted)" text-anchor="middle">' + c.y + "</text>"; } });
+    o += '<path d="' + v.map((c, i) => (i ? "L" : "M") + xs(i).toFixed(1) + "," + ys(c).toFixed(1)).join(" ") + '" fill="none" stroke="var(--ink)" stroke-width="2"/>';
+    return o + "</svg>";
+  }
+  function kohleStat() {
+    const H = (S.coalHist || []).slice(-120), v = H.map(x => x.c);
+    let h = '<h3 style="margin-top:12px">Kohlepreis</h3><p class="sub">In Prozent des Normalpreises, jeden Monat aufgezeichnet – bis zu zehn Jahre zurück.</p>';
+    h += '<div class="kv"><div><b>' + E.coalIdx(S) + " % " + coalArrow() + '</b><span>heute</span></div>' + (v.length ? '<div><b>' + Math.round(v.slice(-12).reduce((a, b) => a + b, 0) / v.slice(-12).length * 100) + ' %</b><span>Schnitt der letzten 12 Monate</span></div><div><b>' + Math.round(Math.min(...v) * 100) + ' %</b><span>am billigsten</span></div><div><b>' + Math.round(Math.max(...v) * 100) + " %</b><span>am teuersten</span></div>" : "") + "</div>";
+    h += H.length < 2 ? '<div class="hint">Der Verlauf wird jeden Monat aufgezeichnet. Nach zwei Monatsabschlüssen erscheint hier das Diagramm.</div>' : coalChart(H);
+    const years = Object.keys(S.years || {}).sort().reverse().slice(0, 10);
+    if (years.length) h += '<h3 style="margin-top:16px">Kohlekosten je Jahr</h3><div class="tblwrap"><table class="stat"><thead><tr><th>Jahr</th><th class="n">Kohle</th><th class="n">Anteil an den Kosten</th></tr></thead><tbody>' +
+      years.map(y => { const Y = S.years[y], k = (Y.costs && Y.costs.Kohle) || 0; return "<tr><td>" + y + '</td><td class="n">' + E.fmt(k) + '</td><td class="n">' + (Y.cost ? Math.round(k / Y.cost * 100) + " %" : "–") + "</td></tr>"; }).join("") + "</tbody></table></div>";
+    return h + '<div class="meta" style="margin-top:8px">Pro Schiff und pro Linie steht die Kohle in den Reitern Schiffe und Linien – jede Spalte lässt sich sortieren.</div>';
+  }
+  function shipTags(sh) {
+    let t = "";
+    if (sh.fahrt) t += '<span class="tag">' + E.FAHRT[sh.fahrt].name + "</span>";
+    if (sh.kq) t += '<span class="tag">eigene Verpflegung</span>';
+    return t ? '<span class="tags">' + t + "</span>" : "";
+  }
+  function fahrtBox() {
+    const cur = S.fahrt || "normal", st = E.staff(S), ex = S.ships.filter(x => !x.museum && x.fahrt).length;
+    let h = '<div class="item fahrt">' + (cur !== "normal" ? img(cur === "spar" ? "fs_sparfahrt" : "fs_volldampf", "banner", E.FAHRT[cur].name) : "") + '<div class="row"><h3>Reederei-Fahrstufe</h3><span class="meta">Kohlepreis ' + E.coalIdx(S) + " % " + coalArrow() + "</span></div>";
+    h += '<div class="seg lv" role="group" aria-label="Reederei-Fahrstufe">' + E.FAHRT_ORDER.map(k => '<button data-act="fahrtSet" data-v="' + k + '" aria-pressed="' + (cur === k) + '">' + E.FAHRT[k].name + "<small>" + fsNote(k) + "</small></button>").join("") + "</div>";
+    h += '<div class="meta" style="margin-top:6px">Gilt für alle Schiffe ohne eigene Fahrstufe' + (ex ? "; " + ex + (ex > 1 ? " Ausnahmen sind" : " Ausnahme ist") + " in der Liste markiert" : "") + ". Sparfahrt spart Kohle, kostet aber Fahrten, Zeit und Einnahmen. Volldampf schafft mehr Fahrten, braucht mehr Kohle und nutzt die Schiffe schneller ab.</div>";
+    if (st.mi >= 0) h += '<div class="meta">' + (st.miAuto ? "Ihr Maschineninspektor stellt um: Sparfahrt ab " + st.miSpar + " %, Volldampf unter " + st.miVoll + " % Kohlepreis." + (st.miPlan ? " Geplant: " + E.FAHRT[st.miPlan.stage].name + " ab " + E.dateStr(st.miPlan.at) + "." : "") : "Die Regel des Maschineninspektors ist ausgeschaltet.") + "</div>";
+    return h + "</div>";
+  }
+  function shipFahrtBox(sh) {
+    const own = sh.fahrt || "", eff = E.fahrtOf(S, sh), t = E.TYPES[sh.type];
+    let h = '<label class="field">Fahrstufe</label><div class="seg" role="group" style="grid-template-columns:repeat(4,1fr)">' + [["", "Reederei"]].concat(E.FAHRT_ORDER.map(k => [k, E.FAHRT[k].name])).map(([k, n]) => '<button data-act="shipFahrt" data-id="' + sh.id + '" data-v="' + k + '" aria-pressed="' + (own === k) + '" style="font-size:13.5px">' + n + "</button>").join("") + "</div>";
+    h += '<div class="meta">' + (own ? "Eigene Fahrstufe – die Reederei-Fahrstufe gilt für dieses Schiff nicht." : "Folgt der Reederei-Fahrstufe: " + E.FAHRT[eff].name + ".") + "</div>";
+    const need = E.postNeed(S, sh);
+    if (need && E.postSlow(S, sh, eff)) h += '<div class="hint bad">Zu langsam für den Postvertrag: Mit ' + E.FAHRT[eff].name + " schafft das Schiff die verlangten " + kn(need) + " Knoten nicht.</div>";
+    const cls = [0, 1, 2].filter(c => t.sb[c] > 0);
+    if (!cls.length) return h;
+    const info = E.infoOf(S, sh), meal = !info || info.cruise || info.dist >= 40;
+    h += '<details class="story"><summary>Verpflegung an Bord' + (sh.kq ? " · eigene Einstellung" : "") + "</summary>";
+    if (!meal) h += '<div class="meta">Auf dieser kurzen Strecke gibt es keine Mahlzeiten an Bord.</div>';
+    for (const c of cls) {
+      const v = sh.kq && sh.kq[c] != null ? sh.kq[c] : -1;
+      h += '<div class="kqrow"><span>' + E.clsName(c, t.ocean) + '</span><div class="seg" role="group" style="grid-template-columns:repeat(4,1fr)">' + [-1, 0, 1, 2].map(q => '<button data-act="shipKq" data-id="' + sh.id + '" data-c="' + c + '" data-v="' + q + '" aria-pressed="' + (v === q) + '" style="font-size:13px">' + (q < 0 ? "Reederei" : KQ_NAME[q]) + "</button>").join("") + "</div></div>";
+    }
+    return h + '<div class="meta">„Reederei“ übernimmt die Verpflegung aus Kontor → Einkauf.</div></details>';
+  }
+  function ruleSeg(k, cur, vals) { return '<div class="seg" role="group" style="grid-template-columns:repeat(' + vals.length + ',1fr)">' + vals.map(v => '<button data-act="staff" data-k="' + k + '" data-v="' + v + '" aria-pressed="' + (cur === v) + '">' + v + " %</button>").join("") + "</div>"; }
+  function staffCard(k, im, title, pay, text, fx, extra) {
+    const st = E.staff(S), lv = st[k], w = S.wage || 1;
+    return '<div class="item">' + img(im, "banner", title) + '<div class="row"><h3>' + title + '</h3><span class="num">' + (lv >= 0 ? M(pay * E.STAFF_PAY[lv] * w) + " / Monat" : "nicht angestellt") + "</span></div><p>" + text + "</p>" +
+      '<div class="seg lv lv5" role="group" aria-label="' + title + '">' + [-1, 0, 1, 2, 3].map(i => '<button data-act="staff" data-k="' + k + '" data-v="' + i + '" aria-pressed="' + (lv === i) + '">' + (i < 0 ? "keiner" : E.STAFF_LV[i]) + "<small>" + (i < 0 ? "–" : M(pay * E.STAFF_PAY[i] * w)) + "</small></button>").join("") + "</div>" +
+      (lv >= 0 ? '<div class="meta" style="margin-top:6px">Wirkung: ' + fx[lv] + ".</div>" + extra() : "") + "</div>";
+  }
+  function einkauf() {
+    const st = E.staff(S), K = E.kueche(S), act = E.coalActive(S), base = E.coalBase(S), y = E.yearOf(S);
+    let h = img("ev_kohlevertrag", "banner", "Kohlenhändler im Kontor") + '<h2>Einkauf</h2><p class="sub">Kohle und Verpflegung für die ganze Reederei. Einzelne Schiffe stellen Sie in der Flotte anders ein.</p>';
+    // Kohle
+    h += '<h3>Kohle</h3><div class="kv"><div><b>' + E.coalIdx(S) + " % " + coalArrow() + '</b><span>Kohlepreis</span></div><div><b>' + M(base) + '</b><span>Verbrauch im Monat zum Normalpreis</span></div></div>' + spark((S.coalHist || []).slice(-36).concat([{ m: S.m, c: S.coal }]), 340, 44);
+    h += '<div class="meta">Der Kohlepreis schwankt jeden Monat um bis zu 3 %. Streiks und neue Zechen bewegen ihn stärker. Mit einem Liefervertrag kaufen Sie zum heutigen Preis mit Aufschlag – wer früh bindet, ist gegen Krisen geschützt.</div>';
+    for (const k of S.coalK || []) {
+      h += '<div class="item"><div class="row"><h3>Liefervertrag über ' + Math.round(k.share * 100) + ' % des Verbrauchs</h3></div><div class="meta">' + (k.years === 1 ? "1 Jahr" : k.years + " Jahre") + " zu " + Math.round(k.price * 100) + " % des Normalpreises · fest " + M(k.qty * k.price) + " im Monat · bis " + E.dateStr(k.until) + "</div>" +
+        (k.stop >= S.m ? '<div class="hint bad">Lieferausfall bis ' + E.dateStr(k.stop) + " – bis dahin bunkern Ihre Schiffe zum Marktpreis.</div>" : "") +
+        '<div class="actions"><button class="btn warn" data-act="coalCancel" data-id="' + k.id + '">Kündigen (' + M(E.coalCancelFee(S, k)) + ")</button></div></div>";
+    }
+    const o = E.coalOffer(S, coalYears, coalShare);
+    h += '<div class="item"><h3>Neuer Liefervertrag</h3><label class="field">Laufzeit</label><div class="seg lv" role="group">' + [1, 3, 5].map(n => '<button data-act="coalY" data-v="' + n + '" aria-pressed="' + (coalYears === n) + '">' + (n === 1 ? "1 Jahr" : n + " Jahre") + "<small>Aufschlag " + pctSign(E.coalOffer(S, n, coalShare).surch) + "</small></button>").join("") + "</div>" +
+      '<label class="field">Menge</label><div class="seg" role="group" style="grid-template-columns:repeat(2,1fr)">' + [.5, 1].map(v => '<button data-act="coalS" data-v="' + v + '" aria-pressed="' + (coalShare === v) + '">' + Math.round(v * 100) + " % des Verbrauchs</button>").join("") + "</div>";
+    if (o.qty >= 100) h += '<table class="fin" style="width:100%;margin-top:10px"><tr><td>Preis</td><td>' + Math.round(o.price * 100) + " % des Normalpreises (heute " + E.coalIdx(S) + " %)</td></tr><tr><td>Fest im Monat</td><td>" + M(o.qty * o.price) + "</td></tr><tr><td>" + (o.now >= 0 ? "Mehrkosten zum heutigen Preis" : "Ersparnis zum heutigen Preis") + "</td><td>" + M(Math.abs(o.now)) + " im Monat</td></tr><tr><td>Lohnt sich ab</td><td>Kohlepreis über " + Math.round(o.price * 100) + " %</td></tr></table>";
+    h += '<div class="meta">Mindestabnahme 80 % der vereinbarten Menge, Mehrverbrauch zum Marktpreis. Höchstens zwei Verträge, zusammen höchstens 100 % des Verbrauchs. Eine Kündigung kostet ein Viertel der Restsumme.' + (st.ke >= 0 ? " Ihr Kohleneinkäufer drückt den Aufschlag." : "") + "</div>" +
+      (o.ok ? '<div class="actions"><button class="btn solid" data-act="coalSign">Vertrag schließen</button></div>' : '<div class="hint">' + esc(o.why) + "</div>") + "</div>";
+    // Verpflegung
+    const ku = S.exp && S.exp.ku != null ? S.exp.ku : 50, cat = E.catOn(S, K.cat) ? K.cat : null, lux = E.catOn(S, K.lux) ? K.lux : null;
+    h += '<h3 style="margin-top:20px">Verpflegung</h3>' + img("kue_fein", "banner", "Speisesaal der 1. Klasse") +
+      '<div class="row"><span>Erfahrung „Küche“</span><b class="num">' + Math.round(ku) + ' / 100</b></div><div class="meter"><i style="width:' + Math.round(ku) + '%"></i></div>' +
+      '<div class="meta">Gutes Essen spricht sich herum: In der 1. Klasse zählt es viel, in der 2. Klasse mittel, im Zwischendeck wenig. Bei Vergnügungsreisen bringt eine gute Küche mehr Buchungen. Längere Seezeit durch Sparfahrt bedeutet mehr Mahlzeiten.</div>';
+    if (K.notUntil >= S.m) h += '<div class="hint bad">Diesen Monat gibt es an Bord nur Notverpflegung („einfach“).</div>';
+    for (const c of [0, 1, 2]) {
+      const lim = cat ? E.CATERERS[cat.k].levels : null;
+      h += '<div class="kqrow"><span><b>' + ["1. Klasse", "2. Klasse", "3. Klasse und Zwischendeck"][c] + "</b>" + (c === 0 && lux ? '<span class="meta">à la carte: ' + esc(E.catName(S, lux.k)) + "</span>" : lim && (K.q[c] < lim[0] || K.q[c] > lim[lim.length - 1]) ? '<span class="meta">Ihr Caterer liefert hier „' + KQ_NAME[Math.max(lim[0], Math.min(lim[lim.length - 1], K.q[c]))] + "“</span>" : "") + '</span><div class="seg lv" role="group">' +
+        [0, 1, 2].map(q => '<button data-act="kqSet" data-c="' + c + '" data-v="' + q + '" aria-pressed="' + (K.q[c] === q) + '">' + KQ_NAME[q] + "<small>" + kqNote(q) + "</small></button>").join("") + "</div></div>";
+    }
+    // eigene Küche
+    h += '<div class="item">' + img("kue_bordkueche", "banner", "Bordküche") + '<div class="row"><h3>Eigene Küche</h3>' + (K.eigen && st.pm >= 0 ? '<span class="tag gold">eingerichtet</span>' : "") + "</div>" +
+      "<p>Ihre eigenen Köche kaufen ein und kochen: 10 % billiger. Dafür brauchen Sie einen Proviantmeister – wie gut gekocht wird und wie oft der Proviant verdirbt, hängt an seiner Lohnstufe.</p>" +
+      (st.pm < 0 ? '<div class="meta">Noch kein Proviantmeister – einstellen unter Kontor → Personal.</div>' : cat ? '<div class="meta">Solange ein Caterer-Vertrag läuft, gibt es keine eigene Küche.</div>' :
+        '<div class="actions"><button class="btn' + (K.eigen ? " warn" : " solid") + '" data-act="eigenSet" data-v="' + (K.eigen ? 0 : 1) + '">' + (K.eigen ? "Eigene Küche auflösen" : "Eigene Küche einrichten") + "</button></div>") + "</div>";
+    // Caterer
+    h += '<div class="item">' + img("kue_caterer", "banner", "Ein Caterer liefert an den Kai") + '<div class="row"><h3>Caterer</h3></div><p>Ein Caterer liefert zu einem festen Preis pro Fahrgast – ein oder drei Jahre ohne Teuerung. Beim Verlängern will er meist mehr.</p>';
+    if (cat) h += '<div class="report"><b>' + esc(E.catName(S, cat.k)) + "</b><br>" + esc(E.CATERERS[cat.k].note) + "<br>Vertrag bis " + E.dateStr(cat.until) + '</div><div class="actions"><button class="btn warn" data-act="catCancel" data-v="cat">Kündigen (' + M(E.catCancelFee(S, cat)) + ")</button></div>";
+    else h += E.catOffers(S).filter(x => !x.first).map(x => '<div class="eqrow"><span>' + esc(x.name) + '<br><span class="meta">' + esc(x.note) + '</span></span><span class="btns"><button class="btn" data-act="catSign" data-k="' + x.k + '" data-y="1">1 Jahr</button><button class="btn" data-act="catSign" data-k="' + x.k + '" data-y="3">3 Jahre</button></span></div>').join("");
+    h += "</div>";
+    // Luxus-Restaurant ab 1905
+    if (y >= E.CATERERS.luxus.from || lux) {
+      h += '<div class="item">' + img("kue_alacarte", "banner", "Restaurant à la carte an Bord") + '<div class="row"><h3>Restaurant à la carte</h3>' + (lux ? '<span class="tag gold">an Bord</span>' : "") + "</div><p>" + esc(E.CATERERS.luxus.note) + ". Gilt für die 1. Klasse aller Schiffe, unabhängig vom übrigen Caterer.</p>";
+      h += lux ? '<div class="report"><b>' + esc(E.catName(S, lux.k)) + "</b><br>Vertrag bis " + E.dateStr(lux.until) + '</div><div class="actions"><button class="btn warn" data-act="catCancel" data-v="lux">Kündigen (' + M(E.catCancelFee(S, lux)) + ")</button></div>"
+        : '<div class="eqrow"><span>' + esc(E.catName(S, "luxus")) + '</span><span class="btns"><button class="btn" data-act="catSign" data-k="luxus" data-y="1">1 Jahr</button><button class="btn" data-act="catSign" data-k="luxus" data-y="3">3 Jahre</button></span></div>';
+      h += "</div>";
+    }
+    if (S.chef) { const sh = S.ships.find(x => x.id === S.chef.ship); h += '<div class="item compact">' + img("ev_koch", "", "Der Meisterkoch") + '<div><h3>Meisterkoch an Bord</h3><div class="meta">' + (sh ? "Er kocht in der 1. Klasse der „" + esc(sh.name) + "“. " : "") + "Heuer " + M(E.CHEF_PAY * (S.wage || 1)) + " im Monat.</div></div></div>"; }
+    return h;
+  }
+  function previewSheet() {
+    const P = sheet, p = P.p, K = E.kueche(S);
+    const T = {
+      fahrt: ["Reederei-Fahrstufe: " + (E.FAHRT[P.v] || {}).name, P.v === "spar" ? "fs_sparfahrt" : P.v === "voll" ? "fs_volldampf" : null],
+      shipFahrt: [(() => { const sh = S.ships.find(x => x.id === P.id); return "Fahrstufe der „" + (sh ? sh.name : "") + "“: " + (P.v ? E.FAHRT[P.v].name : "wie die Reederei"); })(), P.v === "spar" ? "fs_sparfahrt" : P.v === "voll" ? "fs_volldampf" : null],
+      kq: [["1. Klasse", "2. Klasse", "3. Klasse und Zwischendeck"][P.c] + ": Verpflegung „" + KQ_NAME[P.v] + "“", P.v === 0 ? "kue_einfach" : P.v === 2 ? "kue_fein" : null],
+      shipKq: [(() => { const sh = S.ships.find(x => x.id === P.id); return "„" + (sh ? sh.name : "") + "“, " + E.clsName(P.c, sh && E.TYPES[sh.type].ocean) + ": " + (P.v < 0 ? "Verpflegung wie die Reederei" : "Verpflegung „" + KQ_NAME[P.v] + "“"); })(), P.v === 0 ? "kue_einfach" : P.v === 2 ? "kue_fein" : null],
+      eigen: [P.v ? "Eigene Küche einrichten" : "Eigene Küche auflösen", "kue_bordkueche"],
+      cat: [(P.k ? E.catName(S, P.k) : "") + " – " + (P.y === 3 ? "3 Jahre" : "1 Jahr"), P.k === "luxus" ? "kue_alacarte" : "kue_caterer"],
+      catCancel: ["Vertrag mit " + (P.name || "") + " kündigen", "kue_caterer"],
+      coal: ["Kohle-Liefervertrag schließen", "ev_kohlevertrag"],
+      coalCancel: ["Kohle-Liefervertrag kündigen", "ev_kohlevertrag"],
+    }[P.what] || ["Vorschau", null];
+    let h = '<div class="veil" data-act="close"><div class="sheet" role="dialog" aria-modal="true">' + (T[1] ? img(T[1], "banner", "") : "") + '<div class="kicker">Vorschau</div><h3>' + esc(T[0]) + "</h3>";
+    if (P.what === "coal") {
+      const o = P.o;
+      h += '<table class="fin" style="width:100%"><tr><td>Laufzeit</td><td>' + (o.years === 1 ? "1 Jahr" : o.years + " Jahre") + "</td></tr><tr><td>Menge</td><td>" + Math.round(o.share * 100) + " % des Verbrauchs</td></tr><tr><td>Preis</td><td>" + Math.round(o.price * 100) + " % des Normalpreises</td></tr><tr><td>Fest im Monat</td><td>" + M(o.qty * o.price) + "</td></tr><tr><td>" + (o.now >= 0 ? "Mehrkosten zum heutigen Preis" : "Ersparnis zum heutigen Preis") + "</td><td>" + M(Math.abs(o.now)) + " im Monat</td></tr><tr><td>Summe über die Laufzeit</td><td>" + M(o.total) + "</td></tr></table>" +
+        '<p class="meta">Berechnet mit dem Verbrauch der letzten drei Monate. Auf die Fahrgäste wirkt ein Liefervertrag nicht. Steigt der Kohlepreis über ' + Math.round(o.price * 100) + " %, sparen Sie; fällt er, zahlen Sie drauf. Mindestabnahme 80 %.</p>";
+    } else if (P.what === "coalCancel" || P.what === "catCancel") {
+      h += "<p>Die Kündigung kostet " + M(P.fee) + " – ein Viertel der Restsumme.</p>";
+    } else {
+      const has = p && p.base && (p.base.pax > 0 || p.base.coal > 0);
+      if (!has) h += "<p>Im Vormonat ist noch kein Schiff gefahren. Eine Vorschau gibt es nach dem ersten vollen Monat.</p>";
+      else {
+        const row = (n, v, good) => "<tr><td>" + n + '</td><td class="' + (v === 0 ? "" : (v > 0) === good ? "pos" : "neg") + '">' + plusM(v) + "</td></tr>";
+        h += '<p class="meta">So wäre der Vormonat (' + E.dateStr(p.m) + ") mit der neuen Einstellung gelaufen" + (/kq|shipKq|eigen|cat/.test(P.what) ? " – auf Dauer gerechnet, denn die Fahrgäste merken sich, wie an Bord gegessen wird" : "") + ".</p>";
+        h += '<table class="fin prev" style="width:100%">' + row("Kohlekosten", p.coal, false) + row("Verpflegung", p.cater, false) + row("Einnahmen", p.rev, true) +
+          '<tr class="sum"><td><b>' + (p.net >= 0 ? "Ersparnis im Monat" : "Mehrkosten im Monat") + '</b></td><td class="' + (p.net >= 0 ? "pos" : "neg") + '"><b>' + M(Math.abs(p.net)) + "</b></td></tr>" +
+          "<tr><td>Fahrgäste</td><td>" + (p.pax > 0 ? "+" : "") + E.fmt(p.pax) + " (" + pctSign(p.paxPct) + ")</td></tr></table>";
+      }
+      if (p && p.post && p.post.length) h += '<div class="hint bad">' + p.post.map(n => "„" + esc(n) + "“").join(", ") + (p.post.length > 1 ? " wären" : " wäre") + " zu langsam für den Postvertrag. Dann zahlt die Post nicht, und es drohen Vertragsstrafen.</div>";
+      if (p && p.lower && p.lower.length) h += '<div class="hint">' + esc(E.catName(S, P.k)) + " liefert nicht „fein“ – dort gibt es dann „ordentlich“.</div>";
+      if (p && p.upper && p.upper.length) h += '<div class="hint">' + esc(E.catName(S, P.k)) + " liefert nicht „einfach“ – dort gibt es dann „ordentlich“.</div>";
+      if (P.what === "cat" && E.catOn(S, K.cat) && P.k !== "luxus") h += '<div class="hint">Es läuft schon ein Caterer-Vertrag. Kündigen Sie ihn zuerst.</div>';
+      if (P.what === "eigen" && P.v && E.staff(S).pm === 0) h += '<div class="meta">Ihr Proviantmeister ist knapp bezahlt: „fein“ gelingt nicht ganz, und der Proviant verdirbt öfter.</div>';
+      if (P.what === "kq" && P.v === 0) h += '<div class="meta">Bei einfacher Kost erkranken häufiger Fahrgäste – dann drohen Quarantäne und Entschädigungen.</div>';
+    }
+    return h + '<div class="actions"><button class="btn solid" data-act="prevOk" style="flex:1">' + (/Cancel/.test(P.what) ? "Kündigen" : P.what === "coal" || P.what === "cat" ? "Abschließen" : "Übernehmen") + '</button><button class="btn" data-act="close" style="flex:1">Abbrechen</button></div></div></div>';
+  }
+
   /* ---------- Unternavigation ---------- */
   let kontorSub = "uebersicht", marktSub = "werbung", statView = "schiffe", statSort = { schiffe: ["erg", -1], linien: ["erg", -1] }, mrRoute = null;
   const subnav = (act, cur, items) => '<div class="subnav" role="tablist">' + items.map(([k, n]) => '<button data-act="' + act + '" data-v="' + k + '" aria-pressed="' + (cur === k) + '">' + n + "</button>").join("") + "</div>";
@@ -651,8 +818,9 @@
 
   /* ---------- Kontor ---------- */
   function kontorView() {
-    let h = subnav("ksub", kontorSub, [["uebersicht", "Übersicht"], ["statistik", "Statistik"], ["personal", "Personal"]]);
+    let h = subnav("ksub", kontorSub, [["uebersicht", "Übersicht"], ["statistik", "Statistik"], ["einkauf", "Einkauf"], ["personal", "Personal"]]);
     if (kontorSub === "statistik") return h + statistik();
+    if (kontorSub === "einkauf") return h + einkauf();
     if (kontorSub === "personal") return h + personal();
     return h + kontor();
   }
@@ -661,28 +829,29 @@
   function sortTable(key, cols, rows) {
     const [sk, dir] = statSort[key] || [cols[0].k, 1];
     rows.sort((a, b) => { const x = a[sk], y = b[sk]; return (typeof x === "string" ? String(x).localeCompare(String(y), "de") : (x || 0) - (y || 0)) * dir; });
-    let h = '<div class="tblwrap"><table class="stat"><thead><tr>' + cols.map(c => '<th data-act="sort" data-t="' + key + '" data-k="' + c.k + '" class="' + (c.num ? "n" : "") + (sk === c.k ? " on" : "") + '">' + c.n + (sk === c.k ? (dir > 0 ? " ▲" : " ▼") : "") + "</th>").join("") + "</tr></thead><tbody>";
+    let h = '<div class="tblwrap"><table class="stat"><thead><tr>' + cols.map(c => '<th data-act="sort" data-t="' + key + '" data-k="' + c.k + '" class="' + (c.num ? "n" : "") + (sk === c.k ? " on" : "") + '">' + c.n + (sk === c.k ? "<span> " + (dir > 0 ? "▲" : "▼") + "</span>" : "") + "</th>").join("") + "</tr></thead><tbody>";
     for (const r of rows) h += "<tr>" + cols.map(c => '<td class="' + (c.num ? "n" : "") + '">' + (c.f ? c.f(r) : esc(r[c.k])) + "</td>").join("") + "</tr>";
     return h + "</tbody></table></div>";
   }
   function statistik() {
-    let h = img("ev_statistik", "banner", "Buchhalter im Kontor") + subnav("sview", statView, [["schiffe", "Schiffe"], ["linien", "Linien"], ["finanzen", "Finanzen"]]);
+    let h = img("ev_statistik", "banner", "Buchhalter im Kontor") + subnav("sview", statView, [["schiffe", "Schiffe"], ["linien", "Linien"], ["kohle", "Kohle"], ["finanzen", "Finanzen"]]);
+    if (statView === "kohle") return h + kohleStat();
     if (statView === "schiffe") {
       if (!S.ships.length) return h + '<div class="hint">Noch keine Schiffe.</div>';
       const rows = S.ships.map(sh => { const r = E.routeOf(S, sh), l = sh.last && sh.last.m === S.m - 1 ? sh.last : null;
-        return { name: sh.name, linie: sh.ready > S.m ? "im Bau" : E.inDock(S, sh) ? "Werft" : r && !sh.laid ? E.rInfo(S, r).name : "aufgelegt", zust: Math.round(sh.cond), ausl: l ? l.load : 0, pax: l ? l.pax : 0, ums: l ? l.rev : 0, erg: l ? l.rev - l.cost : 0, alter: Math.floor(sh.age / 12) }; });
+        return { name: sh.name, linie: sh.ready > S.m ? "im Bau" : E.inDock(S, sh) ? "Werft" : r && !sh.laid ? E.rInfo(S, r).name : "aufgelegt", zust: Math.round(sh.cond), ausl: l ? l.load : 0, pax: l ? l.pax : 0, ums: l ? l.rev : 0, erg: l ? l.rev - l.cost : 0, kohle: l ? l.coal || 0 : 0, alter: Math.floor(sh.age / 12) }; });
       h += '<p class="sub">Werte des Vormonats. ' + (DESK ? "Klicken" : "Tippen") + ' Sie auf eine Spalte, um zu sortieren.</p>' + sortTable("schiffe", [
         { k: "name", n: "Schiff", f: r => "„" + esc(r.name) + "“" }, { k: "linie", n: "Linie" }, { k: "erg", n: "Ergebnis", num: 1, f: r => num(r.erg) },
-        { k: "ums", n: "Umsatz", num: 1, f: r => E.fmt(r.ums) }, { k: "ausl", n: "Auslastung", num: 1, f: r => pct(r.ausl) }, { k: "pax", n: "Fahrgäste", num: 1, f: r => E.fmt(r.pax) },
+        { k: "ums", n: "Umsatz", num: 1, f: r => E.fmt(r.ums) }, { k: "kohle", n: "Kohle", num: 1, f: r => E.fmt(r.kohle) }, { k: "ausl", n: "Auslastung", num: 1, f: r => pct(r.ausl) }, { k: "pax", n: "Fahrgäste", num: 1, f: r => E.fmt(r.pax) },
         { k: "zust", n: "Zustand", num: 1, f: r => r.zust + " %" }, { k: "alter", n: "Alter", num: 1, f: r => r.alter + " J." }], rows);
       return h;
     }
     if (statView === "linien") {
       if (!S.routes.length) return h + '<div class="hint">Noch keine Linien.</div>';
       const rows = S.routes.map(r => { const i = E.rInfo(S, r), l = r.last && r.last.m === S.m - 1 ? r.last : null;
-        return { name: i ? i.name : "?", typ: i ? i.kind.cat : "", schiffe: S.ships.filter(x => x.line === r.id).length, pax: l ? l.pax : 0, ausl: l ? l.load : 0, anteil: l ? l.share : 0, ums: l ? l.rev : 0, erg: l ? l.rev - l.cost - (l.fixed || 0) : 0 }; });
+        return { name: i ? i.name : "?", typ: i ? i.kind.cat : "", schiffe: S.ships.filter(x => x.line === r.id).length, pax: l ? l.pax : 0, ausl: l ? l.load : 0, anteil: l ? l.share : 0, ums: l ? l.rev : 0, kohle: l ? l.coal || 0 : 0, erg: l ? l.rev - l.cost - (l.fixed || 0) : 0 }; });
       h += '<p class="sub">Werte des Vormonats. Das Ergebnis enthält Heuer, Wartung und Versicherung der eingesetzten Schiffe.</p>' + sortTable("linien", [
-        { k: "name", n: "Linie" }, { k: "erg", n: "Ergebnis", num: 1, f: r => num(r.erg) }, { k: "ums", n: "Umsatz", num: 1, f: r => E.fmt(r.ums) },
+        { k: "name", n: "Linie" }, { k: "erg", n: "Ergebnis", num: 1, f: r => num(r.erg) }, { k: "ums", n: "Umsatz", num: 1, f: r => E.fmt(r.ums) }, { k: "kohle", n: "Kohle", num: 1, f: r => E.fmt(r.kohle) },
         { k: "ausl", n: "Auslastung", num: 1, f: r => pct(r.ausl) }, { k: "anteil", n: "Marktanteil", num: 1, f: r => pct(r.anteil) }, { k: "pax", n: "Fahrgäste", num: 1, f: r => E.fmt(r.pax) },
         { k: "schiffe", n: "Schiffe", num: 1, f: r => r.schiffe }, { k: "typ", n: "Typ" }], rows);
       return h;
@@ -718,6 +887,18 @@
     h += '<div class="item">' + img("ev_marktforschung", "banner", "Marktforschung") + '<div class="row"><h3>Marktforschungsabteilung</h3><span class="num">' + M(E.MARKT_PAY * w) + ' / Monat</span></div>' +
       "<p>Befragt Reisende an den Kais und zeigt Ihnen unter Markt → Marktforschung für jede Linie, warum Fahrgäste zu Ihnen kommen – und warum zur Konkurrenz.</p>" +
       '<div class="switch"><span>Eingestellt</span><input type="checkbox" data-act="staffchk" data-k="markt" ' + (st.markt ? "checked" : "") + ' aria-label="Marktforschung"></div></div>';
+    h += '<h2>Kohle und Küche</h2><p class="sub">Diese drei arbeiten nach Lohnstufe: Wer knapp bezahlt wird, macht mehr Fehler.</p>';
+    h += staffCard("mi", "pers_maschineninspektor", "Maschineninspektor", E.MI_PAY, "Er stellt die Reederei-Fahrstufe nach Ihrer Regel um, sobald sich der Kohlepreis bewegt. Schiffe mit eigener Fahrstufe lässt er in Ruhe.",
+      ["stellt erst zwei Monate später um und übersieht Postverträge", "stellt einen Monat später um und achtet auf Postverträge", "stellt sofort um und achtet auf Postverträge", "stellt sofort um, achtet auf Postverträge und spart 3 % Kohle in der ganzen Flotte"], () =>
+        '<div class="switch"><span>Regel anwenden</span><input type="checkbox" data-act="staffchk" data-k="miAuto" ' + (st.miAuto ? "checked" : "") + ' aria-label="Regel anwenden"></div>' +
+        (st.miAuto ? '<label class="field">Sparfahrt ab Kohlepreis</label>' + ruleSeg("miSpar", st.miSpar, [115, 125, 135, 150]) + '<label class="field">Volldampf unter Kohlepreis</label>' + ruleSeg("miVoll", st.miVoll, [80, 85, 90, 95]) +
+          '<div class="meta">' + (st.miPlan ? "Geplant: " + E.FAHRT[st.miPlan.stage].name + " ab " + E.dateStr(st.miPlan.at) + "." : "Derzeit fährt die Flotte " + E.FAHRT[S.fahrt || "normal"].name + ", der Kohlepreis steht bei " + E.coalIdx(S) + " %.") + "</div>" : '<div class="meta">Regel ausgeschaltet – Sie stellen die Fahrstufe in der Flotte von Hand.</div>'));
+    h += staffCard("ke", "pers_einkaeufer", "Kohleneinkäufer", E.KE_PAY, "Er handelt bei Lieferverträgen einen kleineren Aufschlag heraus, warnt drei Monate vor dem Ende eines Vertrags und verlängert ihn nach Ihrer Regel.",
+      ["Aufschlag 1 Punkt niedriger, vergisst die Warnung manchmal", "Aufschlag 2 Punkte niedriger", "Aufschlag 3 Punkte niedriger", "Aufschlag 4 Punkte niedriger"], () =>
+        '<label class="field">Verlängern, wenn Kohle weniger kostet als</label>' + ruleSeg("keRenew", st.keRenew, [90, 95, 100, 105]));
+    h += staffCard("pm", "pers_proviantmeister", "Proviantmeister", E.PM_PAY, "Er führt die eigene Bordküche: Einkauf, Vorräte und Köche. Mit eigener Küche kostet die Verpflegung 10 % weniger.",
+      ["„fein“ gelingt nicht ganz, öfter verdorbener Proviant", "solide Küche", "bessere Küche, selten Ärger mit dem Proviant", "beste Küche, kaum Ärger mit dem Proviant"], () =>
+        '<div class="meta">' + (E.kueche(S).eigen ? "Die eigene Küche ist eingerichtet." : "Die eigene Küche richten Sie unter Kontor → Einkauf ein.") + "</div>");
     return h;
   }
 
@@ -739,12 +920,12 @@
     }
     return h;
   }
-  const MR_KEYS = ["Preis", "Tempo", "Komfort", "Ruf", "Erfahrungen", "Bekanntheit"];
+  const MR_KEYS = ["Preis", "Tempo", "Komfort", "Ruf", "Erfahrungen", "Bekanntheit", "Küche"];
   function forschung() {
     const st = E.staff(S);
     let h = img("ev_marktforschung", "banner", "Befragung am Kai") + "<h2>Marktforschung</h2>";
     const x = E.myExp(S);
-    h += '<p class="sub">So erleben die Fahrgäste Ihre Reederei (50 ist Durchschnitt):</p><div class="expbars">' + [["Komfort", x[0]], ["Service", x[1]], ["Sicherheit", x[2]]].map(([n, v]) => '<div class="eb"><span>' + n + '</span><div class="meter"><i style="width:' + Math.round(v) + '%"></i></div><b>' + Math.round(v) + "</b></div>").join("") + "</div>";
+    h += '<p class="sub">So erleben die Fahrgäste Ihre Reederei (50 ist Durchschnitt):</p><div class="expbars">' + [["Komfort", x[0]], ["Service", x[1]], ["Sicherheit", x[2]], ["Küche", S.exp && S.exp.ku != null ? S.exp.ku : 50]].map(([n, v]) => '<div class="eb"><span>' + n + '</span><div class="meter"><i style="width:' + Math.round(v) + '%"></i></div><b>' + Math.round(v) + "</b></div>").join("") + "</div>";
     if (!st.markt) return h + '<div class="hint">Für die Auswertung einzelner Linien brauchen Sie eine Marktforschungsabteilung. Sie können sie unter Kontor → Personal einstellen.</div>';
     const routes = S.routes.filter(r => E.rInfo(S, r));
     if (!routes.length) return h + '<div class="hint">Noch keine Linien.</div>';
@@ -756,7 +937,7 @@
     h += '<p class="sub" style="margin-top:10px">Betrachtet wird die wichtigste Kundschaft: ' + E.clsName(mr.cls, info.ocean) + ". Positive Werte ziehen Fahrgäste an, negative treiben sie fort.</p>";
     const cols = [{ n: "Sie", row: mr.me }].concat(mr.riv.map(q => ({ n: q.name, row: q.row })));
     h += '<div class="tblwrap"><table class="stat mr"><thead><tr><th>Grund</th>' + cols.map(c => '<th class="n">' + esc(c.n) + "</th>").join("") + "</tr></thead><tbody>" +
-      MR_KEYS.map(k => "<tr><td>" + k + "</td>" + cols.map(c => { if (!c.row) return '<td class="n">–</td>'; const v = c.row[k]; return '<td class="n ' + (v > .05 ? "pos" : v < -.05 ? "neg" : "") + '">' + (v > 0 ? "+" : "") + v.toFixed(2).replace(".", ",") + "</td>"; }).join("") + "</tr>").join("") +
+      MR_KEYS.map(k => "<tr><td>" + k + "</td>" + cols.map(c => { if (!c.row) return '<td class="n">–</td>'; const v = c.row[k] || 0; return '<td class="n ' + (v > .05 ? "pos" : v < -.05 ? "neg" : "") + '">' + (v > 0 ? "+" : "") + v.toFixed(2).replace(".", ",") + "</td>"; }).join("") + "</tr>").join("") +
       '<tr class="tot"><td>Anteil der Reisenden</td><td class="n">' + pct(mr.share) + "</td>" + mr.riv.map(q => '<td class="n">' + pct(mr.rivShare[q.k] || 0) + "</td>").join("") + "</tr></tbody></table></div>";
     if (mr.me && mr.riv.length) {
       const avg = k => mr.riv.reduce((a, q) => a + q.row[k], 0) / mr.riv.length, diff = MR_KEYS.map(k => [k, mr.me[k] - avg(k)]).sort((a, b) => b[1] - a[1]);
@@ -1082,7 +1263,7 @@
         opts.map((o, i) => '<button class="opt" data-act="choose" data-i="' + i + '" ' + (o.ok === false ? 'disabled data-blocked="1"' : wait ? "disabled" : "") + "><b>" + esc(o.t) + "</b><span>" + esc(o.h) + "</span></button>").join("") + "</div></div></div>";
       return;
     }
-    if (sheet) { m.innerHTML = sheet.kind === "rename" ? renameSheet() : sheet.kind === "export" ? exportSheet() : sheet.kind === "import" ? importSheet() : sheet.kind === "design" ? designSheet() : sheet.kind === "retire" ? retireSheet() : buySheet(); return; }
+    if (sheet) { m.innerHTML = sheet.kind === "prev" ? previewSheet() : sheet.kind === "rename" ? renameSheet() : sheet.kind === "export" ? exportSheet() : sheet.kind === "import" ? importSheet() : sheet.kind === "design" ? designSheet() : sheet.kind === "retire" ? retireSheet() : buySheet(); return; }
     m.innerHTML = "";
   }
   let startHome = "ham";
@@ -1182,7 +1363,7 @@
     if (!S) return "";
     const rt = E.rating(S), eq = E.equity(S), act = S.ships.filter(sh => E.active(S, sh)).length;
     const rows = [["Eigenkapital", M(eq), eq < 0], ["Bonität", rt.grade], ["Ruf", Math.round(S.rep)], ["Bekanntheit", Math.round(S.mk.brand)],
-      ["Schiffe", S.ships.length ? S.ships.length + " (" + act + " im Dienst)" : "keine"], ["Linien", S.routes.length || "keine"], ["Reederei-Index", E.fmt(E.score(S))]];
+      ["Kohlepreis", E.coalIdx(S) + " % " + coalArrow()], ["Schiffe", S.ships.length ? S.ships.length + " (" + act + " im Dienst)" : "keine"], ["Linien", S.routes.length || "keine"], ["Reederei-Index", E.fmt(E.score(S))]];
     return '<dl class="rs">' + rows.map(r => "<div><dt>" + r[0] + '</dt><dd class="' + (r[2] ? "neg" : "") + '">' + r[1] + "</dd></div>").join("") + "</dl>";
   }
   function sidePanel() {
@@ -1267,10 +1448,36 @@
       case "major": err = E.majorRepair(S, d.id, d.k); if (!err) Snd.bell(0, 520, .1); break;
       case "frist": err = E.renewFrist(S, d.id); if (!err) Snd.bell(0, 520, .1); break;
       case "ksub": kontorSub = d.v; window.scrollTo(0, 0); break;
+      case "coalGo": kontorSub = "einkauf"; window.scrollTo(0, 0); break;
       case "msub": marktSub = d.v; window.scrollTo(0, 0); break;
       case "sview": statView = d.v; break;
       case "sort": { const cur = statSort[d.t] || [d.k, 1]; statSort[d.t] = [d.k, cur[0] === d.k ? -cur[1] : (d.k === "name" || d.k === "linie" || d.k === "typ" ? 1 : -1)]; break; }
       case "staff": E.setStaff(S, d.k, +d.v); break;
+      case "fahrtSet": if ((S.fahrt || "normal") !== d.v) sheet = { kind: "prev", what: "fahrt", v: d.v, p: E.prevFahrt(S, d.v) }; break;
+      case "shipFahrt": { const sh = S.ships.find(x => x.id === d.id); if (sh && (sh.fahrt || "") !== d.v) sheet = { kind: "prev", what: "shipFahrt", id: d.id, v: d.v, p: E.prevFahrt(S, d.v || null, d.id) }; break; }
+      case "kqSet": if (E.kueche(S).q[+d.c] !== +d.v) sheet = { kind: "prev", what: "kq", c: +d.c, v: +d.v, p: E.prevKq(S, +d.c, +d.v) }; break;
+      case "shipKq": { const sh = S.ships.find(x => x.id === d.id), cur = sh && sh.kq && sh.kq[+d.c] != null ? sh.kq[+d.c] : -1; if (sh && cur !== +d.v) sheet = { kind: "prev", what: "shipKq", id: d.id, c: +d.c, v: +d.v, p: E.prevKq(S, +d.c, +d.v < 0 ? null : +d.v, d.id) }; break; }
+      case "eigenSet": sheet = { kind: "prev", what: "eigen", v: d.v === "1", p: E.prevEigen(S, d.v === "1") }; break;
+      case "catSign": sheet = { kind: "prev", what: "cat", k: d.k, y: +d.y, p: E.prevCat(S, d.k, +d.y) }; break;
+      case "catCancel": { const K = E.kueche(S), c = d.v === "lux" ? K.lux : K.cat; if (c) sheet = { kind: "prev", what: "catCancel", v: d.v, fee: E.catCancelFee(S, c), name: E.catName(S, c.k) }; break; }
+      case "coalY": coalYears = +d.v; break;
+      case "coalS": coalShare = +d.v; break;
+      case "coalSign": { const o = E.coalOffer(S, coalYears, coalShare); if (!o.ok) err = o.why; else sheet = { kind: "prev", what: "coal", o }; break; }
+      case "coalCancel": { const k = (S.coalK || []).find(x => x.id === d.id); if (k) sheet = { kind: "prev", what: "coalCancel", id: d.id, fee: E.coalCancelFee(S, k) }; break; }
+      case "prevOk": {
+        const P = sheet; if (!P || P.kind !== "prev") break;
+        if (P.what === "fahrt") { const msg = E.setFahrt(S, P.v); if (msg) toast(esc(msg)); }
+        else if (P.what === "shipFahrt") E.setShipFahrt(S, P.id, P.v || null);
+        else if (P.what === "kq") E.setKq(S, P.c, P.v);
+        else if (P.what === "shipKq") E.setShipKq(S, P.id, P.c, P.v < 0 ? null : P.v);
+        else if (P.what === "eigen") err = E.setEigen(S, P.v);
+        else if (P.what === "cat") err = E.signCaterer(S, P.k, P.y);
+        else if (P.what === "catCancel") err = E.cancelCaterer(S, P.v);
+        else if (P.what === "coal") err = E.signCoal(S, P.o.years, P.o.share);
+        else if (P.what === "coalCancel") err = E.cancelCoal(S, P.id);
+        if (!err) { sheet = null; Snd.bell(0, 660, .08); }
+        break;
+      }
       case "planAdd": { const sh = S.ships.find(x => x.id === d.id); if (sh) { const p = (sh.plan || []).slice(); p.push({ from: 4, to: 8, line: sh.line || "" }); openPlan[sh.id] = true; E.setPlan(S, sh.id, p); } break; }
       case "planDel": { const sh = S.ships.find(x => x.id === d.id); if (sh) { const p = (sh.plan || []).slice(); p.splice(+d.i, 1); E.setPlan(S, sh.id, p); } break; }
       case "pickB": selB = d.b; selCruise = false; window.scrollTo(0, 0); break;

@@ -2,7 +2,7 @@
 
 ## Das Projekt
 - Reederei-Managementspiel: eine Reederei für Personenschifffahrt ab 1880 durch die Jahrzehnte führen.
-- Läuft als Web-App (PWA) über GitHub Pages, gespielt auf iPhone und am PC. Aktueller Stand: v4.4.3.
+- Läuft als Web-App (PWA) über GitHub Pages, gespielt auf iPhone und am PC. Aktueller Stand: v4.5.
 - Sprachen: Deutsch (Original), Englisch, Spanisch über das eigene Übersetzungssystem (I18N_CORE, I18N_EN, I18N_ES). Neue Texte immer in allen drei Sprachen pflegen.
 - Heimathäfen Hamburg, Liverpool, London. Bei britischem Heimathafen Pfund statt Mark (die Währung hängt am Heimathafen, nicht an der Sprache).
 - Hausstil: Nachtblau und Messing, weißer achtzackiger Stern. Grafik vollwertig 2D in hoher Auflösung, keine Pixelart, kein 3D.
@@ -15,8 +15,8 @@
 - `assets/`: Bilder als WebP, Musik als M4A, so komprimiert, dass die App auf dem iPhone schnell lädt.
 - `originale/`: hochauflösende Bildbögen und Musik-Originale samt `LIESMICH.md` mit der Zuordnung Bildbogen → Spielbild. Nur als Quelle zum Neu-Zuschneiden, nicht in `sw.js` cachen.
 - `neue-bilder/`: hier lädt David neue Bilder hoch. Nach der Übernahme nach `originale/` verschieben.
-- `docs/`: Updatelog (`updatelog.md`, `Updatelog.pdf`, `Updatelog_Emil.pdf`).
-- `tools/`: Hilfsskripte (Python). `assets.py` erzeugt `js/assets.js` (nach jeder Änderung in `assets/` ausführen), `bilder.py` schneidet die Spielbilder aus `originale/` (Rahmen in `tools/zuschnitt.json`), `musik.py` komprimiert die Musik, `icons.py` erzeugt die App-Icons aus `originale/icon/app-icon.png`, `updatelog_pdf.py` baut aus `docs/updatelog.md` beide PDFs.
+- `docs/`: Updatelog (`updatelog.md`, `Updatelog.pdf`, `Updatelog_Emil.pdf`) und Konzepte (`konzept-v4.5.md` mit den Zahlen und Simulationsergebnissen von „Kohle und Küche“).
+- `tools/`: Hilfsskripte (Python, dazu ein Node-Skript). `assets.py` erzeugt `js/assets.js` (nach jeder Änderung in `assets/` ausführen), `bilder.py` schneidet die Spielbilder aus `originale/` (Rahmen in `tools/zuschnitt.json`), `musik.py` komprimiert die Musik, `icons.py` erzeugt die App-Icons aus `originale/icon/app-icon.png`, `updatelog_pdf.py` baut aus `docs/updatelog.md` beide PDFs. `simulation.js` prüft die Balance: Bots spielen jede Linienart 40 Jahre mit verschiedenen Strategien (`node tools/simulation.js`, einige Minuten; nach Änderungen an Zahlen der Engine laufen lassen).
 
 ## Ablauf bei Updates
 1. Bevor gebaut wird: sagen, welche neuen Bilder gebraucht werden (Motiv, Format, Dateiname).
