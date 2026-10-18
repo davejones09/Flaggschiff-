@@ -310,6 +310,32 @@ Museumshalle als Einzelbild (Alternative zu `mus_halle`).
 - `mk_reise` – unten links
 - `mk_reklame` – oben links
 
+### bogen_fahrt_kueche.webp
+Seit v4.5 (Kohle und Küche).
+- `fs_sparfahrt` – oben links
+- `fs_volldampf` – oben rechts
+- `kue_bordkueche` – unten rechts
+- `pers_proviantmeister` – unten links
+
+### bogen_kohle.webp
+Seit v4.5 (Kohle und Küche).
+- `ev_bunkern` – unten rechts
+- `ev_kohlevertrag` – unten links
+- `pers_einkaeufer` – oben rechts
+- `pers_maschineninspektor` – oben links
+
+### bogen_kueche_ereignisse.webp
+Seit v4.5 (Kohle und Küche), zwei Felder nebeneinander.
+- `ev_koch` – rechts
+- `ev_proviant` – links
+
+### bogen_verpflegung.webp
+Seit v4.5 (Kohle und Küche).
+- `kue_alacarte` – unten rechts
+- `kue_caterer` – unten links
+- `kue_einfach` – oben links
+- `kue_fein` – oben rechts
+
 ## App-Icon
 
 `icon/app-icon.png` ist das Original des App-Icons (1254 × 1254, Goldrahmen mit runden Ecken auf weißem Grund, seit v4.4.3). `python3 tools/icons.py` erzeugt daraus `apple-touch-icon.png` (iPhone, mit Rahmen, Ecken golden), `icon-192.png` und `icon-512.png` (mit Rahmen, Ecken durchsichtig) sowie `icon-maskable-512.png` (Android, ohne Rahmen, auf 88 % verkleinert).
