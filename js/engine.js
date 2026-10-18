@@ -1015,10 +1015,10 @@
   const MI_PAY = 500, KE_PAY = 400, PM_PAY = 450, CHEF_PAY = 700;
   const COAL_SURCH = { 1: .03, 3: .06, 5: .1 };
   const CATERERS = {
-    billig: { cost: .9, levels: [0, 1], fail: .6, names: { ham: "Hafenküche Billwerder", lpl: "Dockside Victualling Co.", lon: "Wapping Galley Works" }, note: "Billiganbieter: nur einfach und ordentlich, 10 % billiger, die Qualität schwankt" },
+    billig: { cost: .9, levels: [0, 1], fail: .6, names: { ham: "Hafenküche Billwerder", lpl: "Dockside Victualling Company", lon: "Wapping Galley Works" }, note: "Billiganbieter: nur einfach und ordentlich, 10 % billiger, die Qualität schwankt" },
     solide: { cost: 1, levels: [0, 1, 2], fail: .15, names: { ham: "Hanseatische Proviant-Gesellschaft", lpl: "Mersey Provision Company", lon: "Thames Provision Company" }, note: "Solider Caterer: alle Stufen zum Normalpreis" },
     hotel: { cost: 1.05, levels: [1, 2], fail: .1, names: { ham: "Alster-Hotel-Gesellschaft", lpl: "Wellington Hotel Company", lon: "Strand Hotel Company" }, note: "Hotel-Caterer: ordentlich und fein, 5 % teurer, feine Küche bringt Ansehen" },
-    luxus: { cost: 1, levels: [3], first: true, from: 1905, fail: .1, names: { ham: "Restaurant-Gesellschaft Imperial", lpl: "Restaurant Excelsior Ltd.", lon: "Restaurant Monarch Ltd." }, note: "Luxus-Restaurant: nur 1. Klasse, à la carte, 40 % teurer als fein, bringt Prestige" } };
+    luxus: { cost: 1, levels: [3], first: true, from: 1905, fail: .1, names: { ham: "Restaurant-Gesellschaft Imperial", lpl: "Restaurant Excelsior", lon: "Restaurant Monarch" }, note: "Luxus-Restaurant: nur 1. Klasse, à la carte, 40 % teurer als fein, bringt Prestige" } };
   const CAT_ORDER = ["billig", "solide", "hotel", "luxus"];
   function catName(s, k) { return CATERERS[k].names[s.home || "ham"] || CATERERS[k].names.ham; }
   function postNeed(s, sh) {
@@ -1165,7 +1165,7 @@
     for (const k of (s.coalK || []).slice()) {
       if (k.until === s.m + 3 && st.ke >= 0 && !k.warned) {
         k.warned = true;
-        if (st.ke > 0 || rnd(s) > .35) s.log.unshift({ m: s.m, head: "Kohlevertrag läuft in drei Monaten aus", text: "Ihr Kohleneinkäufer erinnert Sie: Der Vertrag über " + Math.round(k.share * 100) + " % des Verbrauchs endet am " + dateStr(k.until) + ". " + (s.coal * 100 < st.keRenew ? "Bei heutigem Preis würde er verlängern." : "Bei heutigem Preis würde er nicht verlängern."), kind: "own", img: "pers_einkaeufer" });
+        if (st.ke > 0 || rnd(s) > .35) s.log.unshift({ m: s.m, head: "Kohlevertrag läuft in drei Monaten aus", text: "Ihr Kohleneinkäufer erinnert Sie: Der Vertrag über " + Math.round(k.share * 100) + " % des Verbrauchs endet im " + dateStr(k.until) + ". " + (s.coal * 100 < st.keRenew ? "Bei heutigem Preis würde er verlängern." : "Bei heutigem Preis würde er nicht verlängern."), kind: "own", img: "pers_einkaeufer" });
       }
       if (k.until <= s.m) {
         s.coalK = s.coalK.filter(x => x !== k);
@@ -1336,12 +1336,15 @@
     const info = rInfo(s, r); if (!info) return null;
     const c = info.mix.indexOf(Math.max.apply(null, info.mix)), w = info.w, cs = info.comp, pid = s.pidx;
     const mine = s.ships.filter(x => x.line === r.id && x.ready <= s.m);
-    const row = (spd, com, rep, pf, eu, br) => ({ Preis: w.p * CLS_WP[c] * (1 - pf), Tempo: w.s * 4 * (spd / cs.speed - 1), Komfort: w.c * CLS_WC[c] * .5 * (com - 3), Ruf: w.r * (rep - 50) / 50, Erfahrungen: eu, Bekanntheit: br });
+    const meal = info.cruise || info.dist >= 40;
+    const row = (spd, com, rep, pf, eu, br, ku) => ({ Preis: w.p * CLS_WP[c] * (1 - pf), Tempo: w.s * 4 * (spd / cs.speed - 1), Komfort: w.c * CLS_WC[c] * .5 * (com - 3), Ruf: w.r * (rep - 50) / 50, Erfahrungen: eu, Bekanntheit: br, "Küche": ku || 0 });
     let me = null;
     if (mine.length) {
-      const t0 = mine.map(x => TYPES[x.type]); const spd = mine.reduce((a, x) => a + (TYPES[x.type].speed + (x.spd || 0)) * SPD_LV[staff(s).maschine], 0) / mine.length;
+      const t0 = mine.map(x => TYPES[x.type]); const spd = mine.reduce((a, x) => a + (TYPES[x.type].speed + (x.spd || 0)) * SPD_LV[staff(s).maschine] * (1 + FAHRT_SPD * (fahrtF(s, x) - 1)), 0) / mine.length;
       const com = t0.reduce((a, t) => a + t.comfort, 0) / t0.length + SVC_LV[staff(s).service];
-      me = row(spd, com, s.rep, r.price[c] / (info.refC[c] * pid), expU(info, myExp(s)), mkBonus(s, r, info));
+      const kc = mine.filter(x => TYPES[x.type].sb[c] > 0), kSc = kc.length ? kc.reduce((a, x) => a + Math.min(100, kScore(s, kqEff(s, x, c), c) + (c === 0 && s.chef && s.chef.ship === x.id ? 20 : 0)), 0) / kc.length : 50;
+      const ku = meal ? KU_W * KU_CLS[c] * (.5 * (kSc - 50) / 50 + .5 * ((s.exp && s.exp.ku != null ? s.exp.ku : 50) - 50) / 50) : 0;
+      me = row(spd, com, s.rep, r.price[c] / (info.refC[c] * pid), expU(info, myExp(s)), mkBonus(s, r, info), ku);
     }
     const riv = rivalsOf(s, r, info).map(x => { const q = rivalStats(s, r, info, x.k); return { k: x.k, name: RIV[x.k].name, img: RIV[x.k].img, row: row(q.spd, q.com, q.rep, q.pf * modFactor(s, r, info, "comp"), q.eu, 0) }; });
     const last = r.last || {}, D = last.D || 0;
@@ -1784,7 +1787,7 @@
     { y: 1905, mo: 0, key: "kohle05", img: "ev_bunkern", f: s => { coalShock(s, 1.2, 1.05, 2); return ["Großer Bergarbeiterstreik an der Ruhr", "Der größte Streik seit 1889 legt die Zechen still. Die Reedereien bunkern teure Auslandskohle."]; } },
     { y: 1912, mo: 2, key: "kohle12", img: "ev_bunkern", f: s => { coalShock(s, 1.15, 1.4, 2); return ["Britischer Kohlestreik", "Fast eine Million Bergleute streiken für einen Mindestlohn. In britischen Häfen liegen Schiffe ohne Kohle fest."]; } },
     { y: 1923, mo: 0, key: "kohle23", img: "ev_bunkern", f: s => { coalShock(s, 1.4, 1.1, 6); return ["Ruhrbesetzung", "Französische und belgische Truppen besetzen das Ruhrgebiet. Deutsche Kohle wird knapp, die Reedereien kaufen in England."]; } },
-    { y: 1926, mo: 4, key: "kohle26", img: "ev_bunkern", f: s => { coalShock(s, 1.1, 1.45, 7); return ["Britischer Bergarbeiterstreik", "Nach dem Generalstreik bleiben die Bergleute monatelang unter Tage fern. Kohle wird knapp und teuer."]; } },
+    { y: 1926, mo: 4, key: "kohle26", img: "ev_bunkern", f: s => { coalShock(s, 1.1, 1.45, 7); return ["Britischer Bergarbeiterstreik", "Nach dem Generalstreik bleiben die Bergleute monatelang den Zechen fern. Kohle wird knapp und teuer."]; } },
     { y: 1889, mo: 8, key: "dockstrike89", img: "gb_streik", f: s => { s.mods.push({ port: "lon", key: "demand", f: .6, until: s.m + 1 }); return ["Großer Hafenstreik in London", "Zehntausende Dockarbeiter kämpfen um sechs Pence Stundenlohn. Der Londoner Hafen steht fast einen Monat still."]; } },
     { c: "gb", y: 1894, mo: 4, key: "shipcanal94", img: "gb_kanal", f: s => { s.mods.push({ port: "lpl", key: "demand", seg: "bath", f: 1.15, until: s.m + 12 }); s.mods.push({ port: "lpl", key: "demand", seg: "biz", f: .95, until: s.m + 24 }); return ["Der Manchester-Schiffskanal ist eröffnet", "Große Schiffe fahren jetzt bis nach Manchester. Liverpool verliert etwas Handel – aber Ausflüge durch den neuen Kanal sind der Renner des Sommers."]; } },
     { y: 1911, mo: 5, key: "lplstrike11", img: "gb_streik", f: s => { s.mods.push({ port: "lpl", key: "demand", f: .5, until: s.m + 2 }); return ["Generalstreik im Liverpooler Hafen", "Hafenarbeiter, Seeleute und Eisenbahner legen die Arbeit nieder. Zwei Monate lang geht im Liverpooler Hafen fast nichts."]; } },

@@ -320,6 +320,27 @@ details.ledger2 > summary::-webkit-details-marker { display: none; }
 .bars .bar i { display: block; width: 100%; background: var(--ok, #2e6b3a); border-radius: 2px 2px 0 0; } .bars .bar.neg i { background: var(--bad, #a33); } .bars .bar span { font: 11px var(--sans); color: var(--ink-2); }
 .opt.warn b { color: var(--bad, #a33); }
 
+/* Kohle und Küche (v4.5) */
+.coalbar { display: flex; align-items: center; gap: 10px; width: 100%; margin: 12px 0 2px; padding: 8px 12px; border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: 6px; background: var(--paper); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.coalbar .cl { font-size: 14px; color: var(--muted); white-space: nowrap; }
+.coalbar b { font: 700 19px/1 var(--serif); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.coalbar .spark { flex: 1; min-width: 50px; height: 30px; }
+.coalbar .cr { font-size: 13.5px; color: var(--ink-2); white-space: nowrap; }
+.spark { display: block; width: 100%; height: 44px; margin: 4px 0; }
+.cup { color: var(--red); }
+.cdown { color: var(--good); }
+.cflat { color: var(--muted); font-size: .8em; }
+.seg.lv5 { grid-template-columns: repeat(5, 1fr); }
+.seg.lv5 button { font-size: 12.5px; padding: 0 2px; }
+.kqrow { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-top: 1px dashed var(--line); }
+.kqrow > span { font-size: 15px; }
+.kqrow > span .meta { display: block; }
+.tags { display: block; margin-top: 2px; }
+.tags .tag { margin: 0 4px 0 0; font-size: 12px; padding: 0 5px; }
+.eqrow .btns { display: flex; gap: 6px; flex-shrink: 0; }
+.fin.prev tr.sum td { border-top: 1px solid var(--line); padding-top: 7px; }
+.fin td.pos, .fin td.neg { font-weight: 700; }
+
 /* ===== PC-Version: Schreibtisch-Layout ab 1100 px ===== */
 .rail, .side { display: none; }
 .tabs .k { display: none; }
@@ -405,3 +426,6 @@ body.desk .secbody > details.shipd { grid-column: auto; }
 body.desk details.ledger2 { max-width: 820px; }
 body.desk details.shipd > .item { padding-left: 12px; padding-right: 12px; }
 body.desk .seg:has(> button:nth-child(4):last-child) { grid-template-columns: repeat(4, 1fr); }
+body.desk .coalbar, body.desk .spark { max-width: 820px; }
+body.desk .coalchart { max-width: 640px; }
+body.desk .seg.lv5 { grid-template-columns: repeat(5, 1fr); }
