@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Flaggschiff – Balance-Simulation für „Kohle und Küche“ (v4.5)
+/* Flaggschiff – Balance-Simulation für „Kohle und Küche“ (v4.5) und „Zeitung, Börse und Einführung“ (v4.6)
 
    Bots führen je Linienart eine kleine Reederei über 40 Betriebsjahre und spielen dabei feste Strategien.
    Verglichen wird der Gewinn (Summe der Monatsergebnisse, ohne Schiffskäufe), gemittelt über viele Läufe.
@@ -7,15 +7,18 @@
      fahrt    Sparfahrt, Normal, Volldampf, Regel des Maschineninspektors: keine Stufe überall die beste
      kueche   einfach, ordentlich, fein, eigene Küche, Caterer: keine Stufe überall die beste
      vertrag  Kohle-Lieferverträge lohnen sich nicht immer
-     alt      wer nichts Neues anfasst, steht im Schnitt nicht schlechter da als mit v4.4.3
+     boerse   „nur Aktien“ bringt im Schnitt weniger als eine gut geführte Reederei (Rendite auf das eingesetzte Kapital)
+     hauszeche  über 50 % einer Zeche lohnt sich nur für große Flotten (verglichen mit demselben Geld in einem breiten Depot)
+     prokurist  knapp bezahlt liegt er unter dem Markt, sehr gut leicht darüber (verglichen mit einem breiten Depot ohne Prokurist)
+     alt      wer nichts Neues anfasst, steht im Schnitt nicht schlechter da als mit v4.5
 
    Aufruf im Hauptordner (Node 18 oder neuer, für „alt“ auch git):
      node tools/simulation.js                  alle Prüfungen (einige Minuten, nutzt alle Prozessorkerne)
      node tools/simulation.js --laeufe 8       weniger Läufe je Strategie (Standard 24): schneller, aber ungenauer
-     node tools/simulation.js --nur fahrt      nur eine Prüfung (fahrt, kueche, vertrag, alt; mehrere mit Komma)
+     node tools/simulation.js --nur fahrt      nur eine Prüfung (fahrt, kueche, vertrag, boerse, hauszeche, prokurist, alt; mehrere mit Komma)
      node tools/simulation.js --linien hochsee nur bestimmte Linienarten (Schlüssel siehe LINIEN)
      node tools/simulation.js --jahre 40       Betriebsjahre je Lauf
-     node tools/simulation.js --alt 651cc8c    Vergleichsstand für „alt“ (Standard: v4.4.3)
+     node tools/simulation.js --alt eb1bb23    Vergleichsstand für „alt“ (Standard: v4.5)
      node tools/simulation.js --json datei     Ergebnisse zusätzlich als JSON speichern
 */
 "use strict";
@@ -38,8 +41,17 @@ const caterer = (k, q) => ({
   monat: (E, s) => { const K = E.kueche(s); if (!E.catOn(s, K.cat) && !(K.notUntil >= s.m) && !s.pending.some(p => p.id === "catverl")) E.signCaterer(s, k, 3); },
 });
 const vertrag = (years, share) => ({ monat: (E, s) => { if (!E.coalActive(s).length && E.coalOffer(s, years, share).ok) E.signCoal(s, years, share); } });
+// Börse: Kapital, das die Bots anlegen (Mark von 1880)
+const KAPITAL = 1e6;
+const breit = (E, s, betrag) => { const ks = E.BO_ORDER.filter(k => E.boListed(s, k)); for (const k of ks) E.boBuy(s, k, E.boFor(s, k, betrag / ks.length)); };
+const boStart = f => (E, s) => { s.bo.on = true; s.cash += KAPITAL * 1.3; f(E, s); };
 const STRAT = {
-  basis: { gruppe: ["fahrt", "kueche", "vertrag", "alt"], name: "nichts anfassen (Normal, ordentlich, ohne Vertrag)" },
+  basis: { gruppe: ["fahrt", "kueche", "vertrag", "alt", "boerse", "hauszeche", "prokurist"], name: "nichts anfassen (Normal, ordentlich, ohne Vertrag)" },
+  aktien: { gruppe: ["boerse", "hauszeche", "prokurist"], name: "1 Mio. Mark breit in Aktien, halten", kapital: KAPITAL, start: boStart((E, s) => breit(E, s, KAPITAL)) },
+  hz: { gruppe: ["hauszeche"], name: "Hauszeche: 51 % einer Zeche", kapital: KAPITAL, start: boStart((E, s) => { const c = s.bo.co.zeche1; E.boBuy(s, "zeche1", Math.ceil(c.n * .51)); }) },
+  pk0: { gruppe: ["prokurist"], name: "Prokurist knapp, ausgewogen, 1 Mio. Mark", kapital: KAPITAL, start: boStart((E, s) => { E.setStaff(s, "pk", 0); E.pkSet(s, KAPITAL); }) },
+  pk1: { gruppe: ["prokurist"], name: "Prokurist Tarif, ausgewogen, 1 Mio. Mark", kapital: KAPITAL, start: boStart((E, s) => { E.setStaff(s, "pk", 1); E.pkSet(s, KAPITAL); }) },
+  pk3: { gruppe: ["prokurist"], name: "Prokurist sehr gut, ausgewogen, 1 Mio. Mark", kapital: KAPITAL, start: boStart((E, s) => { E.setStaff(s, "pk", 3); E.pkSet(s, KAPITAL); }) },
   spar: { gruppe: ["fahrt"], name: "Sparfahrt", start: (E, s) => E.setFahrt(s, "spar") },
   voll: { gruppe: ["fahrt"], name: "Volldampf", start: (E, s) => E.setFahrt(s, "voll") },
   regel: { gruppe: ["fahrt"], name: "Maschineninspektor (Tarif), Regel 125 % / 90 %", start: (E, s) => E.setStaff(s, "mi", 1) },
@@ -56,7 +68,7 @@ const STRAT = {
   guenstig: Object.assign({ gruppe: ["vertrag"], name: "5 Jahre, 100 %, nur wenn Kohle unter 90 % kostet" }, { monat: (E, s) => { if (!E.coalActive(s).length && s.coal < .9 && E.coalOffer(s, 5, 1).ok) E.signCoal(s, 5, 1); } }),
   einkauf: { gruppe: ["vertrag"], name: "Kohleneinkäufer (gut): 3 Jahre 100 %, verlängert unter 105 %",
     start: (E, s) => { E.setStaff(s, "ke", 2); E.setStaff(s, "keRenew", 105); }, monat: (E, s) => { if (!E.coalActive(s).length && s.coal < 1.05 && E.coalOffer(s, 3, 1).ok) E.signCoal(s, 3, 1); } },
-  alt: { gruppe: ["alt"], name: "nichts anfassen mit v4.4.3", engine: "alt" },
+  alt: { gruppe: ["alt"], name: "nichts anfassen mit v4.5", engine: "alt" },
 };
 
 // ---------- ein Spiel ----------
@@ -97,14 +109,14 @@ function spielen(E, li, key, seed, jahre, mitSchwelle) {
   const buchen = () => { for (const r of s.routes) { const L = r.last; if (!L || !L.cls) continue; const P = preis[r.id] || (preis[r.id] = [0, 1, 2].map(() => ({ voll: 0, n: 0, last: 0 })));
     L.cls.forEach((c, i) => { if (c.cap > 0 && c.dem > 0) { P[i].n++; P[i].last += c.pax / c.cap; if (c.pax >= .97 * c.cap) P[i].voll++; } }); } };
   const preise = r => { const P = preis[r.id]; if (!P) return; P.forEach((x, c) => { if (x.n) { const f = E.pricePct(s, r, c); E.setPrice(s, r.id, c, x.voll >= 3 ? Math.min(2.5, f * 1.06) : f > 1 ? Math.max(1, f * .96) : f); } x.voll = x.n = x.last = 0; }); };
-  let auf = false, kohleSum = 0, kohleN = 0;
+  let auf = false, kohleSum = 0, kohleN = 0, flotteSum = 0, kapital = 0;
   const sw = { spar: STUFEN.map(() => 0), voll: STUFEN.map(() => 0), n: 0 };
   while (!s.over && E.yearOf(s) < endY) {
     if (s.m >= startM) {
       if (!auf) {
         auf = true; geld(1e6); E.setStaff(s, "insp", true);
         for (const [a, b, c] of L.routes) E.openRoute(s, a, b, !!c, []);
-        if (st.start) st.start(E, s);
+        if (st.start) { const c0 = s.cash; st.start(E, s); kapital = st.kapital || 0; }
       }
       if (E.cal(s.m).mo === 0) for (const r of s.routes) { // jedes Jahr: Preise anpassen, Schiffe über 30 Jahre ersetzen
         preise(r);
@@ -115,11 +127,14 @@ function spielen(E, li, key, seed, jahre, mitSchwelle) {
     }
     for (let g = 0; g < 80; g++) { if (E.nextMonth(s) || s.over) break; if (E.duePending(s)) E.resolve(s, entscheiden(E, s, s.pending[0])); }
     buchen(); geld(3e5);
-    if (s.m >= startM) { kohleSum += s.coal; kohleN++; if (mitSchwelle && (s.m - startM) % 11 === 6) schwelle(E, s, sw); }
+    if (s.m >= startM) { kohleSum += s.coal; kohleN++; flotteSum += E.fleetValue(s); if (mitSchwelle && (s.m - startM) % 11 === 6) schwelle(E, s, sw); }
   }
   const ys = Object.keys(s.years).map(Number).filter(y => y >= L.start && y < endY), sum = k => ys.reduce((a, y) => a + (s.years[y][k] || 0), 0);
   const cost = k => ys.reduce((a, y) => a + ((s.years[y].costs || {})[k] || 0), 0);
-  return { li, key, seed, jahre: ys.length, profit: sum("profit"), rev: sum("rev"), pax: sum("pax"), kohle: cost("Kohle"), verpf: cost("Verpflegung"), over: !!s.over,
+  // Börse: nicht realisierte Gewinne zählen mit (Kurswert minus Einstand)
+  let offen = 0; if (s.bo && s.bo.co) for (const D of [s.bo.dep, s.bo.pk.dep]) for (const k in D) offen += D[k].n * s.bo.co[k].px - D[k].cost;
+  const pkKosten = s.bo && s.bo.pk ? (s.bo.pk.lohn || 0) + (s.bo.pk.paid || 0) : 0;
+  return { li, key, seed, jahre: ys.length, offen, pkKosten, kapital, flotte: kohleN ? flotteSum / kohleN : 0, profit: sum("profit"), rev: sum("rev"), pax: sum("pax"), kohle: cost("Kohle"), verpf: cost("Verpflegung"), over: !!s.over,
     kohleIdx: kohleN ? kohleSum / kohleN : null, sw: mitSchwelle ? sw : null };
 }
 
@@ -153,8 +168,8 @@ if (process.argv[2] === "--arbeiter") {
 
 // ---------- Auswertung ----------
 const arg = (k, d) => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] : d; };
-const LAEUFE = +arg("laeufe", 24), JAHRE = +arg("jahre", 40), ALT = arg("alt", "651cc8c"), JSON_OUT = arg("json", null);
-const NUR = (arg("nur", "fahrt,kueche,vertrag,alt")).split(","), NUR_L = (arg("linien", Object.keys(LINIEN).join(","))).split(",");
+const LAEUFE = +arg("laeufe", 24), JAHRE = +arg("jahre", 40), ALT = arg("alt", "eb1bb23"), JSON_OUT = arg("json", null);
+const NUR = (arg("nur", "fahrt,kueche,vertrag,boerse,hauszeche,prokurist,alt")).split(","), NUR_L = (arg("linien", Object.keys(LINIEN).join(","))).split(",");
 const keys = Object.keys(STRAT).filter(k => STRAT[k].gruppe.some(g => NUR.includes(g)));
 let altDir = null;
 if (keys.includes("alt")) {
@@ -184,11 +199,13 @@ function fertig() {
   const mean = a => a.reduce((x, y) => x + y, 0) / (a.length || 1);
   const sd = a => { const m = mean(a); return Math.sqrt(a.reduce((x, y) => x + (y - m) * (y - m), 0) / Math.max(1, a.length - 1)); };
   const fmt = n => Math.round(n).toLocaleString("de-DE");
+  const pc = x => (x >= 0 ? "+" : "") + (x * 100).toFixed(1) + " %";
   const out = { laeufe: LAEUFE, jahre: JAHRE, linien: {}, gruppen: {} };
   console.log(`\nfertig in ${Math.round((Date.now() - t0) / 1000)} s. Gewinn = Ø Jahresgewinn über ${JAHRE} Betriebsjahre; Δ = Unterschied zu „nichts anfassen“ (± Standardfehler, gepaart nach Startwert).\n`);
-  for (const g of ["fahrt", "kueche", "vertrag", "alt"].filter(g => NUR.includes(g))) {
-    const titel = { fahrt: "1. Fahrstufe", kueche: "2. Verpflegung", vertrag: "3. Kohle-Lieferverträge", alt: "4. Nichts anfassen: v4.5 gegen v4.4.3" }[g];
+  for (const g of ["fahrt", "kueche", "vertrag", "boerse", "hauszeche", "prokurist", "alt"].filter(g => NUR.includes(g))) {
+    const titel = { fahrt: "1. Fahrstufe", kueche: "2. Verpflegung", vertrag: "3. Kohle-Lieferverträge", boerse: "4. Börse: nur Aktien gegen eine gut geführte Reederei", hauszeche: "5. Hauszeche gegen breites Depot", prokurist: "6. Prokurist gegen breites Depot", alt: "7. Nichts anfassen: v4.6 gegen v4.5" }[g];
     console.log("=== " + titel + " ===");
+    if (["boerse", "hauszeche", "prokurist"].includes(g)) { boAuswertung(g); continue; }
     const sk = keys.filter(k => STRAT[k].gruppe.includes(g));
     out.gruppen[g] = {};
     for (const li of NUR_L) {
@@ -240,9 +257,39 @@ function fertig() {
         alt += mean(a.map(r => r.profit / r.jahre)); neu += mean(b.map(r => r.profit / r.jahre)); var2 += d.length > 1 ? sd(d) ** 2 / d.length : 0;
       }
       const m = alt ? (neu - alt) / Math.abs(alt) : 0, se = alt ? Math.sqrt(var2) / Math.abs(alt) : 0, ok = m >= -.01 || m >= -2 * se;
-      console.log(`\n  Ø Kohlepreis: v4.4.3 ${(mean(ka) * 100).toFixed(1)} %, v4.5 ${(mean(kn) * 100).toFixed(1)} % (v4.5 mit Kohlekrisen).`);
-      console.log(`  Alle Linienarten zusammen: v4.5 ohne neue Einstellungen ${m >= 0 ? "+" : ""}${(m * 100).toFixed(1)} % ± ${(se * 100).toFixed(1)} % Gewinn gegenüber v4.4.3 → ${ok ? "Ziel erreicht (nicht schlechter" + (m < 0 ? " im Rahmen der Messgenauigkeit" : "") + ")." : "ACHTUNG: schlechter als v4.4.3."}`);
+      console.log(`\n  Ø Kohlepreis: v4.5 ${(mean(ka) * 100).toFixed(1)} %, v4.6 ${(mean(kn) * 100).toFixed(1)} %.`);
+      console.log(`  Alle Linienarten zusammen: v4.6 ohne Börse ${m >= 0 ? "+" : ""}${(m * 100).toFixed(1)} % ± ${(se * 100).toFixed(1)} % Gewinn gegenüber v4.5 → ${ok ? "Ziel erreicht (nicht schlechter" + (m < 0 ? " im Rahmen der Messgenauigkeit" : "") + ")." : "ACHTUNG: schlechter als v4.5."}`);
       out.alt = { neu, alt, rel: m, se, kohleAlt: mean(ka), kohleNeu: mean(kn) };
+    }
+    console.log("");
+  }
+  // Rendite einer Börsen-Strategie: Mehrgewinn gegenüber „nichts anfassen“ (inklusive offener Kursgewinne) je Jahr, bezogen auf das angelegte Kapital
+  function rendite(li, k, brutto) {
+    const rs = by(li, k), b = by(li, "basis"), d = rs.map((r, i) => b[i] && r.kapital ? (r.profit + r.offen + (brutto ? r.pkKosten : 0) - b[i].profit - b[i].offen) / r.jahre / r.kapital : null).filter(x => x != null);
+    return { m: mean(d), se: sd(d) / Math.sqrt(Math.max(1, d.length)), n: d.length };
+  }
+  function boAuswertung(g) {
+    out.gruppen[g] = {};
+    if (g === "boerse") {
+      let schlechter = 0; const rocs = [], aks = [];
+      for (const li of NUR_L) {
+        const b = by(li, "basis"), roc = mean(b.map(r => r.flotte ? r.profit / r.jahre / r.flotte : 0)), a = rendite(li, "aktien");
+        console.log(`  ${LINIEN[li].name.padEnd(62)} Reederei ${pc(roc).padStart(8)} auf den Flottenwert   nur Aktien ${pc(a.m).padStart(8)} ± ${(a.se * 100).toFixed(1)} %`);
+        if (a.m < roc) schlechter++; rocs.push(roc); aks.push(a.m);
+        out.gruppen[g][li] = { reederei: roc, aktien: a };
+      }
+      const ok = mean(aks) < mean(rocs);
+      console.log(`\n  Im Schnitt: Reederei ${pc(mean(rocs))}, nur Aktien ${pc(mean(aks))}. ${ok ? "Ziel erreicht" : "ACHTUNG"}: Aktien bringen in ${schlechter} von ${NUR_L.length} Linienarten weniger als die Reederei.`);
+    }
+    if (g === "hauszeche" || g === "prokurist") {
+      const ks = g === "hauszeche" ? ["aktien", "hz"] : ["aktien", "pk0", "pk1", "pk3"];
+      for (const li of NUR_L) {
+        const kohle = mean(by(li, "basis").map(r => r.kohle / r.jahre));
+        console.log("  " + LINIEN[li].name + (g === "hauszeche" ? `   (Kohle ${fmt(kohle)} Mark im Jahr)` : ""));
+        out.gruppen[g][li] = {};
+        for (const k of ks) { const a = rendite(li, k), br = k.startsWith("pk") ? rendite(li, k, true) : null; out.gruppen[g][li][k] = Object.assign(a, br ? { brutto: br.m } : {});
+          console.log(`    ${STRAT[k].name.padEnd(52)} ${pc(a.m).padStart(8)} ± ${(a.se * 100).toFixed(1)} % im Jahr` + (br ? `   vor Gehalt und Beteiligung ${pc(br.m)}` : "")); }
+      }
     }
     console.log("");
   }

@@ -20,7 +20,9 @@
   const FLAG = '<svg class="flag" viewBox="0 0 38 26" aria-hidden="true"><rect x=".5" y=".5" width="37" height="25" fill="#1E3A63" stroke="#B08D57"/>' + star(19, 13, 8.5, 3.4, "#fff") + "</svg>";
 
   /* ---------- Klang und Musik ---------- */
-  const TRACKS = [["mus0", "Hamburger Hafen 1880"], ["mus1", "Dampf über den Atlantik"], ["mus2", "Walzer auf dem Ozean"], ["mus4", "Walzer auf dem Ozean (Variante)"], ["mus3", "Ruhige Nachtfahrt"], ["mus5", "Ruhige Nachtfahrt (Variante)"]];
+  const TRACKS = [["mus0", "Hamburger Hafen 1880"], ["mus1", "Dampf über den Atlantik"], ["mus2", "Walzer auf dem Ozean"], ["mus4", "Walzer auf dem Ozean (Variante)"], ["mus3", "Ruhige Nachtfahrt"], ["mus5", "Ruhige Nachtfahrt (Variante)"],
+    ["mus6", "Hafenkneipe"], ["mus7", "Hafenkneipe (Variante)"], ["mus8", "Sommer im Seebad"], ["mus9", "Sommer im Seebad (Variante)"], ["mus10", "Abschied der Auswanderer"], ["mus11", "Abschied der Auswanderer (Variante)"]];
+  const SUMMER = ["mus8", "mus9"], FAREWELL = ["mus10", "mus11"];
   const Snd = (function () {
     let ctx = null, on = true, amb = null, musicOn = true, audio = null, track = 0;
     try { on = localStorage.getItem(KEY + "-ton") !== "0"; musicOn = localStorage.getItem(KEY + "-musik") !== "0"; } catch (e) { }
@@ -31,7 +33,15 @@
       audio.addEventListener("ended", () => next(true));
     }
     function music() { if (!audio) return; if (on && musicOn) { const p = audio.play(); if (p && p.catch) p.catch(() => { }); } else audio.pause(); }
-    function next(auto) { if (!audio) return; track = (track + 1) % list.length; audio.src = A[list[track][0]]; if (on && musicOn) music(); if (!auto) render(); }
+    let queued = null;
+    // Nächstes Stück: zufällig, nie zweimal dasselbe; „Sommer im Seebad“ von Mai bis September doppelt so oft
+    function pickNext() {
+      if (queued != null) { const q = list.findIndex(t => t[0] === queued); queued = null; if (q >= 0 && q !== track) return q; }
+      const mo = S ? E.cal(S.m).mo : -1, summer = mo >= 4 && mo <= 8, w = list.map((t, i) => i === track ? 0 : SUMMER.includes(t[0]) && summer ? 2 : 1), tot = w.reduce((a, b) => a + b, 0);
+      if (!tot) return 0; let r = Math.random() * tot; for (let i = 0; i < w.length; i++) { r -= w[i]; if (r < 0) return i; } return 0;
+    }
+    function next(auto) { if (!audio) return; track = pickNext(); audio.src = A[list[track][0]]; if (on && musicOn) music(); if (!auto) render(); }
+    function queue(keys) { const k = keys[Math.floor(Math.random() * keys.length)]; if (list.some(t => t[0] === k)) queued = k; }
     function ac() {
       if (!on) return null;
       if (!ctx) { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; ctx = new C(); }
@@ -74,7 +84,7 @@
     function toggle() { on = !on; try { localStorage.setItem(KEY + "-ton", on ? "1" : "0"); } catch (e) { } if (on) { ambient(); bell(0, 620, .12); } else stopAmbient(); music(); }
     function toggleMusic() { musicOn = !musicOn; try { localStorage.setItem(KEY + "-musik", musicOn ? "1" : "0"); } catch (e) { } stopAmbient(); ambient(); music(); }
     function wake() { ambient(); music(); }
-    return { bell, horn, coins, thud, telegraph, storm, ambient, toggle, toggleMusic, wake, next, get on() { return on; }, get musicOn() { return musicOn; }, get hasMusic() { return !!audio; }, get title() { return list.length ? list[track][1] : ""; } };
+    return { bell, horn, coins, thud, telegraph, storm, ambient, toggle, toggleMusic, wake, next, queue, get on() { return on; }, get musicOn() { return musicOn; }, get hasMusic() { return !!audio; }, get title() { return list.length ? list[track][1] : ""; } };
   })();
   const ICON_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
   const ICON_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>';
@@ -307,7 +317,7 @@
   }
 
   /* ---------- Kontor ---------- */
-  const SPECIAL_COST = ["Werft", "Reparaturen", "Strafen", "Lotsengeld", "Schadenersatz", "Bergelohn", "Gutachten", "Agenturen", "Sonderausgaben", "Museumsbau", "Entschädigungen"];
+  const SPECIAL_COST = ["Werft", "Reparaturen", "Strafen", "Lotsengeld", "Schadenersatz", "Bergelohn", "Gutachten", "Agenturen", "Sonderausgaben", "Museumsbau", "Entschädigungen", "Kursverluste"];
   const LEDGER_ORDER = ["Kohle", "Heuer", "Verpflegung", "Hafengebühren", "Wartung", "Versicherung", "Werbung", "Zinsen", "Vertragsstrafen", "Überziehungszins", "Kontor"];
   function ledgerOld() {
     const c = S.cur, prev = S.last, ex = c.extra || {};
@@ -345,11 +355,7 @@
     const got = E.ACH.filter(a => S.ach && S.ach[a.id]);
     h += '<details class="sec" data-sec="ach"' + (openSec.ach ? " open" : "") + '><summary><span>Erfolge</span><span class="cnt">' + got.length + "/" + E.ACH.length + "</span></summary>" + img("ev_erfolge", "banner", "Vitrine mit Auszeichnungen") + '<div class="achgrid">' +
       E.ACH.map(a => { const on = S.ach && S.ach[a.id]; return '<div class="ach' + (on ? " on" : "") + '"><b>' + (on ? "★ " : "☆ ") + a.name + "</b><span>" + a.desc + (on ? " · " + E.dateStr(on - 1) : "") + "</span></div>"; }).join("") + "</div></details>";
-    if (!DESK) {
-    h += '<h2>' + ({ ham: "Hamburger Nachrichten", lpl: "Liverpool Mercury", lon: "The Shipping Gazette" }[S.home || "ham"]) + '</h2><div class="news">';
-    for (const l of S.log.slice(0, 8)) { const k = newsImg(l); h += '<article class="' + (l.kind === "bad" ? "bad" : "") + '">' + (k ? img(k, "thumb", "") : "") + "<time>" + E.dateStr(l.m) + "</time><h4>" + esc(l.head) + "</h4><p>" + esc(l.text) + "</p></article>"; }
-    h += "</div>";
-    }
+    if (!DESK) h += '<h2>' + paperName() + '</h2>' + newsBox(8);
     h += '<details><summary>So funktioniert ' + (DESK ? "das Spiel" : "der Prototyp") + '</summary><ul>' +
       (DESK ? "<li>Tastatur: Die Leertaste hält die Zeit an oder lässt sie weiterlaufen, 0 bis 3 stellen den Maschinentelegrafen, K, L, F, W, M und B wechseln die Bereiche. Bei Ereignissen wählen 1 bis 9 die Antwort, Esc schließt Fenster.</li>" : "") + "<li>Unter <b>Kontor</b> finden Sie auch Statistiken zu Schiffen, Linien und Finanzen sowie Ihr Personal. Unter <b>Markt</b> stehen Werbung, die sechs Rivalen und die Marktforschung.</li>" +
       (DESK ? "<li>Die Zeit läuft von selbst. Auf <b>Langsam</b> dauert ein Tag zwei Sekunden. Am Maschinentelegrafen oben halten Sie an oder geben mehr Fahrt – oder mit der Leertaste und den Tasten 0 bis 3. Bei Ereignissen stoppt die Zeit.</li>" : "<li>Die Zeit läuft von selbst. Auf <b>Langsam</b> dauert ein Tag zwei Sekunden. Am Maschinentelegrafen unten halten Sie an oder geben mehr Fahrt. Bei Ereignissen stoppt die Zeit.</li>") +
@@ -359,13 +365,14 @@
       "<li>Vergnügungsreisen (ab 1891/92) sind eine eigene Linienart: Nordland im Sommer, Mittelmeer und Orient im Winter.</li>" +
       "<li><b>Werbung</b> macht Sie bekannter und bringt mehr Fahrgäste – laufende Anzeigen, Agenturen, Kampagnen für einzelne Linien.</li>" +
       "<li>Unter Kontor → Einkauf kaufen Sie Kohle auf Vertrag und bestimmen die Verpflegung an Bord. In der Flotte wählen Sie die Fahrstufe: Sparfahrt spart Kohle, Volldampf schafft mehr Fahrten.</li>" +
+      "<li>Ab drei Schiffen und einem Geschäftsjahr mit Gewinn öffnet sich unter Kontor → Börse der Aktienhandel. Wer ihn nicht nutzt, verpasst nichts.</li>" +
       "<li>Auf See droht Seenot. Dann entscheiden Sie: aufgeben, pumpen oder Hilfe rufen. Rettungsboote, Schotten und Funk verbessern die Aussichten.</li>" +
       "<li>Das Spiel läuft endlos. Löhne, Preise und Reisende nehmen über die Jahrzehnte zu, neue Technik und Bahnverbindungen verändern die Märkte.</li></ul></details>";
     h += '<div class="toggles"><button class="btn" data-act="snd">' + (Snd.on ? "Ton ausschalten" : "Ton einschalten") + '</button><button class="btn" data-act="music" ' + (Snd.on && Snd.hasMusic ? "" : "disabled") + ">" +
       (Snd.musicOn ? "Musik ausschalten" : "Musik einschalten") + '</button><button class="btn" data-act="nexttrack" ' + (Snd.on && Snd.musicOn && Snd.hasMusic ? "" : "disabled") + ">Nächstes Stück</button></div>";
     if (Snd.hasMusic && Snd.on && Snd.musicOn) h += '<div class="now">Es spielt: „' + esc(Snd.title) + "“</div>";
     h += '<label class="field">Sprache</label><div class="seg" role="group" aria-label="Sprache">' + [["de", "Deutsch"], ["en", "English"], ["es", "Español"]].map(([k, n]) => '<button data-act="setLang" data-v="' + k + '" aria-pressed="' + (LANG === k) + '">' + n + "</button>").join("") + "</div>";
-    h += '<div class="actions"><button class="btn" data-act="tutStart">Einführung starten</button></div>';
+    h += tutList();
     h += '<div class="actions"><button class="btn" data-act="exportOpen">Spielstand exportieren</button><button class="btn" data-act="importOpen">Spielstand importieren</button></div>';
     h += '<div class="actions"><button class="btn warn" data-act="reset">' + (confirmReset ? "Wirklich alles löschen und neu beginnen?" : "Neues Spiel beginnen") + "</button></div>";
     return h;
@@ -726,7 +733,7 @@
     const st = E.staff(S), K = E.kueche(S), act = E.coalActive(S), base = E.coalBase(S), y = E.yearOf(S);
     let h = img("ev_kohlevertrag", "banner", "Kohlenhändler im Kontor") + '<h2>Einkauf</h2><p class="sub">Kohle und Verpflegung für die ganze Reederei. Einzelne Schiffe stellen Sie in der Flotte anders ein.</p>';
     // Kohle
-    h += '<h3>Kohle</h3><div class="kv"><div><b>' + E.coalIdx(S) + " % " + coalArrow() + '</b><span>Kohlepreis</span></div><div><b>' + M(base) + '</b><span>Verbrauch im Monat zum Normalpreis</span></div></div>' + spark((S.coalHist || []).slice(-36).concat([{ m: S.m, c: S.coal }]), 340, 44);
+    h += '<h3>Kohle</h3><div class="kv" data-tut="coal"><div><b>' + E.coalIdx(S) + " % " + coalArrow() + '</b><span>Kohlepreis</span></div><div><b>' + M(base) + '</b><span>Verbrauch im Monat zum Normalpreis</span></div></div>' + spark((S.coalHist || []).slice(-36).concat([{ m: S.m, c: S.coal }]), 340, 44);
     h += '<div class="meta">Der Kohlepreis schwankt jeden Monat um bis zu 3 %. Streiks und neue Zechen bewegen ihn stärker. Mit einem Liefervertrag kaufen Sie zum heutigen Preis mit Aufschlag – wer früh bindet, ist gegen Krisen geschützt.</div>';
     for (const k of S.coalK || []) {
       h += '<div class="item"><div class="row"><h3>Liefervertrag über ' + Math.round(k.share * 100) + ' % des Verbrauchs</h3></div><div class="meta">' + (k.years === 1 ? "1 Jahr" : k.years + " Jahre") + " zu " + Math.round(k.price * 100) + " % des Normalpreises · fest " + M(k.qty * k.price) + " im Monat · bis " + E.dateStr(k.until) + "</div>" +
@@ -734,14 +741,14 @@
         '<div class="actions"><button class="btn warn" data-act="coalCancel" data-id="' + k.id + '">Kündigen (' + M(E.coalCancelFee(S, k)) + ")</button></div></div>";
     }
     const o = E.coalOffer(S, coalYears, coalShare);
-    h += '<div class="item"><h3>Neuer Liefervertrag</h3><label class="field">Laufzeit</label><div class="seg lv" role="group">' + [1, 3, 5].map(n => '<button data-act="coalY" data-v="' + n + '" aria-pressed="' + (coalYears === n) + '">' + (n === 1 ? "1 Jahr" : n + " Jahre") + "<small>Aufschlag " + pctSign(E.coalOffer(S, n, coalShare).surch) + "</small></button>").join("") + "</div>" +
+    h += '<div class="item" data-tut="coalnew"><h3>Neuer Liefervertrag</h3><label class="field">Laufzeit</label><div class="seg lv" role="group">' + [1, 3, 5].map(n => '<button data-act="coalY" data-v="' + n + '" aria-pressed="' + (coalYears === n) + '">' + (n === 1 ? "1 Jahr" : n + " Jahre") + "<small>Aufschlag " + pctSign(E.coalOffer(S, n, coalShare).surch) + "</small></button>").join("") + "</div>" +
       '<label class="field">Menge</label><div class="seg" role="group" style="grid-template-columns:repeat(2,1fr)">' + [.5, 1].map(v => '<button data-act="coalS" data-v="' + v + '" aria-pressed="' + (coalShare === v) + '">' + Math.round(v * 100) + " % des Verbrauchs</button>").join("") + "</div>";
     if (o.qty >= 100) h += '<table class="fin" style="width:100%;margin-top:10px"><tr><td>Preis</td><td>' + Math.round(o.price * 100) + " % des Normalpreises (heute " + E.coalIdx(S) + " %)</td></tr><tr><td>Fest im Monat</td><td>" + M(o.qty * o.price) + "</td></tr><tr><td>" + (o.now >= 0 ? "Mehrkosten zum heutigen Preis" : "Ersparnis zum heutigen Preis") + "</td><td>" + M(Math.abs(o.now)) + " im Monat</td></tr><tr><td>Lohnt sich ab</td><td>Kohlepreis über " + Math.round(o.price * 100) + " %</td></tr></table>";
     h += '<div class="meta">Mindestabnahme 80 % der vereinbarten Menge, Mehrverbrauch zum Marktpreis. Höchstens zwei Verträge, zusammen höchstens 100 % des Verbrauchs. Eine Kündigung kostet ein Viertel der Restsumme.' + (st.ke >= 0 ? " Ihr Kohleneinkäufer drückt den Aufschlag." : "") + "</div>" +
       (o.ok ? '<div class="actions"><button class="btn solid" data-act="coalSign">Vertrag schließen</button></div>' : '<div class="hint">' + esc(o.why) + "</div>") + "</div>";
     // Verpflegung
     const ku = S.exp && S.exp.ku != null ? S.exp.ku : 50, cat = E.catOn(S, K.cat) ? K.cat : null, lux = E.catOn(S, K.lux) ? K.lux : null;
-    h += '<h3 style="margin-top:20px">Verpflegung</h3>' + img("kue_fein", "banner", "Speisesaal der 1. Klasse") +
+    h += '<h3 style="margin-top:20px" data-tut="kq">Verpflegung</h3>' + img("kue_fein", "banner", "Speisesaal der 1. Klasse") +
       '<div class="row"><span>Erfahrung „Küche“</span><b class="num">' + Math.round(ku) + ' / 100</b></div><div class="meter"><i style="width:' + Math.round(ku) + '%"></i></div>' +
       '<div class="meta">Gutes Essen spricht sich herum: In der 1. Klasse zählt es viel, in der 2. Klasse mittel, im Zwischendeck wenig. Bei Vergnügungsreisen bringt eine gute Küche mehr Buchungen. Längere Seezeit durch Sparfahrt bedeutet mehr Mahlzeiten.</div>';
     if (K.notUntil >= S.m) h += '<div class="hint bad">Diesen Monat gibt es an Bord nur Notverpflegung („einfach“).</div>';
@@ -818,8 +825,9 @@
 
   /* ---------- Kontor ---------- */
   function kontorView() {
-    let h = subnav("ksub", kontorSub, [["uebersicht", "Übersicht"], ["statistik", "Statistik"], ["einkauf", "Einkauf"], ["personal", "Personal"]]);
+    let h = subnav("ksub", kontorSub, [["uebersicht", "Übersicht"], ["statistik", "Statistik"], ["einkauf", "Einkauf"], ["personal", "Personal"], ["boerse", "Börse"]]);
     if (kontorSub === "statistik") return h + statistik();
+    if (kontorSub === "boerse") return h + boerse();
     if (kontorSub === "einkauf") return h + einkauf();
     if (kontorSub === "personal") return h + personal();
     return h + kontor();
@@ -879,7 +887,7 @@
         '<div class="meta" style="margin-top:6px">Wirkung: ' + D.fx[st[k]] + ". Lohnkosten dieser Abteilung derzeit etwa " + M(crewAll * D.share * E.STAFF_PAY[st[k]]) + " im Monat.</div></div>";
     }
     h += capList();
-    h += '<h2>Angestellte im Kontor</h2>';
+    h += '<h2 data-tut="kontorstaff">Angestellte im Kontor</h2>';
     h += '<div class="item">' + img("pers_inspektor", "banner", "Schiffsinspektor") + '<div class="row"><h3>Schiffsinspektor</h3><span class="num">' + M(E.INSP_PAY * w) + ' / Monat</span></div>' +
       '<p>Er erneuert Fristen rechtzeitig und schickt Schiffe ins Dock, sobald ihr Zustand unter die gewählte Grenze fällt. Bei der Werft handelt er 5 % Rabatt heraus. Er lässt immer 20.000 Mark Reserve in der Kasse.</p>' +
       '<div class="switch"><span>Eingestellt</span><input type="checkbox" data-act="staffchk" data-k="insp" ' + (st.insp ? "checked" : "") + ' aria-label="Schiffsinspektor"></div>' +
@@ -899,7 +907,137 @@
     h += staffCard("pm", "pers_proviantmeister", "Proviantmeister", E.PM_PAY, "Er führt die eigene Bordküche: Einkauf, Vorräte und Köche. Mit eigener Küche kostet die Verpflegung 10 % weniger.",
       ["„fein“ gelingt nicht ganz, öfter verdorbener Proviant", "solide Küche", "bessere Küche, selten Ärger mit dem Proviant", "beste Küche, kaum Ärger mit dem Proviant"], () =>
         '<div class="meta">' + (E.kueche(S).eigen ? "Die eigene Küche ist eingerichtet." : "Die eigene Küche richten Sie unter Kontor → Einkauf ein.") + "</div>");
+    if (S.bo && S.bo.on) {
+      h += '<h2>Börse</h2>';
+      h += staffCard("pk", "pers_prokurist", "Prokurist", E.PK_PAY, "Er verwaltet ein eigenes Depot mit dem Betrag, den Sie ihm zuteilen, und schätzt Gerüchte ein. Dazu bekommt er 10 % der Kursgewinne, die er realisiert.",
+        ["liegt oft daneben und schätzt Gerüchte selten richtig ein", "bleibt etwas hinter dem Markt zurück", "hält ungefähr mit dem Markt mit und liegt bei Gerüchten meist richtig", "schlägt den Markt leicht und schätzt Gerüchte fast immer richtig ein"], () =>
+          '<div class="meta">Depot und Risiko stellen Sie unter Kontor → Börse ein.' + (E.staff(S).pk >= 0 && S.bo.pk.amt ? " Zugeteilt: " + M(S.bo.pk.amt) + "." : "") + "</div>");
+    }
     return h;
+  }
+
+  /* ---------- Börse (v4.6) ---------- */
+  const toMark = v => isGB() ? v * 20.43 : v;
+  const pxM = v => (v >= 100 ? E.fmt(v) : kn(v.toFixed(v >= 10 ? 1 : 2))) + " M";
+  const arrowOf = ch => ch >= .005 ? '<span class="kup">▲</span>' : ch <= -.005 ? '<span class="kdown">▼</span>' : '<span class="cflat">◆</span>';
+  function boChange(k, months) { const H = S.bo.co[k].hist, n = months || 1; if (H.length < 2) return 0; const a = H[Math.max(0, H.length - 1 - n)].p, b = H[H.length - 1].p; return a ? b / a - 1 : 0; }
+  function boDepRows(D) {
+    const b = S.bo; let val = 0, cost = 0;
+    const rows = Object.keys(D).filter(k => D[k].n > 0).map(k => { const d = D[k], c = b.co[k], v = d.n * c.px; val += v; cost += d.cost; return { k, d, c, v, g: v - d.cost }; });
+    return { rows, val, cost };
+  }
+  function boDepTable(D) {
+    const r = boDepRows(D); if (!r.rows.length) return "";
+    return '<div class="tblwrap"><table class="stat bodep"><thead><tr><th>Aktie</th><th class="n">Stück</th><th class="n">Einstand</th><th class="n">Kurs</th><th class="n">Wert</th><th class="n">Gewinn</th><th class="n">Anteil</th></tr></thead><tbody>' +
+      r.rows.map(x => '<tr data-act="boOpen" data-k="' + x.k + '"><td>' + esc(E.boName(S, x.k)) + '</td><td class="n">' + E.fmt(x.d.n) + '</td><td class="n">' + pxM(x.d.cost / x.d.n) + '</td><td class="n">' + pxM(x.c.px) + '</td><td class="n">' + M(x.v) + '</td><td class="n">' + signed(x.g) + " M (" + pctSign(x.d.cost ? x.g / x.d.cost : 0) + ')</td><td class="n">' + kn((x.d.n / x.c.n * 100).toFixed(1)) + " %</td></tr>").join("") +
+      '</tbody><tfoot><tr><td><b>Summe</b></td><td></td><td></td><td></td><td class="n"><b>' + M(r.val) + '</b></td><td class="n"><b>' + signed(r.val - r.cost) + " M</b></td><td></td></tr></tfoot></table></div>";
+  }
+  function boerse() {
+    const b = E.boState(S), st = E.staff(S);
+    let h = img("bo_saal", "banner", "Börsensaal") + '<h2>Börse</h2>';
+    if (!b.on) {
+      const yrs = Object.keys(S.years || {}).filter(y => +y < E.cal(S.m).y), good = yrs.some(y => S.years[y].profit > 0);
+      return h + '<p class="sub">Aktien der Rivalen, der Zechen, der Werft und der Caterer.</p><div class="hint">Die Börse öffnet sich Ihnen, sobald Ihre Reederei mindestens drei Schiffe hat und ein Geschäftsjahr mit Gewinn abgeschlossen ist. Sie bekommen dann eine Meldung in der Zeitung.</div>' +
+        '<div class="kv"><div><b>' + S.ships.length + " / 3</b><span>Schiffe</span></div><div><b>" + (good ? "✓" : "–") + "</b><span>Geschäftsjahr mit Gewinn</span></div></div>" +
+        '<div class="meta">Wer die Börse nicht nutzt, verpasst nichts: Sie ist ein Zusatz für Reedereien mit Geld übrig. Aktien bringen im Schnitt weniger als eine gut laufende Linie.</div>';
+    }
+    E.boSeen(S);
+    const own = boDepRows(b.dep), pk = boDepRows(b.pk.dep);
+    h += '<p class="sub">Der Kurs folgt dem Gewinn der Firma und der Stimmung am Markt. Jeder Auftrag kostet 1 % Gebühr, gekauft wird nur bar.</p>';
+    if (b.closed >= S.m) h += '<div class="hint bad">Die Börse ist geschlossen. Der Handel ruht bis ' + E.dateStr(b.closed + 1) + ".</div>";
+    h += '<div class="kv bokv"><div><b>' + M(own.val) + '</b><span>Ihr Depot</span></div><div><b>' + signed(own.val - own.cost) + ' M</b><span>Gewinn oder Verlust</span></div><div><b>' + Math.round(b.mk * 100) + ' %</b><span>Stimmung am Markt</span></div><div><b>' + (b.divLast ? M(b.divLast.sum) : "–") + "</b><span>" + (b.divLast ? "Dividende für " + b.divLast.y : "Dividende") + "</span></div></div>";
+    if (b.hz) h += '<div class="item compact">' + img("bo_hauszeche", "", "Hauszeche") + '<div><h3>Hauszeche: ' + esc(E.boName(S, b.hz)) + '</h3><div class="meta">Ihre Kohleschiffe bunkern 20 % unter dem Marktpreis, bis zur Förderung der Zeche.' + (b.hzStop >= S.m ? " Derzeit fällt die Lieferung aus – bis " + E.dateStr(b.hzStop) + " zahlen Sie den Marktpreis." : "") + (S.last && S.last.hzSave ? " Im Vormonat gespart: " + M(S.last.hzSave) + "." : "") + "</div></div></div>";
+    h += '<h3 style="margin-top:14px">Ihr Depot</h3>' + (own.rows.length ? boDepTable(b.dep) : '<div class="meta bodepot">Noch keine Aktien. ' + (DESK ? "Klicken" : "Tippen") + " Sie unten auf eine Aktie, um sie zu kaufen.</div>");
+    h += '<h3 style="margin-top:16px">Kurszettel</h3><div class="bolist">';
+    for (const g of Object.keys(E.BO_GRP)) {
+      const ks = E.BO_ORDER.filter(k => E.BO[k].grp === g);
+      h += '<div class="bogrp">' + E.BO_GRP[g] + "</div>";
+      for (const k of ks) {
+        const c = b.co[k], listed = E.boListed(S, k), ch = boChange(k), n = E.boOwn(S, k);
+        h += '<button class="borow" data-act="boOpen" data-k="' + k + '"' + (listed ? "" : " disabled") + ">" + img(E.boImg(S, k), "bothumb", "") + '<span class="bon">' + esc(E.boName(S, k)) + (n ? '<small>' + E.fmt(n) + " Stück im Besitz" + (b.hz === k ? " · Hauszeche" : "") + "</small>" : !listed ? "<small>" + (E.BO[k].from && E.yearOf(S) < E.BO[k].from ? "an der Börse ab " + E.BO[k].from : "derzeit nicht gehandelt") + "</small>" : "") + '</span><span class="bop">' + pxM(c.px) + '</span><span class="boc">' + arrowOf(ch) + " " + pctSign(ch) + "</span></button>";
+      }
+    }
+    h += "</div>";
+    const rum = (b.rum || []).filter(r => r.shown);
+    if (rum.length) h += '<h3 style="margin-top:16px">Gerüchte im Umlauf</h3>' + rum.map(r => '<div class="eqrow">' + img("ev_geruecht", "mini", "") + '<span style="flex:1">' + esc(E.boName(S, r.k)) + " " + esc(r.what) + (r.label ? '<br><span class="meta">Ihr Prokurist: ' + r.label + "</span>" : "") + "</span></div>").join("");
+    // Prokurist
+    h += '<div class="item pkbox">' + img("pers_prokurist", "banner", "Prokurist") + '<div class="row"><h3>Prokurist</h3>' + (st.pk >= 0 ? '<span class="tag">' + E.STAFF_LV[st.pk] + "</span>" : "") + "</div>";
+    if (st.pk < 0) h += '<p>Ein Prokurist verwaltet ein eigenes Depot mit einem festen Betrag und schätzt Gerüchte ein. Einstellen unter Kontor → Personal.</p>';
+    else {
+      const P = b.pk, val = pk.val + (P.cash || 0);
+      h += '<div class="kv"><div><b>' + M(P.amt) + '</b><span>zugeteilt</span></div><div><b>' + M(val) + '</b><span>Wert heute</span></div><div><b>' + M(P.cash || 0) + "</b><span>davon in bar</span></div></div>";
+      h += '<label class="field">Risiko</label><div class="seg" role="group">' + Object.keys(E.PK_RISK).map(k => '<button data-act="pkRisk" data-v="' + k + '" aria-pressed="' + (P.risk === k) + '">' + E.PK_RISK[k].name + "</button>").join("") + "</div>";
+      h += '<div class="meta">' + { vorsichtig: "Vorsichtig: nur große, ruhige Werte, ein knappes Drittel bleibt in bar.", ausgewogen: "Ausgewogen: breit über alle Werte verteilt.", riskant: "Riskant: nur die drei Werte, die er für die besten hält." }[P.risk] + " Er schichtet alle drei Monate um.</div>";
+      h += '<label class="field" for="pkamt">Betrag für sein Depot</label><div class="namebox"><input class="name" id="pkamt" inputmode="numeric" value="' + Math.round(isGB() ? P.amt / 20.43 : P.amt) + '"><button class="btn solid" data-act="pkSet">Übernehmen</button></div>';
+      h += '<div class="meta">Ein höherer Betrag geht aus der Kasse in sein Depot, ein niedrigerer zurück in die Kasse – dafür verkauft er Aktien. Er bekommt 10 % der Kursgewinne, die er realisiert.</div>' + boDepTable(b.pk.dep);
+    }
+    h += "</div>";
+    return h;
+  }
+  function boChart(H) {
+    const W = 340, Ht = 150, v = H.map(x => x.p), lo = Math.min(...v), hi = Math.max(...v), mn = lo * .92, mx = hi * 1.05;
+    const xs = i => 48 + i * (W - 56) / Math.max(1, H.length - 1), ys = c => 8 + (mx - c) / (mx - mn || 1) * (Ht - 30);
+    let o = '<svg class="chart coalchart" viewBox="0 0 ' + W + " " + Ht + '" role="img" aria-label="Kursverlauf">';
+    for (const g of [lo, hi]) o += '<line x1="48" x2="' + (W - 8) + '" y1="' + ys(g).toFixed(1) + '" y2="' + ys(g).toFixed(1) + '" stroke="var(--rule)"/><text x="44" y="' + (ys(g) + 4).toFixed(1) + '" font-size="10" fill="var(--muted)" text-anchor="end">' + pxM(g) + "</text>";
+    let lastY = -9;
+    H.forEach((x, i) => { const c = E.cal(x.m); if (c.mo === 0 && c.y - lastY >= (H.length > 60 ? 2 : 1)) { lastY = c.y; o += '<text x="' + xs(i).toFixed(1) + '" y="' + (Ht - 6) + '" font-size="10" fill="var(--muted)" text-anchor="middle">' + c.y + "</text>"; } });
+    o += '<path d="' + v.map((c, i) => (i ? "L" : "M") + xs(i).toFixed(1) + "," + ys(c).toFixed(1)).join(" ") + '" fill="none" stroke="var(--ink)" stroke-width="2"/>';
+    return o + "</svg>";
+  }
+  function boQuoteHtml() {
+    const P = sheet, k = P.k, raw = Math.max(0, Math.floor(+P.v || 0)), n = P.mode === "amt" ? E.boFor(S, k, toMark(raw)) : raw;
+    if (!n) return '<div class="meta">' + (P.mode === "amt" ? "Betrag eingeben – das Spiel rechnet die Stückzahl aus." : "Stückzahl eingeben.") + "</div>";
+    const qb = E.boQuote(S, k, n), have = S.bo.dep[k] ? S.bo.dep[k].n : 0, qs = E.boQuote(S, k, Math.min(n, have), true);
+    return '<table class="fin" style="width:100%"><tr><td>Stück</td><td>' + E.fmt(n) + "</td></tr><tr><td>Kaufen</td><td>" + M(qb.total) + " (Gebühr " + M(qb.fee) + ")</td></tr>" + (have ? "<tr><td>Verkaufen" + (n > have ? " (" + E.fmt(have) + " Stück)" : "") + "</td><td>" + M(qs.total) + " (Gebühr " + M(qs.fee) + ")</td></tr>" : "") + "</table>" +
+      (n / S.bo.co[k].n > .02 ? '<div class="meta">Ein großes Paket bewegt den Kurs: Im Schnitt zahlen Sie ' + pctSign(qb.px / S.bo.co[k].px - 1) + " auf den Kurs.</div>" : "");
+  }
+  function boSheet() {
+    const P = sheet, k = P.k, b = S.bo, c = b.co[k], B = E.BO[k], d = b.dep[k], err = E.boCanTrade(S, k), last12 = c.g.reduce((a, v) => a + v, 0);
+    let h = '<div class="veil" data-act="close"><div class="sheet" role="dialog" aria-modal="true">' + img(E.boImg(S, k), "banner", "") + '<div class="kicker">' + E.BO_GRP[B.grp] + "</div><h3>" + esc(E.boName(S, k)) + "</h3>";
+    h += '<div class="kv"><div><b>' + pxM(c.px) + " " + arrowOf(boChange(k)) + '</b><span>Kurs</span></div><div><b>' + pctSign(boChange(k, 12)) + '</b><span>in zwölf Monaten</span></div><div><b>' + M(last12) + '</b><span>Gewinn der Firma in zwölf Monaten</span></div><div><b>' + (c.div ? pxM(c.div) + " (" + kn((c.div / c.px * 100).toFixed(1)) + " %)" : "keine") + "</b><span>letzte Dividende je Aktie</span></div></div>";
+    if (c.hist.length > 1) h += boChart(c.hist);
+    h += '<div class="meta">' + { reederei: "Reedereien verdienen, wenn viel gereist wird. Preiskämpfe, Unglücke und neue Schiffe bewegen den Kurs.", zeche: "Zechen verdienen an teurer Kohle. Streiks und Grubenunglücke drücken den Kurs. Mit Ölfeuerung und Motorschiffen verlieren sie ab 1912 langsam an Wert. Wer mehr als die Hälfte hält, bunkert für seine Kohleschiffe 20 % billiger.", werft: "Die Werft lebt von Aufträgen – auch von Ihren eigenen Neubauten.", caterer: "Caterer verdienen an jedem Fahrgast – auch an Ihren, wenn Sie einen Vertrag mit ihnen haben." }[B.grp] + " " + E.fmt(c.n) + " Aktien insgesamt.</div>";
+    if (B.grp === "zeche" && b.hz !== k) { const sv = E.hzPreview(S, k); if (sv > 0) h += '<div class="meta">Als Hauszeche hätte sie Ihren Kohleschiffen im Vormonat etwa ' + M(sv) + " gespart.</div>"; }
+    if (d) h += '<div class="report">Im Besitz: ' + E.fmt(d.n) + " Stück · Einstand " + pxM(d.cost / d.n) + " · Wert " + M(d.n * c.px) + " · " + kn((d.n / c.n * 100).toFixed(1)) + " % der Firma</div>";
+    if (err) h += '<div class="hint">' + esc(err) + "</div>";
+    else {
+      h += '<div class="seg" role="group" style="grid-template-columns:repeat(2,1fr);margin-top:10px">' + [["n", "nach Stückzahl"], ["amt", "nach Betrag"]].map(([m, t]) => '<button data-act="boMode" data-v="' + m + '" aria-pressed="' + (P.mode === m) + '">' + t + "</button>").join("") + "</div>";
+      h += '<div class="namebox" style="margin-top:8px"><input class="name" id="boqty" inputmode="numeric" placeholder="' + (P.mode === "amt" ? (isGB() ? "Betrag in Pfund" : "Betrag in Mark") : "Stück") + '" value="' + (P.v || "") + '"></div><div id="boq">' + boQuoteHtml() + "</div>";
+      h += '<div class="actions"><button class="btn solid" data-act="boBuy" style="flex:1">Kaufen</button>' + (d ? '<button class="btn" data-act="boSell" style="flex:1">Verkaufen</button>' : "") + "</div>";
+      if (d) h += '<div class="actions"><button class="btn warn" data-act="boSellAll" style="flex:1">Alle ' + E.fmt(d.n) + " verkaufen (" + M(E.boQuote(S, k, d.n, true).total) + ")</button></div>";
+    }
+    return h + '<div class="actions"><button class="btn" data-act="close" style="flex:1">Schließen</button></div></div></div>';
+  }
+  // Kurszettel über den Meldungen
+  function ticker() {
+    const H = (S.coalHist || []).slice(-1), b = S.bo, rows = ['<button class="tk" data-act="coalGo"><span>Kohle</span><b>' + E.coalIdx(S) + " % " + coalArrow() + "</b></button>"];
+    if (b && b.on) {
+      let ks = E.BO_ORDER.filter(k => E.boOwn(S, k) > 0).sort((x, y) => E.boOwn(S, y) * b.co[y].px - E.boOwn(S, x) * b.co[x].px);
+      if (ks.length < 4) { const riv = []; for (const r of S.routes) for (const x of (r.riv || [])) if (!riv.includes(x.k)) riv.push(x.k); ks = ks.concat(riv.filter(k => !ks.includes(k)), E.BO_ORDER.filter(k => E.BO[k].grp === "reederei")); }
+      ks = [...new Set(ks)].filter(k => E.boListed(S, k)).slice(0, 4);
+      for (const k of ks) rows.push('<button class="tk" data-act="boOpen" data-k="' + k + '"><span>' + esc(E.boName(S, k)) + "</span><b>" + pxM(b.co[k].px) + " " + arrowOf(boChange(k)) + "</b></button>");
+    }
+    return '<div class="ticker">' + rows.join("") + "</div>";
+  }
+  // Zeitung mit Rubriken
+  let newsCat = (() => { try { return localStorage.getItem(KEY + "-zeitung") || "alle"; } catch (e) { return "alle"; } })();
+  const catOf = l => l.cat || (l.kind === "news" ? "welt" : "eigen");
+  const pinned = l => (l.kind === "bad" || /Seenot|Havarie|gesunken/.test(l.head) || /^Entscheidung:/.test(l.text || "")) && S.m - l.m <= 3;
+  function newsPick(n) {
+    const cat = newsCat === "boerse" && !(S.bo && S.bo.on) ? "alle" : newsCat, L = S.log;
+    if (cat !== "alle") return L.filter(l => catOf(l) === cat).slice(0, n);
+    let out = [], bo = 0;
+    for (const l of L) { if (out.length >= n) break; if (catOf(l) === "boerse") { if (bo >= 2) continue; bo++; } out.push(l); }
+    for (const l of L.filter(x => pinned(x) && !out.includes(x))) { let i = out.length - 1; while (i >= 0 && pinned(out[i])) i--; if (i < 0) break; out.splice(i, 1); out.push(l); }
+    return out.sort((a, b) => L.indexOf(a) - L.indexOf(b));
+  }
+  function newsBox(n) {
+    const cats = [["alle", "Alle"], ["eigen", "Eigene"], ["welt", "Schifffahrt"]].concat(S.bo && S.bo.on ? [["boerse", "Börse"]] : []), cur = cats.some(c => c[0] === newsCat) ? newsCat : "alle";
+    let h = ticker() + '<div class="newschips" role="group" aria-label="Rubriken">' + cats.map(([k, t]) => '<button class="chip" data-act="newsCat" data-v="' + k + '" aria-pressed="' + (cur === k) + '">' + t + "</button>").join("") + '</div><div class="news">';
+    const list = newsPick(n);
+    if (!list.length) h += '<div class="meta">In dieser Rubrik gibt es noch keine Meldungen.</div>';
+    for (const l of list) { const k = newsImg(l); h += '<article class="' + (l.kind === "bad" ? "bad" : "") + '">' + (k ? img(k, "thumb", "") : "") + "<time>" + E.dateStr(l.m) + (l.rum ? ' · <span class="rumtag">Gerücht</span>' : "") + "</time><h4>" + esc(l.head.replace(/^Gerücht: /, "")) + "</h4><p>" + esc(l.text) + "</p></article>"; }
+    return h + "</div>";
   }
 
   /* ---------- Markt ---------- */
@@ -1027,26 +1165,118 @@
     return h;
   }
 
-  /* ---------- Einführung ---------- */
+  /* ---------- Einführung: Grundkurs und Kapitel (v4.6) ---------- */
+  const tapW = (d, m) => DESK ? d : m;
   const TUT = [
-    { get t() { return "Willkommen in Ihrem Kontor! Die Zeit steht still, bis Sie sie starten. Eröffnen wir zuerst eine Linie: " + (DESK ? "Klicken Sie links auf „Linien“ (oder Taste L)." : "Tippen Sie unten auf „Linien“."); }, ok: () => tab === "linien" },
-    { get t() { return "Wählen Sie Start und Ziel. Für den Anfang eignen sich kurze Fähren – zum Beispiel " + ({ ham: "Hamburg – Blankenese", lpl: "Liverpool – Birkenhead", lon: "London – Gravesend" }[S.home || "ham"]) + ". Die Tabelle zeigt, wohin viele Menschen reisen wollen. Dann " + (DESK ? "auf „Linie eröffnen“ klicken." : "„Linie eröffnen“ tippen."); }, ok: () => S.routes.length > 0 },
-    { get t() { return "Jetzt brauchen Sie ein Schiff. " + (DESK ? "Klicken Sie auf „Werft“ (Taste W)" : "Tippen Sie auf „Werft“") + ", klappen Sie „Hafen, Küste und Fähren“ auf und bestellen Sie ein passendes Schiff – eine Hafenfähre ist billig und robust."; }, ok: () => S.ships.length > 0 },
-    { t: "Unter „Flotte“ weisen Sie dem Schiff die Linie zu – über das Auswahlfeld „Linie“. Neubauten brauchen ein paar Monate, die Zuweisung gilt ab der Ablieferung.", ok: () => S.ships.some(x => x.line) },
-    { get t() { return DESK ? "Starten Sie die Zeit: oben am Maschinentelegrafen auf „Langsam“ klicken oder die Leertaste drücken. Ereignisse halten die Zeit automatisch an." : "Starten Sie die Zeit: unten am Maschinentelegrafen auf „Langsam“ tippen. Ereignisse halten die Zeit automatisch an."; }, ok: () => S.speed > 0 },
-    { t: "Im Kontor sehen Sie im Hauptbuch Tag für Tag Einnahmen und Kosten. Denken Sie an Ihren Gründungskredit: Die Zinsen laufen schon.", next: true },
-    { t: "Noch ein paar Tipps: Fristen und Docken übernimmt auf Wunsch ein Schiffsinspektor (Kontor → Personal). Bäderlinien lohnen nur im Sommer – der Saisonfahrplan in der Flotte legt die Schiffe im Winter automatisch auf. Unter „Markt“ finden Sie Werbung und Ihre Rivalen. Viel Erfolg!", next: true, last: true },
+    { get t() { return "Willkommen in Ihrem Kontor! Die Zeit steht still, bis Sie sie starten. Eröffnen wir zuerst eine Linie: " + tapW("Klicken Sie links auf „Linien“ (Taste L).", "Tippen Sie unten auf „Linien“."); }, sel: '#tabs [data-tab="linien"]', ok: () => tab === "linien" },
+    { get t() { return "Wählen Sie Start und Ziel. Für den Anfang eignet sich eine kurze Fähre, zum Beispiel " + ({ ham: "Hamburg – Blankenese", lpl: "Liverpool – Birkenhead", lon: "London – Gravesend" }[S.home || "ham"]) + ". Die Tabelle zeigt, wohin viele Menschen reisen wollen. Dann " + tapW("auf „Linie eröffnen“ klicken.", "„Linie eröffnen“ tippen."); }, get sel() { return tab === "linien" ? '[data-act="openRoute"]' : '#tabs [data-tab="linien"]'; }, ok: () => S.routes.length > 0 },
+    { get t() { return "Jetzt fehlt ein Schiff. " + tapW("Klicken Sie auf „Werft“ (Taste W)", "Tippen Sie auf „Werft“") + ", klappen Sie „Hafen, Küste und Fähren“ auf und bestellen Sie ein passendes Schiff. Eine Hafenfähre ist billig und robust."; }, get sel() { return tab === "werft" ? '[data-act="buyNew"]' : '#tabs [data-tab="werft"]'; }, ok: () => S.ships.length > 0 },
+    { t: "In der „Flotte“ weisen Sie dem Schiff die Linie zu, über das Auswahlfeld „Linie“. Neubauten brauchen ein paar Monate, die Zuweisung gilt ab der Ablieferung.", get sel() { return tab === "flotte" ? '[data-act="line"]' : '#tabs [data-tab="flotte"]'; }, ok: () => S.ships.some(x => x.line) },
+    { get t() { return "Starten Sie die Zeit: " + tapW("oben am Maschinentelegrafen auf „Langsam“ klicken oder die Leertaste drücken.", "unten am Maschinentelegrafen auf „Langsam“ tippen.") + " Ereignisse halten die Zeit automatisch an."; }, sel: '#tele [data-act="speed"][data-v="1"]', ok: () => S.speed > 0 },
+    { t: "Im Kontor zeigt das Hauptbuch Tag für Tag Einnahmen und Kosten. Denken Sie an Ihren Gründungskredit: Die Zinsen laufen schon.", get sel() { return tab === "kontor" ? "#ledger" : '#tabs [data-tab="kontor"]'; }, next: true },
+    { t: "Das war der Grundkurs. Wenn Sie einen Bereich zum ersten Mal öffnen – Werft, Flotte, Einkauf, Personal, Markt, Zeitung oder Börse –, erklärt Ihnen der Berater dort das Wichtigste in wenigen Schritten. Viel Erfolg!", next: true, last: true },
   ];
+  const CHAP = {
+    werft: { name: "Werft", when: () => tab === "werft", go: () => { tab = "werft"; }, steps: [
+      { t: "Hier bestellen Sie Neubauten. Die Schiffe sind nach Einsatz sortiert: Hafen, Küste und Fähren, Nord- und Ostsee, Übersee. Ältere Bauarten stehen jeweils am Ende.", sel: "main details.sec" },
+      { t: "Ein Neubau braucht einige Monate. Sie zahlen bar mit 3 % Skonto oder mit Kredit von Bank oder Werft – die Raten laufen erst ab der Ablieferung.", sel: '[data-act="buyNew"]' },
+      { t: "Gebrauchte Schiffe sind sofort da und billiger, aber älter. Ein Gutachten verrät ihren wahren Zustand, bevor Sie kaufen.", sel: '[data-act="buyUsed"]' } ] },
+    flotte: { name: "Flotte", when: () => tab === "flotte" && flSub === "schiffe" && S.ships.some(x => !x.museum), go: () => { tab = "flotte"; flSub = "schiffe"; }, steps: [
+      { t: "Jedes Schiff hat hier seine Karte: Linie, Wartung, Versicherung und Zustand. " + "Aufklappen zeigt alle Einstellungen.", sel: "main details.sec" },
+      { t: "Die Reederei-Fahrstufe gilt für die ganze Flotte: Sparfahrt spart Kohle, Volldampf schafft mehr Fahrten. Einzelne Schiffe können Sie ausnehmen.", sel: "main .item.fahrt" },
+      { t: "Bäderlinien lohnen nur im Sommer. Mit dem Saisonfahrplan liegt ein Schiff im Winter auf und spart Kohle und drei Viertel der Heuer.", sel: '[data-act="planAdd"]' },
+      { t: "Läuft die Frist eines Schiffs ab, darf es nicht mehr auslaufen. Erneuern Sie sie rechtzeitig – oder stellen Sie unter Kontor → Personal einen Schiffsinspektor ein, der das übernimmt." } ] },
+    einkauf: { name: "Einkauf", old: true, when: () => tab === "kontor" && kontorSub === "einkauf", go: () => { tab = "kontor"; kontorSub = "einkauf"; }, steps: [
+      { t: "Hier kaufen Sie Kohle und Verpflegung für die ganze Reederei. Oben steht der Kohlepreis mit seinem Verlauf.", sel: '[data-tut="coal"]' },
+      { t: "Ein Liefervertrag sichert den heutigen Preis mit Aufschlag. Er lohnt sich, wenn die Kohle danach teurer wird – und kostet, wenn sie billiger wird.", sel: '[data-tut="coalnew"]' },
+      { t: "Die Verpflegung stellen Sie je Klasse ein. In der 1. Klasse zählt gutes Essen viel, im Zwischendeck wenig. Auf kurzen Fähren gibt es keine Mahlzeiten.", sel: '[data-tut="kq"]' },
+      { t: "Vor jeder Änderung rechnet eine Vorschau aus, wie der Vormonat mit der neuen Einstellung gelaufen wäre. So probieren Sie ohne Risiko." } ] },
+    personal: { name: "Personal", when: () => tab === "kontor" && kontorSub === "personal", go: () => { tab = "kontor"; kontorSub = "personal"; }, steps: [
+      { t: "Deck, Maschine und Service bezahlen Sie nach Lohnstufe. Knapp bezahlte Leute machen mehr Fehler und streiken öfter, gut bezahlte bringen spürbare Vorteile.", sel: "main .item" },
+      { t: "Jedes Schiff hat einen Kapitän. Mit den Jahren sammelt er Erfahrung – erfahrene Kapitäne fahren sicherer.", sel: "main .capline" },
+      { t: "Angestellte im Kontor nehmen Ihnen Arbeit ab: der Schiffsinspektor Fristen und Docken, später Maschineninspektor, Kohleneinkäufer, Proviantmeister und Prokurist. Jeder kostet ein festes Gehalt.", sel: '[data-tut="kontorstaff"]' } ] },
+    markt: { name: "Markt", when: () => tab === "werbung", go: () => { tab = "werbung"; marktSub = "werbung"; }, steps: [
+      { t: "Wer bekannt ist, wird gebucht. Unter Werbung schalten Sie Anzeigen, Agenturen und Kampagnen für einzelne Linien.", sel: '[data-act="msub"][data-v="werbung"]' },
+      { t: "Unter Rivalen sehen Sie, wer auf Ihren Linien fährt, was er gut kann und wie er auf Ihren Erfolg reagiert.", sel: '[data-act="msub"][data-v="rivalen"]' },
+      { t: "Die Marktforschung zeigt für jede Linie, warum Fahrgäste zu Ihnen kommen oder zur Konkurrenz gehen. Dafür brauchen Sie die Abteilung unter Kontor → Personal.", sel: '[data-act="msub"][data-v="forschung"]' } ] },
+    zeitung: { name: "Zeitung", when: () => DESK || (tab === "kontor" && kontorSub === "uebersicht" && S.ships.length > 0), go: () => { tab = "kontor"; kontorSub = "uebersicht"; }, steps: [
+      { get t() { return "Die Zeitung " + (DESK ? "rechts" : "unten im Kontor") + " meldet, was in der Welt der Schifffahrt passiert. Mit den Rubriken filtern Sie: Eigene, Schifffahrt und später Börse."; }, sel: ".newschips" },
+      { t: "Der Kurszettel zeigt den Kohlepreis und, sobald die Börse für Sie offen ist, Ihre wichtigsten Kurse. Ein Tipp darauf führt zum Einkauf oder zur Aktie.", sel: ".ticker" },
+      { t: "Seenot, Unglücke und Ihre Entscheidungen bleiben immer sichtbar. Gerüchte tragen den Zusatz „Gerücht“ – nicht alle stimmen." } ] },
+    boerse: { name: "Börse", old: true, when: () => tab === "kontor" && kontorSub === "boerse" && S.bo && S.bo.on, go: () => { tab = "kontor"; kontorSub = "boerse"; }, steps: [
+      { t: "Willkommen an der Börse. Hier handeln Sie Aktien der Rivalen, der Zechen, der Werft und der Caterer. Der Kurs folgt dem Gewinn der Firma und der Stimmung am Markt.", sel: ".bolist" },
+      { get t() { return tapW("Ein Klick", "Ein Tipp") + " auf eine Aktie öffnet sie: Kurs, Verlauf, Kaufen und Verkaufen – nach Stückzahl oder Betrag. Jeder Auftrag kostet 1 % Gebühr, gekauft wird nur bar."; }, sel: ".borow" },
+      { t: "Im Mai zahlen Firmen mit gutem Vorjahr eine Dividende. Wer mehr als die Hälfte einer Zeche hält, bunkert für seine Kohleschiffe 20 % billiger – das lohnt sich erst für große Flotten.", sel: ".bokv" },
+      { t: "Ein Prokurist verwaltet auf Wunsch ein eigenes Depot und schätzt Gerüchte ein. Bedenken Sie: Aktien bringen im Schnitt weniger als eine gut laufende Linie.", sel: ".pkbox" } ] },
+  };
+  const CHAP_ORDER = ["werft", "flotte", "einkauf", "personal", "markt", "zeitung", "boerse"];
+  function tutState() { if (!S) return null; const T = S.tut || (S.tut = { done: true }); T.ch = T.ch || {}; return T; }
+  function tutCur() {
+    const T = tutState(); if (!T || T.off) return null;
+    if (!T.done) { const st = TUT[T.step]; return st ? { st, i: T.step, n: TUT.length, base: true } : null; }
+    // ein Kapitel ruht, solange man den Bereich verlassen hat, und geht weiter, wenn man zurückkommt
+    if (T.cur && CHAP[T.cur.k]) { const C = CHAP[T.cur.k], st = C.steps[T.cur.i]; return st && C.when() ? { st, i: T.cur.i, n: C.steps.length, name: C.name } : null; }
+    return null;
+  }
   function tutBox() {
-    if (!S || !S.tut || S.tut.done) return "";
-    const st = TUT[S.tut.step]; if (!st) return "";
-    return '<div class="tut" role="status">' + img("ev_berater", "tutimg", "Berater") + '<div class="tuttxt"><div class="kicker">Einführung · Schritt ' + (S.tut.step + 1) + " von " + TUT.length + "</div><p>" + st.t + '</p><div class="tutbtn">' + (st.next ? '<button class="btn solid" data-act="tutNext">' + (st.last ? "Fertig" : "Weiter") + "</button>" : "") + '<button class="btn" data-act="tutSkip">' + (st.last ? "Schließen" : "Überspringen") + "</button></div></div></div>";
+    const c = tutCur(); if (!c || sheet || (S.pending.length && E.duePending(S))) return "";
+    const st = c.st, last = c.base ? !!st.last : c.i === c.n - 1, canNext = c.base ? (st.next || S.tut.held) : true;
+    const dots = '<span class="tutdots" aria-hidden="true">' + Array.from({ length: c.n }, (_, i) => '<i class="' + (i === c.i ? "on" : i < c.i ? "done" : "") + '"></i>').join("") + "</span>";
+    return '<div class="tut" role="status">' + img("ev_berater", "tutimg", "Berater") + '<div class="tuttxt"><div class="kicker">' + (c.base ? "Grundkurs" : "Einführung · " + c.name) + " · Schritt " + (c.i + 1) + " von " + c.n + dots + "</div><p>" + st.t + '</p><div class="tutbtn">' +
+      (c.i > 0 ? '<button class="btn" data-act="tutBack">Zurück</button>' : "") + (canNext ? '<button class="btn solid" data-act="tutNext">' + (last ? "Fertig" : "Weiter") + "</button>" : "") +
+      '<button class="btn" data-act="tutSkip">Überspringen</button><button class="btn linkish" data-act="tutOff">Tipps aus</button></div></div></div>';
   }
   function tutCheck() {
-    if (!S || !S.tut || S.tut.done) return false;
-    const st = TUT[S.tut.step];
-    if (st && st.ok && st.ok()) { S.tut.step++; if (S.tut.step >= TUT.length) S.tut.done = true; return true; }
+    const T = tutState(); if (!T || T.off) return false;
+    if (!T.done) {
+      const st = TUT[T.step];
+      if (st && st.ok && !T.held && st.ok()) { T.step++; if (T.step >= TUT.length) T.done = true; return true; }
+      return false;
+    }
+    if (T.cur || sheet || (S.pending.length && E.duePending(S))) return false;
+    for (const k of CHAP_ORDER) { const C = CHAP[k]; if (!T.ch[k] && (T.full || C.old) && C.when()) { T.cur = { k, i: 0 }; return true; } }
     return false;
+  }
+  function tutAct(a) {
+    const T = tutState(); if (!T) return;
+    if (a === "tutOff") { T.off = true; T.done = true; T.cur = null; return; }
+    if (!T.done) {
+      if (a === "tutNext") { T.held = false; T.step++; if (T.step >= TUT.length) T.done = true; }
+      else if (a === "tutBack") { T.step = Math.max(0, T.step - 1); T.held = true; }
+      else if (a === "tutSkip") { T.done = true; T.held = false; }
+      return;
+    }
+    if (!T.cur) return;
+    const C = CHAP[T.cur.k];
+    if (a === "tutNext") { T.cur.i++; if (T.cur.i >= C.steps.length) { T.ch[T.cur.k] = 1; T.cur = null; } }
+    else if (a === "tutBack") T.cur.i = Math.max(0, T.cur.i - 1);
+    else if (a === "tutSkip") { T.ch[T.cur.k] = 1; T.cur = null; }
+  }
+  function tutReplay(k) {
+    const T = tutState(); T.off = false;
+    if (k === "grund") { T.done = false; T.step = 0; T.held = true; T.cur = null; tab = "kontor"; return; }
+    if (!CHAP[k]) return;
+    T.done = true; T.cur = { k, i: 0 }; CHAP[k].go();
+  }
+  // Messingrahmen um den Bereich, um den es geht; ist er nicht zu sehen, scrollt die Ansicht hin
+  let tutGlowKey = "";
+  function tutGlow() {
+    document.querySelectorAll(".tutglow").forEach(e => e.classList.remove("tutglow"));
+    const c = tutCur(); if (!c || sheet || (S.pending.length && E.duePending(S))) { tutGlowKey = ""; return; }
+    const sel = c.st.sel; if (!sel) return;
+    const el = Array.from(document.querySelectorAll(sel)).find(e => e.offsetParent !== null || e.getClientRects().length);
+    if (!el) return;
+    el.classList.add("tutglow");
+    const key = (c.base ? "b" : c.name) + c.i + sel;
+    if (key === tutGlowKey) return; tutGlowKey = key;
+    const r = el.getBoundingClientRect(), box = document.querySelector("#tutbox .tut"), bottom = window.innerHeight - (box ? box.getBoundingClientRect().height + 30 : 160) - (DESK ? 0 : 150), top = DESK ? 80 : 70;
+    if (r.top < top || r.bottom > bottom) { const scroller = el.closest(".side") || null; try { if (scroller) el.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" }); else window.scrollTo({ top: Math.max(0, window.scrollY + r.top - Math.max(top, (bottom - r.height) / 2)), behavior: reduceMotion ? "auto" : "smooth" }); } catch (e) { el.scrollIntoView(); } }
+  }
+  function tutList() {
+    const T = tutState();
+    return '<details class="sec" data-sec="tut"' + (openSec.tut ? " open" : "") + '><summary><span>Einführung</span><span class="cnt">' + (T.off ? "Tipps aus" : "") + "</span></summary>" +
+      '<p class="meta">Jedes Kapitel lässt sich hier neu abspielen. ' + (T.off ? "Die Tipps sind ausgeschaltet; ein Kapitel zu starten schaltet sie wieder ein." : "") + '</p><div class="tutlist">' +
+      [["grund", "Grundkurs"]].concat(CHAP_ORDER.filter(k => k !== "boerse" || (S.bo && S.bo.on)).map(k => [k, CHAP[k].name])).map(([k, n]) => '<button class="btn" data-act="tutReplay" data-v="' + k + '">' + (k !== "grund" && T.ch[k] ? "✓ " : "") + n + "</button>").join("") + "</div></details>";
   }
   /* ---------- Baukasten-Bild ---------- */
   const KIT = { hull_s: [265, 76], hull_m: [360, 81], hull_l: [470, 101], sup_haus: [291, 109], sup_salon: [310, 114], sup_sonne: [330, 95], fun_hoch: [197, 240], fun_motor: [163, 132], mast: [186, 261], rad: [306, 134], boote: [264, 151] };
@@ -1263,7 +1493,7 @@
         opts.map((o, i) => '<button class="opt" data-act="choose" data-i="' + i + '" ' + (o.ok === false ? 'disabled data-blocked="1"' : wait ? "disabled" : "") + "><b>" + esc(o.t) + "</b><span>" + esc(o.h) + "</span></button>").join("") + "</div></div></div>";
       return;
     }
-    if (sheet) { m.innerHTML = sheet.kind === "prev" ? previewSheet() : sheet.kind === "rename" ? renameSheet() : sheet.kind === "export" ? exportSheet() : sheet.kind === "import" ? importSheet() : sheet.kind === "design" ? designSheet() : sheet.kind === "retire" ? retireSheet() : buySheet(); return; }
+    if (sheet) { m.innerHTML = sheet.kind === "bo" ? boSheet() : sheet.kind === "prev" ? previewSheet() : sheet.kind === "rename" ? renameSheet() : sheet.kind === "export" ? exportSheet() : sheet.kind === "import" ? importSheet() : sheet.kind === "design" ? designSheet() : sheet.kind === "retire" ? retireSheet() : buySheet(); return; }
     m.innerHTML = "";
   }
   let startHome = "ham";
@@ -1363,11 +1593,11 @@
     if (!S) return "";
     const rt = E.rating(S), eq = E.equity(S), act = S.ships.filter(sh => E.active(S, sh)).length;
     const rows = [["Eigenkapital", M(eq), eq < 0], ["Bonität", rt.grade], ["Ruf", Math.round(S.rep)], ["Bekanntheit", Math.round(S.mk.brand)],
-      ["Kohlepreis", E.coalIdx(S) + " % " + coalArrow()], ["Schiffe", S.ships.length ? S.ships.length + " (" + act + " im Dienst)" : "keine"], ["Linien", S.routes.length || "keine"], ["Reederei-Index", E.fmt(E.score(S))]];
+      ["Kohlepreis", E.coalIdx(S) + " % " + coalArrow()], ["Schiffe", S.ships.length ? S.ships.length + " (" + act + " im Dienst)" : "keine"], ["Linien", S.routes.length || "keine"], ["Reederei-Index", E.fmt(E.score(S))]].concat(S.bo && E.boHeld(S) ? [["Depot", M(E.boValue(S))]] : []);
     return '<dl class="rs">' + rows.map(r => "<div><dt>" + r[0] + '</dt><dd class="' + (r[2] ? "neg" : "") + '">' + r[1] + "</dd></div>").join("") + "</dl>";
   }
   function sidePanel() {
-    return '<h3 class="sidehd">Seekarte</h3>' + mapSVG() + '<h3 class="sidehd next">' + paperName() + "</h3>" + newsList(10);
+    return '<h3 class="sidehd">Seekarte</h3>' + mapSVG() + '<h3 class="sidehd next">' + paperName() + "</h3>" + newsBox(10);
   }
   function keyLetters() {
     const li = { de: 0, en: 1, es: 2 }[typeof LANG !== "undefined" ? LANG : "de"] || 0, word = ["Taste ", "Key ", "Tecla "][li];
@@ -1390,6 +1620,7 @@
       if (/^[1-9]$/.test(k)) { const b = document.querySelector('#modal [data-act="choose"][data-i="' + (+k - 1) + '"]'); if (b && !b.disabled) { e.preventDefault(); act("choose", { i: String(+k - 1) }); } }
       return;
     }
+    if (!sheet && $("tutbox").firstChild && (k === "Enter" || k === "Escape")) { const b = $("tutbox").querySelector(k === "Enter" ? '[data-act="tutNext"]' : '[data-act="tutSkip"]'); if (b) { e.preventDefault(); act(b.dataset.act, {}); return; } }
     if (k === "Escape") { if (sheet) { e.preventDefault(); act("close", {}); } else if (mapPick) { mapPick = null; render(); } return; }
     if (sheet || S.over) return;
     if (k === " " || k === "Spacebar") { e.preventDefault(); if (S.speed > 0) { lastSpeed = S.speed; act("speed", { v: "0" }); } else act("speed", { v: String(lastSpeed || 1) }); return; }
@@ -1412,9 +1643,10 @@
     tutCheck();
     $("main").innerHTML = views[tab]();
     deskRender();
-    $("tutbox").innerHTML = tutBox(); document.body.classList.toggle("tut-on", !!(S.tut && !S.tut.done));
+    $("tutbox").innerHTML = tutBox(); document.body.classList.toggle("tut-on", !!$("tutbox").firstChild);
     renderModal();
     translateDom(document.body);
+    tutGlow();
   }
   function toast(msg) {
     const t = $("toast"); t.innerHTML = '<div class="toast" role="status">' + msg + "</div>"; translateDom(t);
@@ -1427,7 +1659,7 @@
     let err = null;
     switch (a) {
       case "rollfirm": { startName = randomFirm(); const i = $("nm"); if (i) { i.value = startName; return; } break; }
-      case "start": { Snd.wake(); Snd.horn(.2); const nm = ($("nm").value || "").trim().slice(0, 28) || randomFirm(); S = E.newGame((Date.now() ^ (Math.random() * 1e9)) | 0, nm, { home: startHome }); selA = S.home; const tc = $("tutchk"); if (tc && tc.checked) { S.tut = { step: 0 }; tab = "kontor"; } else tab = "werft"; break; }
+      case "start": { Snd.wake(); Snd.horn(.2); const nm = ($("nm").value || "").trim().slice(0, 28) || randomFirm(); S = E.newGame((Date.now() ^ (Math.random() * 1e9)) | 0, nm, { home: startHome }); selA = S.home; const tc = $("tutchk"); if (tc && tc.checked) { S.tut = { step: 0, full: true, ch: {} }; tab = "kontor"; } else { S.tut = { done: true, ch: {} }; tab = "werft"; } break; }
       case "choose": { if (Date.now() < evReadyAt) return; const was = S.pending[0] && S.pending[0].id, n = S.stats.sunk; E.resolve(S, +d.i); if (was === "seenot") { if (S.stats.sunk > n) Snd.storm(0); else Snd.horn(0); toast(esc(S.log[0].head)); } else Snd.bell(0, 520, .1); break; }
       case "price": E.stepPrice(S, d.id, +d.c, +d.d); break;
       case "align": E.alignPrices(S, d.id); Snd.bell(0, 660, .08); break;
@@ -1499,9 +1731,20 @@
       case "selDist": selDist = +d.v; break;
       case "shipsAll": for (const sh of S.ships) { if (d.v === "1") openShip.add(sh.id); else openShip.delete(sh.id); } if (d.v === "1") for (const g of ["flbau", "flg0", "flg1", "flg2"]) openSec[g] = true; break;
       case "capfire": err = E.dismissCaptain(S, d.id); break;
-      case "tutNext": S.tut.step++; if (S.tut.step >= TUT.length) S.tut.done = true; break;
-      case "tutSkip": S.tut.done = true; document.body.classList.remove("tut-on"); break;
-      case "tutStart": S.tut = { step: 0 }; tab = "kontor"; break;
+      case "tutNext": case "tutBack": case "tutSkip": case "tutOff": tutAct(a); tutGlowKey = ""; break;
+      case "tutReplay": tutReplay(d.v); tutGlowKey = ""; window.scrollTo(0, 0); break;
+      case "newsCat": newsCat = d.v; try { localStorage.setItem(KEY + "-zeitung", d.v); } catch (e) { } break;
+      case "boOpen": if (E.BO[d.k]) { E.boSeen(S); sheet = { kind: "bo", k: d.k, mode: "n", v: "" }; } break;
+      case "boMode": sheet.mode = d.v; sheet.v = ""; break;
+      case "boBuy": case "boSell": case "boSellAll": {
+        const P = sheet, raw0 = Math.max(0, Math.floor(+P.v || 0)), raw = P.mode === "amt" ? toMark(raw0) : raw0, have = S.bo.dep[P.k] ? S.bo.dep[P.k].n : 0;
+        const n = a === "boSellAll" ? have : P.mode === "amt" ? (a === "boBuy" ? E.boFor(S, P.k, raw) : Math.min(have, Math.ceil(raw / (S.bo.co[P.k].px * (1 - E.BO_FEE))))) : raw;
+        err = a === "boBuy" ? E.boBuy(S, P.k, n) : E.boSell(S, P.k, Math.min(n, have));
+        if (!err) { P.v = ""; Snd.coins(); }
+        break;
+      }
+      case "pkRisk": S.bo.pk.risk = d.v; S.bo.pk.last = -99; break;
+      case "pkSet": { const v = parseInt(((($("pkamt") || {}).value) || "0").replace(/[^0-9]/g, ""), 10) || 0; err = E.pkSet(S, isGB() ? v * 20.43 : v); if (!err) Snd.bell(0, 660, .08); break; }
       case "setLang": setLang(d.v); break;
       case "setHome": startHome = d.v; startName = randomFirm(); break;
       case "buyBrandt": sheet = { kind: "new", type: d.type, name: E.randomName(S), brandt: true }; break;
@@ -1583,7 +1826,7 @@
     if (t.dataset.act === "mrsel") { mrRoute = t.value; render(); }
     if (t.dataset.act === "plan") { const sh = S.ships.find(x => x.id === t.dataset.id); if (sh) { const p = (sh.plan || []).map(x => Object.assign({}, x)), i = +t.dataset.i; if (p[i]) { p[i][t.dataset.f] = t.dataset.f === "line" ? t.value : +t.value; openPlan[sh.id] = true; E.setPlan(S, sh.id, p); save(); render(); } } }
   });
-  document.addEventListener("input", e => { if (e.target.id === "shipname" && sheet) sheet.name = e.target.value; if (e.target.id === "nm") startName = e.target.value; });
+  document.addEventListener("input", e => { if (e.target.id === "boqty" && sheet && sheet.kind === "bo") { sheet.v = e.target.value.replace(/[^0-9]/g, ""); const q = $("boq"); if (q) { q.innerHTML = boQuoteHtml(); translateDom(q); } } if (e.target.id === "shipname" && sheet) sheet.name = e.target.value; if (e.target.id === "nm") startName = e.target.value; });
   $("tabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (!b || !S) return; tab = b.dataset.tab; confirmSell = null; mapPick = null; render(); window.scrollTo(0, 0); });
   /* ---------- Uhr ---------- */
   const SEC = [0, 2, 1, 1 / 3];
@@ -1600,7 +1843,7 @@
     }
     let l = $("ledger"); if (l && tab === "kontor") { const tmp = document.createElement("div"); tmp.innerHTML = ledger2(); const n = tmp.firstElementChild; n.open = l.open; l.replaceWith(n); l = n; }
     if (DESK && S) { const rs = $("railStats"); if (rs) { rs.innerHTML = railStats(); translateDom(rs); } }
-    if (tutCheck()) { $("tutbox").innerHTML = tutBox(); document.body.classList.toggle("tut-on", !!(S.tut && !S.tut.done)); }
+    if (tutCheck()) { $("tutbox").innerHTML = tutBox(); document.body.classList.toggle("tut-on", !!$("tutbox").firstChild); translateDom($("tutbox")); tutGlow(); }
     translateDom($("hdr")); translateDom($("tele")); if (l) translateDom(l);
     document.querySelectorAll("[data-dock]").forEach(el => { const sh = S.ships.find(x => x.id === el.dataset.dock); if (sh) { const n = Math.max(0, (sh.dockUntil || 0) - S.t); el.textContent = n + " Tag" + (n === 1 ? "" : "e"); translateDom(el); } });
   }
@@ -1610,6 +1853,7 @@
     const res = rep.profit - (rep.principal || 0);
     if (res >= 0) Snd.coins(.9); else Snd.thud(.9);
     if (fresh.some(l => /abgeliefert/.test(l.head))) Snd.horn(1.2);
+    if (fresh.some(l => /^Auswandererwelle/.test(l.head))) Snd.queue(FAREWELL);
     toast(E.dateStr(rep.m) + " abgeschlossen: Ergebnis " + (rep.profit >= 0 ? "+" : "") + E.fmt(rep.profit) + " Mark");
   }
   function step() {

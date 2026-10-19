@@ -372,7 +372,7 @@
   function shipValue(s, sh) { const t = TYPES[sh.type]; return Math.round(P(s, t) * Math.pow(0.95, sh.age / 12) * (0.75 + 0.25 * sh.cond / 100) * s.shipIdx); }
   function fleetValue(s) { return s.ships.reduce((a, sh) => a + (sh.ready <= s.m ? shipValue(s, sh) : sh.paid || 0), 0); }
   function debt(s) { return s.loans.reduce((a, l) => a + l.out, 0); }
-  function equity(s) { return s.cash + fleetValue(s) - debt(s); }
+  function equity(s) { return s.cash + fleetValue(s) + boValue(s) - debt(s); }
   function rating(s) {
     const assets = Math.max(1, Math.max(0, s.cash) + fleetValue(s));
     const q = (s.cash + fleetValue(s) - s.loans.filter(l => !l.founder).reduce((a, l) => a + l.out, 0)) / assets;
@@ -455,7 +455,7 @@
     for (const sh of s.ships) { if (sh.emil && !caps(s).some(c => c.sp === "emil")) specialCaptain(s, "emil").ship = sh.id; if (!capOf(s, sh)) captainFor(s, sh, 1 + Math.min(4, Math.floor((sh.age || 0) / 36))); }
     if (!s.exp) s.exp = { k: 50, s: 50, si: 50 }; if (!s.expHit) s.expHit = { si: 0, k: 0 }; if (!s.years) s.years = {};
     if (s.exp.ku == null) s.exp.ku = 50; if (s.expHit.ku == null) s.expHit.ku = 0;
-    if (!FAHRT[s.fahrt]) s.fahrt = "normal"; kueche(s); staff(s); s.coalK = s.coalK || []; s.coalHist = s.coalHist || []; s.coalUse = s.coalUse || [];
+    if (!FAHRT[s.fahrt]) s.fahrt = "normal"; kueche(s); staff(s); boState(s); boUnlock(s); s.coalK = s.coalK || []; s.coalHist = s.coalHist || []; s.coalUse = s.coalUse || [];
     if (s.t == null) { let t = 0; for (let m = 0; m < s.m; m++) t += dim(m); s.t = t + s.day - 1; }
     if (s.m > 0 && !s.flags.hadFounder) s.flags.hadFounder = true;
     s.ships.forEach((sh, i) => { if (sh.repair != null) { if (sh.repair >= s.m) sh.dockUntil = s.t + 10; delete sh.repair; } if (sh.survey == null) sh.survey = s.t + 120 + (i * 337) % 1300; initShip(s, sh); });
@@ -522,6 +522,7 @@
     s.cash -= q.now;
     const sh = initShip(s, { id: uid(s), name: cleanName(name) || randomName(s), type, age: 0, cond: 100, line: null, laid: false, insured: true, maint: 1, ready: s.m + Math.max(2, t.build - (brandt ? 1 : 0)), paid: price, isNew: true, eq: {}, spd: brandt ? .7 : 0, brandt: !!brandt }, { fresh: true });
     if (brandt) { const st = rivState(s, "brandt"); st.boost = Math.min(.5, st.boost + .04); }
+    if (s.bo) s.bo.ord[brandt ? "brandt" : "werft"] += price;
     if (yearOf(s) >= 1912) sh.eq.boote = true;
     for (const k of eqSel) sh.eq[k] = true;
     if (t.design && s.designs && s.designs[t.design]) s.designs[t.design].built++;
@@ -809,7 +810,7 @@
       if (cater) { add("Verpflegung", cater); cost += cater; }
       for (const p of per) {
         const t = TYPES[p.sh.type], size = Math.max(.15, t.seats / 500);
-        const coal = coalPrice(s, cur, t.coal * .85 * 2 * info.dist * p.tr.trips * fd * s.coal * (p.sh.majLate && p.sh.majLate.kessel ? 1.1 : 1) * COAL_LV[st.maschine] * p.cf.coal * p.fz * p.fz * (st.mi === 3 ? .97 : 1));
+        const coal = coalPrice(s, cur, t.coal * .85 * 2 * info.dist * p.tr.trips * fd * s.coal * (p.sh.majLate && p.sh.majLate.kessel ? 1.1 : 1) * COAL_LV[st.maschine] * p.cf.coal * p.fz * p.fz * (st.mi === 3 ? .97 : 1), t);
         const fees = ((info.fee * Math.min(1, .25 + info.dist / nLegs / 40) + 60 * Math.min(1, info.dist / nLegs / 100) * Math.sqrt(s.sizeM || 1)) * 2 * nLegs + 120 * 2 * (nLegs - 1)) * p.tr.trips * fd * size * s.feeMult * s.wage;
         let shipRev = 0;
         if (t.trajekt && info.rail) { const x = 250 * pid * 2 * p.tr.trips * fd; rev += x; shipRev += x; }
@@ -875,7 +876,7 @@
   }
   function finalize(s) {
     const cur = s.cur, ex = cur.extra || {}, exSum = Object.values(ex).reduce((a, b) => a + b, 0);
-    const rep = { m: s.m, lines: {}, rev: cur.rev + exSum, tickets: cur.rev - (cur.freight || 0), freight: cur.freight || 0, extra: Object.assign({}, ex), cost: Object.assign({}, cur.cost), profit: 0, events: [] };
+    const rep = { m: s.m, hzSave: Math.round(cur.hzSave || 0), lines: {}, rev: cur.rev + exSum, tickets: cur.rev - (cur.freight || 0), freight: cur.freight || 0, extra: Object.assign({}, ex), cost: Object.assign({}, cur.cost), profit: 0, events: [] };
     for (const r of s.routes) {
       const a = r.cur; if (!a) { r.last = null; continue; }
       r.last = { pax: Math.round(a.pax), cap: Math.round(a.cap), share: a.D ? a.pax / a.D : 0, load: a.cap ? (a.legPax || a.pax) / a.cap : 0, rev: Math.round(a.rev), cost: Math.round(a.cost), ships: a.ships, D: Math.round(a.D), m: s.m, coal: Math.round(a.coal || 0),
@@ -1003,6 +1004,7 @@
   function staff(s) {
     const st = s.staff || (s.staff = { deck: 1, maschine: 1, service: 1, insp: false, inspMin: 60, markt: false });
     if (st.mi == null) Object.assign(st, { mi: -1, miAuto: true, miSpar: 125, miVoll: 90, miPlan: null, ke: -1, keRenew: 95, pm: -1 });
+    if (st.pk == null) st.pk = -1;
     return st;
   }
 
@@ -1116,14 +1118,14 @@
   function coalTrend(s) { const h = s.coalHist || [], p = h.length ? h[h.length - 1].c : s.coal; return s.coal > p + .004 ? 1 : s.coal < p - .004 ? -1 : 0; }
   function coalActive(s) { return (s.coalK || []).filter(k => k.start <= s.m && k.until >= s.m); }
   function coalBase(s) { const u = (s.coalUse || []).slice(-3); return u.length ? u.reduce((a, b) => a + b, 0) / u.length : 0; }
-  function coalPrice(s, cur, mkt) {
+  function coalPrice(s, cur, mkt, t) {
     const n = mkt / s.coal; cur.coalN = (cur.coalN || 0) + n;
     const ks = coalActive(s).filter(k => !(k.stop >= s.m));
-    if (!ks.length) return mkt;
+    if (!ks.length) return s.bo && s.bo.hz ? hzPrice(s, cur, n, t) : mkt;
     const qty = ks.reduce((a, k) => a + k.qty, 0), p = ks.reduce((a, k) => a + k.qty * k.price, 0) / qty;
     const cov = Math.min(Math.max(0, qty - (cur.kUsed || 0)), n);
     cur.kUsed = (cur.kUsed || 0) + cov;
-    return cov * p + (n - cov) * s.coal;
+    return cov * p + (s.bo && s.bo.hz ? hzPrice(s, cur, n - cov, t) : (n - cov) * s.coal);
   }
   function coalOffer(s, years, share) {
     years = COAL_SURCH[years] != null ? +years : 1; share = share >= 1 ? 1 : .5;
@@ -1247,12 +1249,13 @@
     const st = staff(s);
     if (DEPT[k]) st[k] = clamp(v | 0, 0, 3);
     else if (k === "insp") st.insp = !!v; else if (k === "inspMin") st.inspMin = clamp(v | 0, 40, 80); else if (k === "markt") st.markt = !!v;
+    else if (k === "pk") { st.pk = clamp(v | 0, -1, 3); if (st.pk < 0) pkFire(s); }
     else if (k === "mi" || k === "ke" || k === "pm") { st[k] = clamp(v | 0, -1, 3); if (k === "pm" && st.pm < 0) kueche(s).eigen = false; if (k === "mi") { st.miPlan = null; if (st.mi >= 0) st.miAuto = true; } }
     else if (k === "miAuto") { st.miAuto = !!v; st.miPlan = null; } else if (k === "miSpar") st.miSpar = clamp(v | 0, 100, 150); else if (k === "miVoll") st.miVoll = clamp(v | 0, 60, 100); else if (k === "keRenew") st.keRenew = clamp(v | 0, 70, 150);
   }
   function staffMonthly(s) {
     const st = staff(s), lv = (k, pay) => st[k] >= 0 ? pay * STAFF_PAY[st[k]] : 0;
-    return ((st.insp ? INSP_PAY : 0) + (st.markt ? MARKT_PAY : 0) + lv("mi", MI_PAY) + lv("ke", KE_PAY) + lv("pm", PM_PAY) + (s.chef ? CHEF_PAY : 0)) * s.wage;
+    return ((st.insp ? INSP_PAY : 0) + (st.markt ? MARKT_PAY : 0) + lv("mi", MI_PAY) + lv("ke", KE_PAY) + lv("pm", PM_PAY) + lv("pk", PK_PAY) + (s.chef ? CHEF_PAY : 0)) * s.wage;
   }
   function inspectorDay(s) {
     const st = staff(s); if (!st.insp) return;
@@ -1742,13 +1745,14 @@
       ] },
   };
 
+  const KRISE_W = .12; // zufälliger Börsenkrach nur fern der historischen Krisen, im Schnitt etwa alle 15 bis 20 Jahre (v4.5: w 1, etwa alle drei Jahre)
   const NEWS = {
     welle: { when: s => true, w: 1.2, img: "ev_welle", f: s => { s.mods.push({ line: "*", key: "demand", seg: "ausw", f: 1.45, until: s.m + 8 }); return ["Auswandererwelle erreicht die Häfen", "Tausende warten auf eine Überfahrt nach Amerika. Die Nachfrage der Auswanderer steigt deutlich."]; } },
-    krise: { when: s => s.konj > .9, w: 1, img: "ev_krise", f: s => { s.konj = .8; s.shipIdx = Math.min(s.shipIdx, .85); s.base += 1; return ["Börsenkrach – die Wirtschaft stockt", "Weniger Reisende, fallende Schiffspreise, steigende Zinsen. Banken prüfen ihre Kredite genauer."]; } },
+    krise: { when: s => s.konj > .9 && !boNearCrisis(s), w: KRISE_W, img: "ev_krise", f: s => { boCrisis(s, .75); return ["Börsenkrach – die Wirtschaft stockt", "Weniger Reisende, fallende Schiffspreise, steigende Zinsen. Banken prüfen ihre Kredite genauer."]; } },
     boom: { when: s => s.konj < 1.1, w: .8, f: s => { s.konj = Math.min(1.25, s.konj + .15); return ["Die Geschäfte brummen", "Handel und Industrie wachsen kräftig. Es wird mehr gereist als je zuvor."]; } },
-    preis: { when: s => ownRoutesWithComp(s).length > 0, w: 1.3, f: s => { const r = pick(s, ownRoutesWithComp(s)), i = rInfo(s, r), k = mainRival(s, r, i); s.mods.push({ route: r.id, key: "comp", f: .8, until: s.m + 6 }); return ["Preiskampf auf " + i.name, RIV[k].name + " senkt dort die Fahrpreise um 20 % – vorerst für ein halbes Jahr.", RIV[k].img]; } },
+    preis: { when: s => ownRoutesWithComp(s).length > 0, w: 1.3, f: s => { const r = pick(s, ownRoutesWithComp(s)), i = rInfo(s, r), k = mainRival(s, r, i); s.mods.push({ route: r.id, key: "comp", f: .8, until: s.m + 6 }); boHit(s, k, -.05); return ["Preiskampf auf " + i.name, RIV[k].name + " senkt dort die Fahrpreise um 20 % – vorerst für ein halbes Jahr.", RIV[k].img]; } },
     kaiser: { when: s => monthIn(s, [3, 4, 5]), w: 1, img: "line_helgo", f: s => { s.mods.push({ port: "hel", key: "demand", f: 1.5, until: s.m + 2 }); return ["Kaiserbesuch auf Helgoland angekündigt", "Die Insel erwartet einen Ansturm von Schaulustigen."]; } },
-    konk: { when: s => ownRoutesWithComp(s).length > 0, w: 1, f: s => { const r = pick(s, ownRoutesWithComp(s)), i = rInfo(s, r), k = mainRival(s, r, i); r.compMult = (r.compMult || 1) * 1.3; r.compSpeedAdd = (r.compSpeedAdd || 0) + .5; return [RIV[k].name + " verstärkt die Flotte", "Mehr Abfahrten und schnellere Schiffe auf " + i.name + ".", RIV[k].img]; } },
+    konk: { when: s => ownRoutesWithComp(s).length > 0, w: 1, f: s => { const r = pick(s, ownRoutesWithComp(s)), i = rInfo(s, r), k = mainRival(s, r, i); r.compMult = (r.compMult || 1) * 1.3; r.compSpeedAdd = (r.compSpeedAdd || 0) + .5; boHit(s, k, .03); return [RIV[k].name + " verstärkt die Flotte", "Mehr Abfahrten und schnellere Schiffe auf " + i.name + ".", RIV[k].img]; } },
     kohle: { when: s => s.coal < 1.15, w: .7, img: "ev_kohle", f: s => { s.coal = 1.3; return ["Kohle wird teuer", "Streiks in den Zechen treiben den Kohlepreis um 30 % nach oben."]; } },
     verzug: { when: s => s.ships.some(sh => sh.ready > s.m + 1), w: 1.5, f: s => { const sh = pick(s, s.ships.filter(x => x.ready > s.m + 1)); sh.ready += 2; return ["Bauverzug bei der Werft", "Die Ablieferung der „" + sh.name + "“ verschiebt sich auf " + dateStr(sh.ready) + "."]; } },
     rabatt: { when: s => !(s.discount && s.discount.until >= s.m), w: .8, f: s => { s.discount = { f: .9, until: s.m + 3 }; return ["Werft bietet Sonderkonditionen", "Freie Hellingplätze: 10 % Rabatt auf alle Neubauten, die bis " + dateStr(s.m + 3) + " bestellt werden."]; } },
@@ -1760,7 +1764,7 @@
       f: s => { const list = s.routes.filter(r => !r.railHit && rInfo(s, r).dist < 150 && !rInfo(s, r).areas.includes("north") && r.a !== "hel" && r.b !== "hel"); const r = pick(s, list), i = rInfo(s, r); r.railHit = true; r.demMult = (r.demMult || 1) * .8; return ["Neue Eisenbahn parallel zu " + i.name, "Die Bahn ist schneller und fährt öfter. Ein Teil der Fahrgäste steigt dauerhaft um."]; } },
     hafenausbau: { when: s => s.routes.length > 0, w: .7, f: s => { const r = pick(s, s.routes), p = pick(s, [r.a, r.b]); s.pm[p] = Object.assign({}, s.pm[p], { fee: ((s.pm[p] || {}).fee || 1) * .85 }); s.pmVer++; return ["Hafen " + PORTS[p].name + " wird ausgebaut", "Neue Kais und Kräne – die Liegezeiten werden kürzer, und mehr Reisende kommen in die Stadt."]; } },
     versicherung: { when: s => s.insMult <= 1 && s.stats.sunk > 0, w: .8, f: s => { s.insMult = 1.25; s.mods.push({ line: "*", key: "ins", f: 1, until: s.m + 12 }); s.flags.insUntil = s.m + 12; return ["Versicherer erhöhen die Prämien", "Nach mehreren Unglücken verlangen die Seeversicherer ein Jahr lang 25 % mehr."]; } },
-    pleite: { when: s => ownRoutesWithComp(s).length > 0, w: .7, f: s => { const r = pick(s, ownRoutesWithComp(s)), i = rInfo(s, r), k = mainRival(s, r, i), st = rivState(s, k); st.weak = .5; st.weakUntil = s.m + 12; return [RIV[k].name + " in Schwierigkeiten", "Der Rivale muss sparen und streicht für ein Jahr viele Abfahrten. Seine Fahrgäste suchen neue Schiffe.", RIV[k].img]; } },
+    pleite: { when: s => ownRoutesWithComp(s).length > 0, w: .7, f: s => { const r = pick(s, ownRoutesWithComp(s)), i = rInfo(s, r), k = mainRival(s, r, i), st = rivState(s, k); st.weak = .5; st.weakUntil = s.m + 12; boHit(s, k, -.25); return [RIV[k].name + " in Schwierigkeiten", "Der Rivale muss sparen und streicht für ein Jahr viele Abfahrten. Seine Fahrgäste suchen neue Schiffe.", RIV[k].img]; } },
     epidemie: { when: s => s.routes.some(r => ["rio", "bue", "sha", "ale"].includes(r.a) || ["rio", "bue", "sha", "ale"].includes(r.b)), w: .6, f: s => { const p = pick(s, ["rio", "bue", "sha", "ale"].filter(x => s.routes.some(r => r.a === x || r.b === x))); s.mods.push({ port: p, key: "demand", f: .6, until: s.m + 4 }); return ["Gelbfieber in " + PORTS[p].name, "Die Behörden raten von Reisen ab. Die Buchungen gehen für einige Monate deutlich zurück."]; } },
   };
   Object.assign(NEWS, {
@@ -1780,6 +1784,10 @@
     ausflug: { when: s => monthIn(s, [4, 5, 6, 7]), w: .8, img: "line_insel", f: s => { s.mods.push({ line: "*", key: "demand", seg: "bath", f: 1.25, until: s.m + 3 }); return ["Ein Rekordsommer kündigt sich an", "Hitze in den Städten – wer kann, fährt an die See. Die Bäderlinien erwarten Hochbetrieb."]; } },
   });
   const HISTORY = [
+    { y: 1893, mo: 4, key: "panik93", img: "ev_krise", f: s => { boCrisis(s, .72); return ["Panik an den Börsen", "In New York und London brechen die Kurse ein, Banken schließen ihre Schalter. Weniger Reisende, fallende Schiffspreise, steigende Zinsen."]; } },
+    { y: 1907, mo: 9, key: "panik07", img: "ev_krise", f: s => { boCrisis(s, .7); return ["Bankenpanik in New York", "Ein Ansturm auf die Banken reißt die Börsen in aller Welt mit. Die Wirtschaft stockt, Banken prüfen ihre Kredite genauer."]; } },
+    { y: 1914, mo: 6, key: "schluss14", img: "ev_krise", f: s => { boCrash(s, .85); s.bo.closed = s.m + 4; return ["Die Börsen schließen", "Ende Juli stellen die Börsen in London, Berlin und New York den Handel ein. Bis Dezember ruht der Aktienhandel, die Kurse sind eingefroren."]; } },
+    { y: 1929, mo: 9, key: "krach29", img: "ev_krise", f: s => { boCrisis(s, .65); return ["Der große Börsenkrach", "An der Wall Street stürzen die Kurse ins Bodenlose. Die Krise erfasst die ganze Welt: weniger Reisende, fallende Schiffspreise, steigende Zinsen."]; } },
     { y: 1882, mo: 4, key: "irland82", img: "gb_queenstown", f: s => { s.mods.push({ port: "que", key: "demand", f: 1.4, until: s.m + 12 }); return ["Auswanderungswelle aus Irland", "Missernten und Not treiben Zehntausende nach Amerika. In Queenstown drängen sich die Auswanderer an den Tendern."]; } },
     { y: 1886, mo: 4, key: "tilbury86", img: "gb_dover", f: s => { s.pmVer++; return ["Die Tilbury Docks eröffnen", "Unterhalb von London entstehen neue, tiefe Docks. Die Bahn bringt Reisende bis an die Schiffe – Tilbury wird zum Fährbahnhof."]; } },
     { y: 1889, mo: 4, key: "kohle89", img: "ev_bunkern", f: s => { coalShock(s, 1.25, 1.1, 3); return ["Bergarbeiterstreik an der Ruhr", "Zehntausende Bergleute legen die Arbeit nieder. Kohle wird knapp und teuer."]; } },
@@ -2003,6 +2011,7 @@
 
   function duePending(s) { return s.pending.length > 0 && (s.pending[0].day || 0) <= s.day; }
   function closeMonth(s) {
+    boRescue(s);
     const rep = monthEnd(s);
     const delivered = s.ships.filter(sh => sh.ready === s.m + 1);
     for (const sh of delivered) { const r = routeOf(s, sh); s.log.unshift({ m: s.m + 1, head: "„" + sh.name + "“ abgeliefert", text: "Das neue Schiff liegt bereit" + (r ? " und fährt ab jetzt auf " + rInfo(s, r).name + "." : ". Weisen Sie ihm in der Flotte eine Linie zu."), kind: "own", img: "ship_" + sh.type }); }
@@ -2021,6 +2030,7 @@
     s.m += 1; s.day = 1; s.cur = newCur(s);
     if (s.musDue) { s.musDue = false; museumMonthly(s); }
     world(s);
+    boMonthly(s);
     fahrtAuto(s);
     for (const sh of s.ships) applyPlan(s, sh);
     majorCheck(s);
@@ -2351,12 +2361,365 @@
     return { years, pricePct: pricePctAvg, avgAge, oldest: oldest.map(x => ({ name: x.name, age: Math.floor(x.age / 12) })), lines, reasons };
   }
 
+  /* ---------- Börse (v4.6) ----------
+     Eigener Zufallsgenerator (s.bo.r): Die Börse verbraucht keine Zufallszahlen des Hauptspiels.
+     Wer sie nie öffnet, spielt bis auf die gewollten Änderungen (Krisen-Termine) genau wie in v4.5. */
+  const BO_KGV = 14, BO_PAYOUT = .5, BO_FEE = .01, BO_IMPACT = .25, BO_HZ = .2, BO_HZ_CAP = 4, PK_PAY = 700, PK_SHARE = .1;
+  const BO = {
+    weser: { grp: "reederei", g: 900000, px: 300 }, elbe: { grp: "reederei", g: 200000, px: 80 }, balt: { grp: "reederei", g: 250000, px: 120 },
+    kopen: { grp: "reederei", g: 300000, px: 200 }, brandt: { grp: "reederei", g: 500000, px: 250 }, themse: { grp: "reederei", g: 400000, px: 180 },
+    zeche1: { grp: "zeche", g: 150000, px: 150, names: { de: "Ruhrtaler Bergbau-AG", gb: "Rhondda Steam Coal Company" } },
+    zeche2: { grp: "zeche", g: 110000, px: 90, names: { de: "Kohlenzeche Hohe Halde AG", gb: "Cwm Du Colliery Company" } },
+    werft: { grp: "werft", g: 300000, px: 200, names: { ham: "Steinwerder Schiffbau-AG", lpl: "Wirral Shipbuilding Company", lon: "Medway Shipbuilding Company" } },
+    billig: { grp: "caterer", g: 25000, px: 40 }, solide: { grp: "caterer", g: 50000, px: 100 }, hotel: { grp: "caterer", g: 60000, px: 120 }, luxus: { grp: "caterer", g: 45000, px: 150, from: 1905 },
+  };
+  const BO_ORDER = ["weser", "elbe", "balt", "kopen", "brandt", "themse", "zeche1", "zeche2", "werft", "billig", "solide", "hotel", "luxus"];
+  const BO_GRP = { reederei: "Reedereien", zeche: "Zechen", werft: "Werft", caterer: "Caterer" };
+  const BO_CRISES = [1893, 1907, 1914, 1929];
+  const PK_RISK = { vorsichtig: { name: "vorsichtig", cash: .3, temp: 25 }, ausgewogen: { name: "ausgewogen", cash: .05, temp: 50 }, riskant: { name: "riskant", cash: 0, top: 3 } };
+  const PK_SIG = [.009, .006, .004, .003], PK_RUM = [.55, .65, .75, .85];
+  function brnd(s) {
+    const b = s.bo; b.r = (b.r + 0x6D2B79F5) | 0;
+    let t = b.r; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  const bpick = (s, arr) => arr[Math.floor(brnd(s) * arr.length)];
+  const bgauss = s => Math.sqrt(-2 * Math.log(1 - brnd(s))) * Math.cos(2 * Math.PI * brnd(s));
+  function boName(s, k) {
+    const B = BO[k]; if (!B) return k;
+    if (B.grp === "reederei") return RIV[k].name;
+    if (B.grp === "caterer") return catName(s, k);
+    if (B.grp === "zeche") return B.names[(s.country || "de") === "gb" ? "gb" : "de"];
+    return B.names[s.home || "ham"] || B.names.ham;
+  }
+  function boImg(s, k) {
+    const B = BO[k]; if (!B) return null;
+    if (B.grp === "reederei") return RIV[k].img;
+    if (B.grp === "zeche") return (s.country || "de") === "gb" ? "bo_zeche_wales" : "bo_zeche_ruhr";
+    if (B.grp === "werft") return "wf_dock";
+    return k === "luxus" ? "kue_alacarte" : "kue_caterer";
+  }
+  const boGrow = s => (1 + .012 * s.m / 12) * (s.pidx || 1);
+  function boListed(s, k) { const B = BO[k]; return !!B && (!B.from || yearOf(s) >= B.from) && !(s.bo.co[k].pleite >= s.m); }
+  function boState(s) {
+    if (s.bo && s.bo.co) return s.bo;
+    const b = s.bo = { r: ((s.seed | 0) ^ 0x5bd1e995) | 0, on: false, seen: false, mk: 1, mkOff: 0, co: {}, dep: {}, pk: { amt: 0, cash: 0, dep: {}, risk: "ausgewogen", last: -1 }, closed: -1, rum: [], ord: { werft: 0, brandt: 0 }, hz: null, hzStop: -1, tut: {} };
+    for (const k of BO_ORDER) {
+      const B = BO[k], g = B.g / 12 * boGrow(s);
+      b.co[k] = { n: Math.round(B.g * BO_KGV / B.px), g: Array(12).fill(Math.round(g)), y: {}, idio: 1, tr: 0, hit: null, px: 0, prev: 0, hist: [], pleite: -1, ev: -1 };
+    }
+    for (const k of BO_ORDER) { const c = b.co[k]; c.px = c.prev = boPrice(s, k); }
+    return b;
+  }
+  function boPrice(s, k) {
+    const b = s.bo, c = b.co[k], B = BO[k], sum = c.g.reduce((a, v) => a + v, 0);
+    const w = Math.max(sum, B.g * boGrow(s) * .08) * BO_KGV / c.n;
+    return Math.max(1, Math.round(w * b.mk * c.idio * 100) / 100);
+  }
+  // Gewinn einer Firma im laufenden Monat
+  function boDriver(s, k) {
+    const B = BO[k], b = s.bo, y = yearOf(s), konj = s.konj;
+    if (B.grp === "reederei") {
+      const st = rivState(s, k);
+      let d = Math.pow(konj, 1.5) * (st.weakUntil >= s.m ? .45 : 1) * (st.pUntil >= s.m && st.pmod < 1 ? .85 : 1) * (1 + .6 * (st.boost || 0)) * (1 + .5 * (st.comBoost || 0));
+      if (k === "weser") d *= 1 + .5 * (s.mods.some(md => md.seg === "ausw" && md.key === "demand" && md.f > 1) ? 1 : 0);
+      if (k === "brandt") d = .6 * d + .4 * Math.pow(s.shipIdx, 2);
+      return d;
+    }
+    if (B.grp === "zeche") { const dec = y < 1912 ? 1 : y < 1920 ? Math.pow(.99, y - 1912) : Math.max(.3, Math.pow(.99, 8) * Math.pow(.98, y - 1920)); return clamp((s.coal - .62) / .38, .05, 3) * Math.sqrt(konj) * dec; }
+    if (B.grp === "werft") return Math.pow(s.shipIdx, 2);
+    return konj * (k === "luxus" ? Math.min(1.5, 1 + (y - 1905) * .02) : 1);
+  }
+  function boProfit(s, k) {
+    const B = BO[k], b = s.bo, c = b.co[k];
+    let g = B.g / 12 * boGrow(s) * boDriver(s, k) * (1 + (brnd(s) - .5) * .2);
+    if (c.hit && c.hit.until >= s.m) g *= c.hit.f;
+    if (k === "werft" || k === "brandt") { const o = b.ord[k]; g += o * .005; b.ord[k] = o * 11 / 12; }
+    if (B.grp === "caterer") { const K = kueche(s), own = [K.cat, K.lux].some(x => catOn(s, x) && x.k === k); if (own && s.last && s.last.cost) g += (s.last.cost.Verpflegung || 0) * .08; }
+    return g;
+  }
+  function boVisible(s) { const b = s.bo; return !!(b && (b.seen || boHeld(s))); }
+  function boHeld(s) { const b = s.bo; return !!b && (Object.values(b.dep).some(d => d.n > 0) || Object.values(b.pk.dep).some(d => d.n > 0)); }
+  function boLog(s, head, text, img, cat, extra) { s.log.unshift(Object.assign({ m: s.m, head, text, kind: cat === "eigen" ? "own" : "news", cat: cat || "boerse", img }, extra || {})); }
+  function boHit(s, k, f) { if (!s.bo || !s.bo.co[k]) return; const c = s.bo.co[k]; c.idio = clamp(c.idio * (1 + f), .3, 3); c.ev = s.m; }
+  function boCrash(s, f) { const b = boState(s); b.mk = clamp(b.mk * f, .4, 1.6); b.mkOff -= .2; }
+  function boNearCrisis(s) { const y = yearOf(s); return BO_CRISES.some(c => Math.abs(y - c) < 6); }
+  function boCrisis(s, f) { s.konj = Math.min(s.konj, .8); s.shipIdx = Math.min(s.shipIdx, .85); s.base += 1; boCrash(s, f); }
+  // Monatsabschluss der Börse
+  function boMonthly(s) {
+    const b = boState(s), c0 = cal(s.m), y = c0.y, vis = boVisible(s);
+    const closed = b.closed >= s.m;
+    if (b.closed === s.m - 1) s.log.unshift({ m: s.m, head: "Die Börse öffnet wieder", text: "Nach Monaten der Schließung wird wieder gehandelt – zunächst vorsichtig und mit festen Mindestkursen.", kind: "news", cat: "welt", img: "bo_saal" });
+    b.mkOff *= .96;
+    const target = clamp(1 + .8 * (s.konj - 1) + b.mkOff, .5, 1.5);
+    if (!closed) b.mk = clamp(b.mk + (target - b.mk) * .12 + (brnd(s) - .5) * .06, .4, 1.6);
+    for (const k of BO_ORDER) {
+      const c = b.co[k], B = BO[k];
+      c.g.push(Math.round(boProfit(s, k))); c.g.shift();
+      c.y[y] = (c.y[y] || 0) + c.g[11];
+      c.tr = .85 * c.tr + (brnd(s) - .5) * .004;
+      if (!closed) { c.idio = clamp(c.idio * (1 + c.tr + (brnd(s) - .5) * .05), .3, 3); c.idio += (1 - c.idio) * .03; }
+      // Zechen: Streik und Grubenunglück
+      if (B.grp === "zeche") {
+        const r = brnd(s), hz = b.hz === k;
+        if (r < .004 || r > .998) {
+          const strike = r < .004, n = 1 + Math.floor(brnd(s) * 3), f = strike ? -.15 - brnd(s) * .1 : -.2 - brnd(s) * .1;
+          c.hit = { f: .3, until: s.m + n - 1 }; boHit(s, k, f);
+          if (hz) b.hzStop = s.m + n - 1;
+          const head = boName(s, k) + (strike ? ": Die Bergleute streiken" : ": Grubenunglück");
+          const text = (strike ? "Die Bergleute legen die Arbeit nieder. " : "Schlagende Wetter in der Tiefe – die Grube steht still, die Rettungsmannschaften sind unterwegs. ") + "Der Kurs fällt um " + Math.round(-f * 100) + " %." + (hz ? " Ihre Hauszeche liefert " + (n === 1 ? "einen Monat" : n + " Monate") + " keine Kohle – Ihre Schiffe bunkern so lange zum Marktpreis." : "");
+          if (hz) boLog(s, head, text, strike ? "ev_streik" : "ev_grube", "eigen"); else if (vis) boLog(s, head, text, strike ? "ev_streik" : "ev_grube");
+        }
+      }
+      if (k === "billig" && !(c.pleite >= s.m) && c0.mo === 0 && brnd(s) < .04) {
+        c.pleite = s.m + 11; const lost = boLiquidate(s, k, .1);
+        if (vis || lost) boLog(s, boName(s, k) + " ist pleite", "Die Aktie stürzt auf ein Zehntel und wird vom Kurszettel gestrichen." + (lost ? " Ihre Aktien sind fast nichts mehr wert: Sie bekommen " + fmt(lost) + " Mark." : "") + " In einem Jahr will ein neuer Besitzer wieder an die Börse.", "kue_caterer", lost ? "eigen" : "boerse");
+      }
+      if (k === "billig" && c.pleite === s.m - 1) { c.idio = .7; c.g = c.g.map(v => Math.round(Math.max(v, B.g / 12 * boGrow(s) * .8))); }
+    }
+    rivalNews(s);
+    rumMonthly(s);
+    for (const k of BO_ORDER) {
+      const c = b.co[k];
+      if (!closed) c.px = boPrice(s, k);
+      c.hist.push({ m: s.m, p: c.px }); if (c.hist.length > 120) c.hist.shift();
+      const ch = c.prev ? c.px / c.prev - 1 : 0;
+      if (b.on && vis && !closed && Math.abs(ch) >= .15 && c.ev !== s.m && boListed(s, k)) boLog(s, boName(s, k) + (ch > 0 ? ": Kurssprung" : ": Kurssturz"), "Die Aktie " + (ch > 0 ? "steigt" : "fällt") + " im " + MONTHS[cal(s.m - 1).mo] + " um " + Math.round(Math.abs(ch) * 100) + " % auf " + fmt(c.px) + " Mark.", boImg(s, k));
+      c.prev = c.px;
+    }
+    if (c0.mo === 4) boDividend(s);
+    hzCheck(s);
+    if (staff(s).pk >= 0 && b.on && !closed) pkMonthly(s);
+    boUnlock(s);
+  }
+  function boDividend(s) {
+    const b = s.bo, y = cal(s.m).y - 1; let sum = 0; const got = [];
+    for (const k of BO_ORDER) {
+      const c = b.co[k], B = BO[k], yp = c.y[y] || 0, exp = B.g * boGrow(s) * .7;
+      c.div = 0;
+      if (!boListed(s, k) || yp <= 0 || yp < exp * .6) { c.divY = y; continue; }
+      c.div = Math.round(yp * BO_PAYOUT / c.n * 100) / 100; c.divY = y;
+      const n = (b.dep[k] ? b.dep[k].n : 0) + (b.pk.dep[k] ? b.pk.dep[k].n : 0);
+      if (n > 0) { const v = n * c.div; sum += v; got.push(boName(s, k)); }
+    }
+    for (const y0 of Object.keys(b.co.weser.y)) if (+y0 < y - 1) for (const k of BO_ORDER) delete b.co[k].y[y0];
+    if (sum > 0) {
+      income(s, "Dividenden", Math.round(sum)); b.divLast = { y, sum: Math.round(sum) };
+      boLog(s, "Dividende für " + y, "Ihre Aktien bringen " + fmt(sum) + " Mark Dividende" + (got.length <= 3 ? " – von " + got.join(", ") : " aus " + got.length + " Firmen") + ".", "bo_dividende", "eigen");
+    } else if (b.on && boVisible(s)) {
+      const none = BO_ORDER.filter(k => boListed(s, k) && !b.co[k].div).map(k => boName(s, k));
+      if (none.length) boLog(s, "Die Dividenden für " + y + " sind beschlossen", none.length === BO_ORDER.length ? "Ein schlechtes Jahr: Keine Firma zahlt eine Dividende." : "Keine Dividende zahlen " + none.join(", ") + ".", "bo_dividende");
+    }
+  }
+  function boUnlock(s) {
+    const b = s.bo; if (!b || b.on) return;
+    const y = cal(s.m).y;
+    if (s.ships.length >= 3 && Object.keys(s.years || {}).some(yy => +yy < y && s.years[yy].profit > 0)) {
+      b.on = true;
+      s.log.unshift({ m: s.m, head: "Die Börse öffnet Ihnen ihre Türen", text: s.name + " gilt jetzt als feste Größe im Hafen. Unter Kontor → Börse können Sie Aktien der Rivalen, der Zechen, der Werft und der Caterer kaufen.", kind: "news", cat: "welt", img: "bo_saal" });
+    }
+  }
+  // Meldungen über die Rivalen: für alle sichtbar, sie bewegen nur den Kurs
+  function rivalNews(s) {
+    if (brnd(s) >= .35) return;
+    const k = bpick(s, RIV_ORDER), R = RIV[k], mo = cal(s.m).mo, ports = Object.keys(PORTS).filter(p => PORTS[p].reg !== "Übersee" || k === "weser");
+    const types = ["schiff", "schiff", "unglueck", "linie", "streik"].concat(mo < 3 ? ["rekord", "rekord"] : []);
+    const t = bpick(s, types); let head, text, f;
+    if (t === "schiff") { f = .03 + brnd(s) * .03; s.bo.ord[k === "brandt" ? "brandt" : "werft"] += Math.round((800000 + brnd(s) * 2200000) * (s.pidx || 1)); head = R.name + " stellt einen neuen Dampfer in Dienst"; text = "Festlich beflaggt läuft der Neubau zur ersten Reise aus. Die Aktie legt um " + Math.round(f * 100) + " % zu."; }
+    if (t === "unglueck") { f = -.06 - brnd(s) * .06; head = R.name + ": Dampfer auf Grund gelaufen"; text = "Menschen kamen nicht zu Schaden, doch die Reparatur wird teuer. Die Aktie verliert " + Math.round(-f * 100) + " %."; s.bo.co[k].hit = { f: .8, until: s.m }; }
+    if (t === "linie") { f = .02 + brnd(s) * .03; head = R.name + " eröffnet eine neue Linie"; text = "Ab sofort fährt sie auch nach " + PORTS[bpick(s, ports)].name + ". Die Aktie legt um " + Math.round(f * 100) + " % zu."; }
+    if (t === "streik") { f = -.04 - brnd(s) * .04; head = R.name + ": Streik an Bord"; text = "Heizer und Matrosen fordern mehr Lohn, die Schiffe bleiben einige Tage im Hafen. Die Aktie verliert " + Math.round(-f * 100) + " %."; s.bo.co[k].hit = { f: .7, until: s.m }; }
+    if (t === "rekord") { const yp = s.bo.co[k].y[cal(s.m).y - 1] || 0, ok = yp > RIV_BASE(s, k); f = ok ? .05 + brnd(s) * .05 : -.03 - brnd(s) * .03; head = R.name + (ok ? " meldet ein Rekordjahr" : " legt eine enttäuschende Bilanz vor"); text = ok ? "So viele Fahrgäste wie nie zuvor. Die Aktie legt um " + Math.round(f * 100) + " % zu." : "Die Bilanz enttäuscht die Aktionäre. Die Aktie verliert " + Math.round(-f * 100) + " %."; }
+    boHit(s, k, f);
+    s.log.unshift({ m: s.m, head, text, kind: "news", cat: "welt", img: R.img });
+  }
+  const RIV_BASE = (s, k) => BO[k].g * boGrow(s);
+  // Gerüchte: nur nach Freischaltung, etwa 60 % treffen zu
+  const RUM = {
+    reederei: [["plant einen neuen Schnelldampfer", .1, .2], ["steckt in Geldnot", -.15, -.25]],
+    zeche: [["steht vor einem Streik", -.15, -.25], ["hat ein reiches Flöz entdeckt", .12, .2]],
+    werft: [["erhält einen Großauftrag aus Übersee", .12, .2], ["verliert einen Großauftrag", -.12, -.2]],
+    caterer: [["gewinnt einen großen Hotelvertrag", .1, .18], ["hat Ärger mit der Gesundheitsbehörde", -.12, -.2]],
+  };
+  function rumMonthly(s) {
+    const b = s.bo, st = staff(s);
+    for (const r of b.rum.slice()) {
+      if (r.due > s.m) continue;
+      b.rum = b.rum.filter(x => x !== r);
+      const c = b.co[r.k]; if (!c) continue;
+      if (r.ok) {
+        boHit(s, r.k, r.f);
+        if (r.f < 0) c.hit = { f: .6, until: s.m + 1 };
+        if (BO[r.k].grp === "zeche" && r.f < 0 && b.hz === r.k) b.hzStop = s.m;
+        if (boVisible(s)) boLog(s, "Das Gerücht bestätigt sich", boName(s, r.k) + " " + r.what + ". Die Aktie " + (r.f > 0 ? "steigt" : "fällt") + " um " + Math.round(Math.abs(r.f) * 100) + " %.", "ev_geruecht");
+      } else {
+        boHit(s, r.k, -r.f * .15);
+        if (boVisible(s)) boLog(s, "Nichts dran am Gerücht", "Es hieß, " + boName(s, r.k) + " " + r.what + ". Das hat sich nicht bestätigt.", "ev_geruecht");
+      }
+    }
+    if (!b.on || b.closed >= s.m || brnd(s) >= .33) return;
+    const list = BO_ORDER.filter(k => boListed(s, k) && !b.rum.some(r => r.k === k));
+    if (!list.length) return;
+    const k = bpick(s, list), R = bpick(s, RUM[BO[k].grp]), ok = brnd(s) < .6, f = R[1] + (R[2] - R[1]) * brnd(s);
+    const r = { k, what: R[0], f, ok, due: s.m + 1 + Math.floor(brnd(s) * 3) };
+    let label = null;
+    if (st.pk >= 0) { const right = brnd(s) < PK_RUM[st.pk]; label = (ok === right) ? "glaubwürdig" : "zweifelhaft"; }
+    r.label = label; r.shown = boVisible(s); b.rum.push(r);
+    if (boVisible(s)) boLog(s, "Gerücht: " + boName(s, k) + " " + R[0], "An der Börse wird es hinter vorgehaltener Hand erzählt. Ob etwas dran ist, weiß niemand." + (label ? " Ihr Prokurist hält das Gerücht für " + label + "." : ""), "ev_geruecht", "boerse", { rum: label || "?" });
+  }
+  // Wert der Depots
+  function boValue(s) {
+    const b = s.bo; if (!b || !b.co) return 0;
+    let v = b.pk.cash || 0;
+    for (const D of [b.dep, b.pk.dep]) for (const k in D) if (D[k].n > 0) v += D[k].n * b.co[k].px;
+    return v;
+  }
+  function boOwn(s, k) { const b = s.bo; return (b.dep[k] ? b.dep[k].n : 0) + (b.pk.dep[k] ? b.pk.dep[k].n : 0); }
+  // Preis eines Auftrags: große Pakete bewegen den Kurs (im Schnitt ein Viertel des Anteils an der Firma)
+  function boQuote(s, k, n, sell) {
+    const b = boState(s), c = b.co[k]; n = Math.max(0, Math.floor(n || 0));
+    const imp = 1 + (sell ? -1 : 1) * BO_IMPACT * n / c.n, gross = n * c.px * imp, fee = Math.max(n ? 1 : 0, gross * BO_FEE);
+    return { n, px: c.px * imp, gross: Math.round(gross), fee: Math.round(fee), total: Math.round(sell ? gross - fee : gross + fee) };
+  }
+  function boCanTrade(s, k) {
+    const b = boState(s);
+    if (!b.on) return "Die Börse ist erst ab drei Schiffen und einem Geschäftsjahr mit Gewinn für Sie offen.";
+    if (b.closed >= s.m) return "Die Börse ist geschlossen. Der Handel ruht.";
+    if (!BO[k] || !boListed(s, k)) return "Diese Aktie wird derzeit nicht gehandelt.";
+    return null;
+  }
+  // Anzahl zu einem Betrag (abgerundet, inklusive Gebühr)
+  function boFor(s, k, amount) { const b = boState(s), c = b.co[k]; let n = Math.floor(amount / (c.px * (1 + BO_FEE))); while (n > 0 && boQuote(s, k, n).total > amount) n--; return n; }
+  function buyInto(s, D, k, n) { const q = boQuote(s, k, n); const d = D[k] || (D[k] = { n: 0, cost: 0 }); d.n += q.n; d.cost += q.total; return q; }
+  function sellFrom(s, D, k, n) {
+    const d = D[k]; n = Math.min(n, d ? d.n : 0); if (n <= 0) return null;
+    const q = boQuote(s, k, n, true), basis = d.cost * n / d.n; d.n -= n; d.cost -= basis; if (d.n <= 0) delete D[k];
+    return { q, gain: q.total - basis };
+  }
+  function bookGain(s, g) { const c = s.cur; if (!c) return; if (g >= 0) { c.extra = c.extra || {}; c.extra.Kursgewinne = (c.extra.Kursgewinne || 0) + g; } else c.cost.Kursverluste = (c.cost.Kursverluste || 0) - g; }
+  function boBuy(s, k, n) {
+    const err = boCanTrade(s, k); if (err) return err;
+    n = Math.floor(n); if (!(n > 0)) return "Bitte eine Stückzahl oder einen Betrag angeben.";
+    const b = s.bo; if (boOwn(s, k) + n > b.co[k].n) return "So viele Aktien gibt es nicht.";
+    const q = boQuote(s, k, n); if (q.total > s.cash) return "Nicht genug Geld in der Kasse. Aktien kaufen Sie nur bar, ohne Kredit.";
+    s.cash -= q.total; buyInto(s, b.dep, k, n); b.seen = true;
+    s.log.unshift({ m: s.m, head: "Aktien gekauft: " + boName(s, k), text: fmt(n) + " Stück zu " + fmt(q.px) + " Mark, mit Gebühr " + fmt(q.total) + " Mark.", kind: "own", cat: "boerse", img: "bo_saal" });
+    hzCheck(s);
+    return null;
+  }
+  function boSell(s, k, n) {
+    const err = boCanTrade(s, k); if (err) return err;
+    const r = sellFrom(s, s.bo.dep, k, Math.floor(n)); if (!r) return "Davon haben Sie keine Aktien.";
+    s.cash += r.q.total; bookGain(s, r.gain);
+    s.log.unshift({ m: s.m, head: "Aktien verkauft: " + boName(s, k), text: fmt(r.q.n) + " Stück zu " + fmt(r.q.px) + " Mark, nach Gebühr " + fmt(r.q.total) + " Mark. " + (r.gain >= 0 ? "Gewinn " : "Verlust ") + fmt(Math.abs(r.gain)) + " Mark.", kind: "own", cat: "boerse", img: "bo_saal" });
+    hzCheck(s);
+    return null;
+  }
+  // Pleite einer Firma: Aktien zum Zehntel abrechnen
+  function boLiquidate(s, k, f) {
+    const b = s.bo; let got = 0;
+    for (const D of [b.dep, b.pk.dep]) { const d = D[k]; if (!d || !d.n) continue; const v = Math.round(d.n * b.co[k].px * f); got += v; bookGain(s, v - d.cost); if (D === b.dep) s.cash += v; else b.pk.cash += v; delete D[k]; }
+    b.co[k].idio *= f; b.co[k].px = boPrice(s, k); b.co[k].ev = s.m;
+    return got;
+  }
+  // Notverkauf, wenn die Kasse im Minus ist
+  function boRescue(s) {
+    const b = s.bo; if (!b || s.cash >= 0 || !boHeld(s) && !b.pk.cash) return;
+    if (b.pk.cash > 0) { const t = Math.min(b.pk.cash, -s.cash + 5000); b.pk.cash -= t; s.cash += t; b.pk.amt = Math.max(0, b.pk.amt - t); }
+    let got = 0;
+    for (const D of [b.dep, b.pk.dep]) for (const k of Object.keys(D)) {
+      if (s.cash >= 0) break;
+      const d = D[k], need = Math.ceil((-s.cash + 5000) / (b.co[k].px * .97)), r = sellFrom(s, D, k, Math.min(d.n, need)); if (!r) continue;
+      s.cash += r.q.total; got += r.q.total; bookGain(s, r.gain);
+    }
+    if (got) { if (b.pk.amt) b.pk.amt = Math.max(0, b.pk.amt - got); s.log.unshift({ m: s.m, head: "Die Bank verkauft Ihre Aktien", text: "Die Kasse war im Minus. Die Bank hat Aktien für " + fmt(got) + " Mark verkauft, bevor sie an die Schiffe geht.", kind: "bad", cat: "eigen", img: "ev_krise" }); }
+  }
+  // Hauszeche: über 50 % einer Zeche
+  function hzCheck(s) {
+    const b = s.bo; if (!b) return;
+    const k = ["zeche1", "zeche2"].find(z => boOwn(s, z) > b.co[z].n / 2) || null;
+    if (k === b.hz) return;
+    if (k) s.log.unshift({ m: s.m, head: "Eine eigene Zeche", text: "Sie halten jetzt die Mehrheit an " + boName(s, k) + ". Ihre Kohleschiffe bunkern ab sofort 20 % unter dem Marktpreis. Laufende Lieferverträge bleiben bestehen.", kind: "own", cat: "eigen", img: "bo_hauszeche" });
+    else s.log.unshift({ m: s.m, head: "Die Hauszeche ist abgegeben", text: "Sie halten nicht mehr die Mehrheit an " + boName(s, b.hz) + ". Ihre Schiffe bunkern wieder zum Marktpreis.", kind: "own", cat: "eigen", img: "ev_bunkern" });
+    b.hz = k;
+  }
+  const coalShip = t => !t.motor && !t.oil && (!!t.design || t.from < 1920);
+  // Kohle aus der Hauszeche: Rabatt bis zur Förderung der Zeche
+  function hzPrice(s, cur, n, t) {
+    const b = s.bo; if (!b || !b.hz || b.hzStop >= s.m || !coalShip(t)) return n * s.coal;
+    const cap = BO_HZ_CAP * BO[b.hz].g / 12 * boGrow(s), left = Math.max(0, cap - (cur.hzUsed || 0)), use = Math.min(n, left);
+    cur.hzUsed = (cur.hzUsed || 0) + use; cur.hzSave = (cur.hzSave || 0) + use * s.coal * BO_HZ;
+    return use * s.coal * (1 - BO_HZ) + (n - use) * s.coal;
+  }
+  // Vorschau: was eine Hauszeche im Vormonat gespart hätte (ohne Lieferverträge gerechnet)
+  function hzPreview(s, k) {
+    let coal = 0;
+    for (const sh of s.ships) { const t = TYPES[sh.type]; if (t && coalShip(t) && sh.last) coal += sh.last.coal || 0; }
+    return Math.round(Math.min(coal, BO_HZ_CAP * BO[k].g / 12 * boGrow(s) * s.coal) * BO_HZ);
+  }
+  // Prokurist: verwaltet ein eigenes Depot
+  function pkTarget(s) {
+    const b = s.bo, st = staff(s), R = PK_RISK[b.pk.risk] || PK_RISK.ausgewogen;
+    const list = BO_ORDER.filter(k => boListed(s, k) && (b.pk.risk !== "vorsichtig" || ["weser", "kopen", "themse", "werft", "solide", "hotel"].includes(k)));
+    // Einschätzung des Prokuristen: Trend plus Irrtum, der sich nur langsam ändert (sonst handelt er sich arm)
+    const nz = b.pk.nz || (b.pk.nz = {}), sig = {};
+    for (const k of list) { nz[k] = .7 * (nz[k] || 0) + .71 * bgauss(s) * PK_SIG[st.pk]; sig[k] = 2 * b.co[k].tr + .03 * (1 - b.co[k].idio) + nz[k]; }
+    let w = {};
+    if (R.top) list.slice().sort((x, y) => sig[y] - sig[x]).slice(0, R.top).forEach(k => { w[k] = 1; });
+    else for (const k of list) w[k] = Math.exp(R.temp / 50 * clamp(sig[k] / .006, -2, 2));
+    const tot = Object.values(w).reduce((a, v) => a + v, 0); for (const k in w) w[k] = Math.min(.25, w[k] / tot * (1 - R.cash));
+    return w;
+  }
+  function pkMonthly(s) {
+    const b = s.bo, P = b.pk, st = staff(s);
+    if (st.pk >= 0) P.lohn = (P.lohn || 0) + PK_PAY * STAFF_PAY[st.pk] * s.wage;
+    if (s.m - P.last < 3) return;
+    P.last = s.m;
+    let val = P.cash; for (const k in P.dep) val += P.dep[k].n * b.co[k].px;
+    if (val < 1000) return;
+    const w = pkTarget(s); let gain = 0;
+    for (const k of Object.keys(P.dep)) {
+      const want = Math.floor((w[k] || 0) * val / b.co[k].px), have = P.dep[k].n;
+      if (have > want && (have - want) * b.co[k].px > val * .05) { const r = sellFrom(s, P.dep, k, have - want); if (r) { P.cash += r.q.total; gain += r.gain; } }
+    }
+    for (const k of Object.keys(w)) {
+      const have = P.dep[k] ? P.dep[k].n : 0, cap = Math.max(0, Math.min(Math.floor(b.co[k].n * (BO[k].grp === "zeche" ? .45 : .6)) - boOwn(s, k), Math.floor(b.co[k].n * .12) - have));
+      let n = Math.min(cap, Math.floor(w[k] * val / b.co[k].px) - have);
+      if (n <= 0 || n * b.co[k].px < val * (P.cash > val * .15 ? .01 : .05)) continue;
+      while (n > 0 && boQuote(s, k, n).total > P.cash) n = Math.floor(n * .9);
+      if (n > 0) { P.cash -= buyInto(s, P.dep, k, n).total; }
+    }
+    if (gain) { bookGain(s, gain); if (gain > 0) { const fee = Math.round(gain * PK_SHARE); expense(s, "Personal", fee); P.paid = (P.paid || 0) + fee; } }
+  }
+  function pkSet(s, amt) {
+    const b = boState(s), P = b.pk; amt = Math.max(0, Math.round(amt));
+    if (staff(s).pk < 0) return "Erst einen Prokuristen einstellen (Kontor → Personal).";
+    let val = P.cash; for (const k in P.dep) val += P.dep[k].n * b.co[k].px;
+    if (amt > val) { const add = amt - val; if (add > s.cash) return "Nicht genug Geld in der Kasse."; s.cash -= add; P.cash += add; }
+    else if (amt < val) {
+      let need = val - amt - P.cash;
+      for (const k of Object.keys(P.dep)) { if (need <= 0) break; const r = sellFrom(s, P.dep, k, Math.min(P.dep[k].n, Math.ceil(need / (b.co[k].px * .97)))); if (r) { P.cash += r.q.total; need -= r.q.total; bookGain(s, r.gain); } }
+      const back = Math.max(0, Math.min(P.cash, val - amt)); P.cash -= back; s.cash += back;
+    }
+    P.amt = amt; P.last = -99;
+    return null;
+  }
+  function pkFire(s) {
+    const b = s.bo; if (!b) return; const P = b.pk; let back = P.cash, gain = 0;
+    for (const k of Object.keys(P.dep)) { const r = sellFrom(s, P.dep, k, P.dep[k].n); if (r) { back += r.q.total; gain += r.gain; } }
+    if (gain) bookGain(s, gain);
+    s.cash += back; P.cash = 0; P.amt = 0; P.dep = {};
+  }
+  // Börse unter Kontor geöffnet
+  function boSeen(s) { const b = boState(s); if (b.on) b.seen = true; }
+
   const api = { MONTHS, TYPES, TYPE_ORDER, SPECIAL_ORDER, TYPE_NOTE, MAINT, EQUIP, MK_BUDGET, MK_AGENCY, FIN, PORTS, REGIONS, HOME, SEG, World: W,
     cal, dateStr, fmt, newGame, migrate, nextMonth, resolve, eventOptions, buyNew, buyUsed, rename, randomName, openRoute, closeRoute, routeInfo, canServe, routePrice,
     survey, setLine, setPrice, setMaint, setInsured, equip, equipCost, dock, sellShip, repay, quote, newPrice, shipValue, fleetValue, debt, equity, rating, loanRate,
     tripsOf, active, score, compDepsOf, GEN_TYPES, typeGroup, factoryEqOptions, factoryEqCost, DES, designBases, designType, saveDesign, seriesFactor, EXHIBITS, partsFor, partCost, scrapValue, scrapShip, donateShip, MUS_PRICE, museumUnlocked, museumCost, hallSlots, hallCost, buildMuseum, expandHall, toMuseum, restoreCost, restoreDays, museumMode, museumFest, museumDraw, bankruptReport, avgPct, CAP_NAMES: { first: CAP_FIRST.concat(CAP_FIRST_GB), last: CAP_LAST.concat(CAP_LAST_GB) }, stopInfo, HOMES, homeName, applyCountry, CAP_SPEC, CAP_XP, SPECIAL_CAPS, caps, capOf, capLevel, capPay, capFx, assignCaptain, hireCaptain, dismissCaptain, lineOf, STAFF_LV, STAFF_PAY, DEPT, INSP_PAY, MARKT_PAY, staff, setStaff, crewCost, RIV, RIV_ORDER, rivalsOf, rivState, rivalNames, marketResearch, myExp, setPlan, planTarget, brandtPrice, ACH, stepPrice, alignPrices, pricePct, refNow, maintCost, ageY, fristInfo, renewFrist, reportInfo, isEmil, tourOpen, rInfo, advanceDay,
     FAHRT, FAHRT_ORDER, KQ, CATERERS, CAT_ORDER, KU_CLS, MI_PAY, KE_PAY, PM_PAY, CHEF_PAY, COAL_SURCH, fahrtOf, setFahrt, setShipFahrt, postNeed, postSlow,
     kueche, kqOf, kqEff, kScore, setKq, setShipKq, setEigen, catOffers, catName, signCaterer, cancelCaterer, catCancelFee, catOn,
+    BO, BO_ORDER, BO_GRP, BO_FEE, BO_HZ, PK_PAY, PK_RISK, boState, boName, boImg, boListed, boValue, boOwn, boQuote, boFor, boBuy, boSell, boCanTrade, boSeen, boVisible, boHeld, pkSet, coalShip, hzPreview,
     coalIdx, coalTrend, coalActive, coalBase, coalOffer, signCoal, cancelCoal, coalCancelFee, prevFahrt, prevKq, prevCat, prevEigen, mealShips, duePending, dim, dayStr, clsName, CLS_K, inDock, offDuty, detained, dateAfter, dockDays, dockInfo, majorRepair, majorCost, MAJOR, shipFixed, simulateMonth, typeOpen, setBudget, setAgency, campaign, campaignCost, buildHallen, pressTrip, riskOf, suggest, distressOdds, routeOf, infoOf, yearOf };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Engine = api;
 })(this);
