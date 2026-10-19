@@ -317,6 +317,13 @@ Seit v4.5 (Kohle und Küche).
 - `kue_bordkueche` – unten rechts
 - `pers_proviantmeister` – unten links
 
+### bogen_boerse.webp
+Seit v4.6 (Zeitung, Börse und Einführung).
+- `bo_dividende` – unten rechts
+- `bo_saal` – oben links
+- `ev_geruecht` – unten links
+- `pers_prokurist` – oben rechts
+
 ### bogen_kohle.webp
 Seit v4.5 (Kohle und Küche).
 - `ev_bunkern` – unten rechts
@@ -336,6 +343,13 @@ Seit v4.5 (Kohle und Küche).
 - `kue_einfach` – oben links
 - `kue_fein` – oben rechts
 
+### bogen_zechen.webp
+Seit v4.6 (Zeitung, Börse und Einführung).
+- `bo_hauszeche` – unten rechts
+- `bo_zeche_ruhr` – oben links
+- `bo_zeche_wales` – oben rechts
+- `ev_grube` – unten links
+
 ## App-Icon
 
 `icon/app-icon.png` ist das Original des App-Icons (1254 × 1254, Goldrahmen mit runden Ecken auf weißem Grund, seit v4.4.3). `python3 tools/icons.py` erzeugt daraus `apple-touch-icon.png` (iPhone, mit Rahmen, Ecken golden), `icon-192.png` und `icon-512.png` (mit Rahmen, Ecken durchsichtig) sowie `icon-maskable-512.png` (Android, ohne Rahmen, auf 88 % verkleinert).
@@ -344,11 +358,19 @@ Seit v4.5 (Kohle und Küche).
 
 | Spiel | Titel | Datei |
 |---|---|---|
-| `mus0` | Hamburger Hafen 1880 | `musik/Hamburger_Hafen_1880.mp3` |
-| `mus1` | Dampf über den Atlantik | `musik/Dampf_u_ber_den_Atlantik.m4a` |
+| `mus0` | Hamburger Hafen 1880 | `musik/Hamburger_Hafen_1880_Remastered.mp3` |
+| `mus1` | Dampf über den Atlantik | `musik/Dampf_ueber_den_Atlantik_Remastered.mp3` |
 | `mus2` | Walzer auf dem Ozean | `musik/Walzer_auf_dem_Ozean.mp3` |
 | `mus4` | Walzer auf dem Ozean (Variante) | `musik/Walzer_auf_dem_Ozean_2.mp3` |
 | `mus3` | Ruhige Nachtfahrt | `musik/ruhige_Nachtfahrt.mp3` |
 | `mus5` | Ruhige Nachtfahrt (Variante) | `musik/ruhige_Nachtfahrt_2.mp3` |
+| `mus6` | Hafenkneipe | `musik/Hafenkneipe.mp3` |
+| `mus7` | Hafenkneipe (Variante) | `musik/Hafenkneipe_2.mp3` |
+| `mus8` | Sommer im Seebad | `musik/Sommer_im_Seebad.mp3` |
+| `mus9` | Sommer im Seebad (Variante) | `musik/Sommer_im_Seebad_2.mp3` |
+| `mus10` | Abschied der Auswanderer | `musik/Abschied_der_Auswanderer.mp3` |
+| `mus11` | Abschied der Auswanderer (Variante) | `musik/Abschied_der_Auswanderer_2.mp3` |
 
 Seit v4.4.2 liegt die Musik im Spiel mit 96 kbit/s AAC (M4A) vor, so laut wie vorher (etwa −20 LUFS). `python3 tools/musik.py` erzeugt sie aus den Originalen neu.
+
+Seit v4.6 sind `mus0` und `mus1` Remaster (Suno-Instrumentals) und ersetzen die alten Originale. `mus0` bleibt die Titelmusik auf dem Startbildschirm. Alle übrigen Stücke laufen in der Playlist in zufälliger Reihenfolge ohne direkte Wiederholung. Sommer im Seebad kommt von Mai bis September doppelt so oft, Abschied der Auswanderer läuft nach der Meldung „Auswandererwelle“ als nächstes Stück. Hafenkneipe ist mit 80 und 95 Sekunden absichtlich kürzer.

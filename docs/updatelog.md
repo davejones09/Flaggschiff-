@@ -1,6 +1,6 @@
 # Updatelog
 
-*Alle Versionen des spielbaren Prototyps · Stand 18. Oktober 2026*
+*Alle Versionen des spielbaren Prototyps · Stand 19. Oktober 2026*
 
 Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spielstände werden beim Update automatisch übernommen.
 
@@ -373,7 +373,7 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 
 - Die großen Icons werden nicht mehr bei jedem Update neu geladen.
 
-## v4.5 · Kohle und Küche · aktuell
+## v4.5 · Kohle und Küche
 
 *Kohle wird zur Stellschraube – und was an Bord gegessen wird, spricht sich herum.*
 
@@ -400,7 +400,34 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 
 - Sortierte Spalten in den Statistiken waren auf Englisch und Spanisch nicht übersetzt, ebenso einige ältere Hinweise (abgelaufene Fristen mehrerer Schiffe, verchartertes Schiff, hohe Sinkgefahr, Zinsen).
 
+## v4.6 · Zeitung, Börse und Einführung · aktuell
+
+*Die Zeitung bekommt Rubriken und einen Kurszettel, wer Geld übrig hat, kann es an der Börse anlegen – und der Berater erklärt jeden Bereich beim ersten Besuch.*
+
+**NEU**
+
+- Börse unter Kontor → Börse: Sie öffnet sich ab drei Schiffen und einem Geschäftsjahr mit Gewinn, eine Meldung in der Zeitung sagt Bescheid. 13 Werte mit erfundenen Namen: die sechs Rivalen, je zwei Zechen (Ruhr für Hamburg, Südwales für Liverpool und London), eine Werft neben Brandt und die vier Caterer (das Luxus-Restaurant ab 1905).
+- Der Kurs folgt dem Gewinn der Firma und der Stimmung am Markt, die mit der Konjunktur geht. Zechen verdienen an teurer Kohle und verlieren ab 1912 mit Ölfeuerung und Motorschiffen langsam an Wert, die Werft lebt von Aufträgen (auch Ihren eigenen), Caterer von den Fahrgästen.
+- Kaufen und Verkaufen nach Stückzahl oder Betrag, 1 % Gebühr, nur bar, keine Leerverkäufe. Große Pakete bewegen den Kurs. Das Depot zeigt Einstand, Gewinn oder Verlust und den Anteil an der Firma, jede Aktie hat eine Detailansicht mit Kursverlauf.
+- Dividende einmal im Jahr im Mai, im Schnitt 3 bis 5 % des Kurses, in schlechten Jahren keine.
+- Historische Börsenkrisen: Panik 1893, Bankenpanik 1907, Schließung der Börsen Ende Juli 1914 bis Dezember, großer Krach Oktober 1929. Dazwischen und danach kommt ein zufälliger Börsenkrach etwa alle 15 bis 20 Jahre.
+- Bergarbeiterstreik und Grubenunglück an den Zechen. Wer mehr als die Hälfte einer Zeche hält, hat eine Hauszeche: Kohleschiffe bunkern 20 % billiger, bis zur Förderung der Zeche. Streik oder Unglück bedeuten dann auch Lieferausfall. Laufende Lieferverträge bleiben. Die Detailansicht zeigt vorher, was die Hauszeche im Vormonat gespart hätte.
+- Neue Stelle Prokurist (Kontor → Personal, sobald die Börse offen ist): 700 Mark im Monat bei Tarif plus 10 % der realisierten Kursgewinne. Er verwaltet ein eigenes Depot mit dem Betrag, den Sie ihm geben, vorsichtig, ausgewogen oder riskant, und schätzt Gerüchte ein. Knapp bezahlt liegt er oft daneben, sehr gut bezahlt schlägt er den Markt leicht.
+- Zeitung mit Rubriken Alle, Eigene, Schifffahrt und Börse (am Handy in der Kontor-Übersicht, am PC rechts) und einem Kurszettel mit Kohlepreis und Ihren wichtigsten Kursen. Seenot, Unglücke und Entscheidungen werden nie von Börsenmeldungen verdrängt.
+- Mehr Meldungen über die Rivalen: neue Dampfer, Unglücke, Rekordjahre, neue Linien und Streiks. Sie bewegen den Kurs, ändern aber nichts an der Konkurrenz auf Ihren Linien.
+- Gerüchte an der Börse, deutlich als „Gerücht“ markiert. Etwa 60 % stimmen. Mit Prokurist steht „glaubwürdig“ oder „zweifelhaft“ dabei.
+- Neue Einführung: Der Grundkurs ist überarbeitet und weiter beim Spielstart abwählbar. Dazu kommen Kapitel zu Werft, Flotte, Einkauf, Personal, Markt, Zeitung und Börse beim ersten Öffnen, mit leuchtendem Messingrahmen um den passenden Knopf, Fortschrittspunkten, Zurück und „Tipps aus“. Jedes Kapitel lässt sich im Kontor neu abspielen. Am PC: Eingabetaste = Weiter, Esc = Überspringen. Alte Spielstände bekommen die Kapitel Einkauf und Börse.
+- Neue Musik: Hafenkneipe, Sommer im Seebad (von Mai bis September doppelt so oft) und Abschied der Auswanderer (nach einer Auswandererwelle als nächstes Stück), jeweils in zwei Fassungen. Die Playlist mischt jetzt zufällig ohne direkte Wiederholung.
+- 8 neue Bilder für Börse, Prokurist, Gerüchte, Dividende, Zechen, Grubenunglück und Hauszeche.
+
+**GEÄNDERT**
+
+- Hamburger Hafen 1880 und Dampf über den Atlantik sind neu abgemischt (Remaster).
+- Der zufällige „Börsenkrach“ kam bisher etwa alle drei Jahre. Jetzt kommen die vier historischen Krisen fest, dazwischen und danach seltener ein zufälliger Krach. Wer die Börse nicht nutzt, verdient dadurch im Schnitt etwas mehr als in v4.5.
+- Das Depot zählt zum Eigenkapital. Steht die Kasse am Monatsende im Minus, verkauft die Bank zuerst Aktien, bevor sie an die Schiffe geht.
+- Die Simulation prüft jetzt auch die Börse (Aktien gegen Reederei, Hauszeche, Prokurist). Alles Nähere im Konzept (docs/konzept-v4.6.md).
+
 ## Als Nächstes geplant
 
-- Restliche Musik (Hafenkneipe, Seebad-Sommer, Ostsee-Winter, Seenot, Auswanderer-Abschied, Salon, Nordlandfahrt, Mittelmeer, Schiffstaufe-Fanfare), sobald Suno Premium da ist.
+- Restliche Musik (Ostsee-Winter, Seenot, Salon, Nordlandfahrt, Mittelmeer, Schiffstaufe-Fanfare), sobald Suno Premium da ist.
 - Später: echte App-Version für App Store bzw. Desktop mit Claude Code am PC, wie im Konzept vorgesehen.

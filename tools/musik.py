@@ -17,12 +17,18 @@ import subprocess
 
 BITRATE = "96k"
 STUECKE = {  # Spiel-Schlüssel: (Datei in originale/musik/, Ziel-Lautheit in LUFS)
-    "mus0": ("Hamburger_Hafen_1880.mp3", -20.3),
-    "mus1": ("Dampf_u_ber_den_Atlantik.m4a", -21.1),
+    "mus0": ("Hamburger_Hafen_1880_Remastered.mp3", -20.3),
+    "mus1": ("Dampf_ueber_den_Atlantik_Remastered.mp3", -21.1),
     "mus2": ("Walzer_auf_dem_Ozean.mp3", -20.2),
     "mus3": ("ruhige_Nachtfahrt.mp3", -19.8),
     "mus4": ("Walzer_auf_dem_Ozean_2.mp3", -19.9),
     "mus5": ("ruhige_Nachtfahrt_2.mp3", -20.2),
+    "mus6": ("Hafenkneipe.mp3", -20.0),
+    "mus7": ("Hafenkneipe_2.mp3", -20.0),
+    "mus8": ("Sommer_im_Seebad.mp3", -20.0),
+    "mus9": ("Sommer_im_Seebad_2.mp3", -20.0),
+    "mus10": ("Abschied_der_Auswanderer.mp3", -20.2),
+    "mus11": ("Abschied_der_Auswanderer_2.mp3", -20.2),
 }
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
