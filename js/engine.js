@@ -151,7 +151,7 @@
     const d = { frist: 5 + z / 150, dock: 4 + z / 150, havarie: (8 + z / 60) * (1 + (100 - (cond == null ? 70 : cond)) / 150), maschine: 3 + z / 300, seenot: 10 + z / 50, kessel: 20 + z / 40, rumpf: 28 + z / 35, befund: 5 + z / 200 }[kind] || 7;
     return Math.max(2, Math.round(d));
   }
-  function sendToDock(s, sh, days) { sh.dockUntil = Math.max(sh.dockUntil || 0, s.t) + days; return sh.dockUntil - s.t; }
+  function sendToDock(s, sh, days) { const at = sh.v && sh.v.st === "see" ? Math.max(s.t, Math.ceil(sh.v.eta)) : s.t; sh.dockUntil = Math.max(sh.dockUntil || 0, at) + days; return sh.dockUntil - s.t; }
   const MAJOR = { kessel: { name: "Kesselerneuerung", every: 144, pct: .12, text: "Die Kessel sind nach vielen Jahren verschlissen. Ohne neue Kessel steigt die Gefahr von Havarien, und das Schiff verbraucht mehr Kohle." },
     rumpf: { name: "Rumpferneuerung", every: 240, pct: .18, text: "Platten und Spanten sind vom Rost gezeichnet. Ohne Erneuerung nutzt sich das Schiff schneller ab und wird nie wieder richtig gut." } };
   function majorCost(s, sh, k) { return Math.round(P(s, TYPES[sh.type]) * MAJOR[k].pct / 1000) * 1000; }
@@ -380,7 +380,7 @@
   function shipValue(s, sh) { const t = TYPES[sh.type]; return Math.round(P(s, t) * Math.pow(0.95, sh.age / 12) * (0.75 + 0.25 * sh.cond / 100) * s.shipIdx); }
   function fleetValue(s) { return s.ships.reduce((a, sh) => a + (sh.ready <= s.m ? shipValue(s, sh) : sh.paid || 0), 0); }
   function debt(s) { return s.loans.reduce((a, l) => a + l.out, 0); }
-  function equity(s) { return s.cash + fleetValue(s) + boValue(s) - debt(s); }
+  function equity(s) { return s.cash + fleetValue(s) + boValue(s) + bunkerValue(s) - debt(s); }
   function rating(s) {
     const assets = Math.max(1, Math.max(0, s.cash) + fleetValue(s));
     const q = (s.cash + fleetValue(s) - s.loans.filter(l => !l.founder).reduce((a, l) => a + l.out, 0)) / assets;
@@ -419,9 +419,10 @@
       stats: { pax: 0, sunk: 0, lost: 0, profitSum: 0, band: false }, last: null, over: null, nextId: 1, discount: null,
       mk: { budget: 0, ag: {}, brand: 10, hallen: false }, pm: {}, pmVer: 0, pair: {}, insMult: 1, flags: {}, day: 1, speed: 0, t: 0 };
     s.cur = newCur(s);
-    s.home = HOMES[opt.home] ? opt.home : "ham"; s.country = HOMES[s.home].country;
+    s.home = HOMES[opt.home] ? opt.home : "ham"; s.country = HOMES[s.home].country; s.diff = DIFF[opt.diff] ? opt.diff : "normal";
     migrate(s);
-    s.loans.push({ id: uid(s), label: "Gründungskredit " + HOMES[s.home].bank, out: 450000, rate: 3.5, pay: Math.round(450000 * .035 / 12), left: 240, grace: 36, founder: true });
+    const loan = diffOf(s).loan; s.cash = loan;
+    s.loans.push({ id: uid(s), label: "Gründungskredit " + HOMES[s.home].bank, out: loan, rate: 3.5, pay: Math.round(loan * .035 / 12), left: 240, grace: 36, founder: true });
     s.flags.hadFounder = true;
     if (isEmil(s.name)) s.flags.emilFirm = true;
     addListing(s, "moewe", 14 * 12); addListing(s, "seebad", 9 * 12); addListing(s, "kurier", 19 * 12);
@@ -467,6 +468,18 @@
     if (s.t == null) { let t = 0; for (let m = 0; m < s.m; m++) t += dim(m); s.t = t + s.day - 1; }
     if (s.m > 0 && !s.flags.hadFounder) s.flags.hadFounder = true;
     s.ships.forEach((sh, i) => { if (sh.repair != null) { if (sh.repair >= s.m) sh.dockUntil = s.t + 10; delete sh.repair; } if (sh.survey == null) sh.survey = s.t + 120 + (i * 337) % 1300; initShip(s, sh); });
+    // v5.0: Fahrplan, Bekohlung und Pünktlichkeit. Alte Spielstände: Schiffe fahren am nächsten Tag ab, Bunker halb voll, Schwierigkeit Normal
+    if (!s.v5) {
+      s.v5 = 1;
+      if (!DIFF[s.diff]) s.diff = "normal";
+      if (s.coalUse && s.coalUse.length) { s.coalUse = s.coalUse.map(x => Math.round(x / COAL_T)); s.coalPort = s.coalPort || {}; s.coalPort[s.home || "ham"] = s.coalUse.slice(); }
+      for (const k of s.coalK || []) if (!k.port) { k.port = s.home || "ham"; k.qty = (k.qty || 0) / COAL_T; k.pt = COAL_T * TIER[portTier(k.port)] * (k.price || 1); }
+      for (const sh of s.ships) if (sh.ready <= s.m && !sh.museum && !sh.v) { initV(s, sh, s.home, true); sh.v.mig = 1; }
+    }
+    if (!BUNK_RES[s.bunk]) s.bunk = "heim";
+    s.pause = Object.assign({}, PAUSE_DEF, s.pause || {}); s.fahrten = s.fahrten || []; s.blk = s.blk || {}; s.coalPort = s.coalPort || {};
+    if (s.exp.p == null) s.exp.p = 50;
+    for (const r of s.routes) { if (r.pk == null) r.pk = pkStart(s, r); if (r.buf == null) r.buf = 0; r.q = r.q || {}; }
     s.v = 3;
     return s;
   }
@@ -524,20 +537,29 @@
   function brandtPrice(s, type) { return Math.round(newPrice(s, type) * 1.12 / 1000) * 1000; }
   function buyNew(s, type, kind, name, brandt, opt) {
     if (!typeOpen(s, type)) return "Diesen Schiffstyp baut noch keine Werft.";
-    const eqSel = ((opt && opt.eq) || []).filter(k => FACTORY_PCT[k] && yearOf(s) >= EQUIP[k].from);
-    const t = TYPES[type], price = (brandt ? brandtPrice(s, type) : newPrice(s, type)) + eqSel.reduce((a, k) => a + factoryEqCost(s, type, k), 0), q = quote(s, price, kind);
+    opt = opt || {};
+    const eqSel = (opt.eq || []).filter(k => FACTORY_PCT[k] && yearOf(s) >= EQUIP[k].from);
+    const t = TYPES[type], O = orderInfo(s, type, brandt, opt.n || 1, eqSel), q = quote(s, O.total, kind);
     if (!q.ok) return q.reason || "Nicht genug Geld.";
+    const line = opt.line && s.routes.find(r => r.id === opt.line) && !canServe(s, type, s.routes.find(r => r.id === opt.line).a, s.routes.find(r => r.id === opt.line).b, s.routes.find(r => r.id === opt.line).cruise, s.routes.find(r => r.id === opt.line).stops) ? opt.line : null;
     s.cash -= q.now;
-    const sh = initShip(s, { id: uid(s), name: cleanName(name) || randomName(s), type, age: 0, cond: 100, line: null, laid: false, insured: true, maint: 1, ready: s.m + Math.max(2, t.build - (brandt ? 1 : 0)), paid: price, isNew: true, eq: {}, spd: brandt ? .7 : 0, brandt: !!brandt }, { fresh: true });
-    if (brandt) { const st = rivState(s, "brandt"); st.boost = Math.min(.5, st.boost + .04); }
-    if (s.bo) s.bo.ord[brandt ? "brandt" : "werft"] += price;
-    if (yearOf(s) >= 1912) sh.eq.boote = true;
-    for (const k of eqSel) sh.eq[k] = true;
-    if (t.design && s.designs && s.designs[t.design]) s.designs[t.design].built++;
-    s.ships.push(sh);
-    if (q.loan) addLoan(s, q, sh, kind === "werft" ? "Werftkredit" : "Bankkredit");
-    emilCheck(s, sh);
-    s.log.unshift({ m: s.m, head: "Neubau bestellt: „" + sh.name + "“", text: t.name + " (" + t.cls + ")" + (brandt ? " in Brandt-Bauart – 0,7 Knoten schneller. Brandt & Söhne verdient kräftig mit" : "") + ", Ablieferung " + dateStr(sh.ready) + ".", kind: "own", img: brandt ? "ev_brandtwerft" : undefined });
+    const sid = O.n > 1 ? uid(s) : null, made = [];
+    for (let i = 0; i < O.n; i++) {
+      const price = O.prices[i];
+      const sh = initShip(s, { id: uid(s), name: i === 0 ? (cleanName(name) || randomName(s)) : randomName(s, made.map(x => x.name).join(" ")), type, age: 0, cond: 100, line, laid: !line, insured: true, maint: 1, ready: O.plan[i], paid: price, isNew: true, eq: {}, spd: brandt ? .7 : 0, brandt: !!brandt }, { fresh: true });
+      if (sid) { sh.series = sid; if (i === 0) sh.seriesFirst = true; }
+      if (yearOf(s) >= 1912) sh.eq.boote = true;
+      for (const k of eqSel) sh.eq[k] = true;
+      if (t.design && s.designs && s.designs[t.design]) s.designs[t.design].built++;
+      s.ships.push(sh); made.push(sh);
+      if (q.loan) { const loan = Math.round(q.loan * price / O.total); addLoan(s, { loan, rate: q.rate, pay: Math.round(annuity(loan, q.rate, q.months)), months: q.months }, sh, kind === "werft" ? "Werftkredit" : "Bankkredit"); }
+      emilCheck(s, sh);
+    }
+    if (brandt) { const st = rivState(s, "brandt"); st.boost = Math.min(.5, st.boost + .04 * O.n); }
+    if (s.bo) s.bo.ord[brandt ? "brandt" : "werft"] += O.total;
+    const sh0 = made[0];
+    if (O.n === 1) s.log.unshift({ m: s.m, head: "Neubau bestellt: „" + sh0.name + "“", text: t.name + " (" + t.cls + ")" + (brandt ? " in Brandt-Bauart – 0,7 Knoten schneller. Brandt & Söhne verdient kräftig mit" : "") + ", Ablieferung " + dateStr(sh0.ready) + ".", kind: "own", img: brandt ? "ev_brandtwerft" : undefined });
+    else s.log.unshift({ m: s.m, head: "Serie bestellt: " + O.n + " × " + t.name, text: "Ablieferung ab " + dateStr(O.plan[0]) + ", dann " + (O.gap === 1 ? "jeden Monat" : "alle " + O.gap + " Monate") + ", das letzte Schiff im " + dateStr(O.plan[O.n - 1]) + ". Serienrabatt " + Math.round(O.disc * 100) + " %, zusammen " + fmt(O.total) + " Mark.", kind: "own", img: brandt ? "ev_brandtwerft" : "wf_buero" });
     return null;
   }
   function buyUsed(s, id, kind, name) {
@@ -746,110 +768,674 @@
     if (r.adOn) u += .3;
     return u;
   }
-  function dayTick(s) {
-    const mo = cal(s.m).mo, winter = WINTER.includes(mo), fd = 1 / dim(s.m), cur = s.cur, pid = s.pidx, st = staff(s), myEx = myExp(s), kuX = ((s.exp && s.exp.ku != null ? s.exp.ku : 50) - 50) / 50;
-    let dRev = 0, dCost = 0;
-    const add = (k, v) => { cur.cost[k] = (cur.cost[k] || 0) + v; dCost += v; };
-    cur.days += 1;
-    const odsOf = info => info.multi ? info.ods.map(o => ({ a: info.ports[o.i], b: info.ports[o.j], info: o.info, along: o.along, legs: o.legs, hops: o.j - o.i, key: o.i + "-" + o.j })) : [{ a: info.a, b: info.b, info, along: info.dist, legs: [0], hops: 1, key: "" }];
-    const odCount = {};
-    for (const r of s.routes) { const i = rInfo(s, r); if (!i) continue; for (const od of odsOf(i)) { const k = pairKey(od.a, od.b) + (i.cruise ? "c" : ""); odCount[k] = (odCount[k] || 0) + 1; } }
-    for (const r of s.routes) {
-      const info = rInfo(s, r); if (!info) continue;
-      const acc = r.cur || (r.cur = { pax: 0, cap: 0, rev: 0, cost: 0, fixed: 0, D: 0, cp: [0, 0, 0], cc: [0, 0, 0], dem: [0, 0, 0], ships: 0, rp: {} });
-      acc.rp = acc.rp || {}; acc.fixed = acc.fixed || 0;
-      const ships = s.ships.filter(sh => active(s, sh) && sh.line === r.id);
-      if (ships.length) r.used = true;
-      const capC = [0, 0, 0], kCw = [0, 0, 0], kSw = [0, 0, 0]; let capT = 0, deps = 0, spdW = 0, comW = 0, firstB = 0, seaW = 0, seaX = 0;
-      const per = ships.map(sh => {
-        const fz = fahrtF(s, sh), t = TYPES[sh.type], tr = tripsOf(s, sh, info, fz), mul = (info.cruise ? 1 : 2) * tr.trips * fd, c = t.sb.map(x => x * mul), ct = c[0] + c[1] + c[2];
-        for (let i = 0; i < 3; i++) { capC[i] += c[i]; if (c[i]) { const q = kqEff(s, sh, i); kCw[i] += c[i] * (kCostF(s, q, i) - 1); kSw[i] += c[i] * (Math.min(100, kScore(s, q, i) + (i === 0 && s.chef && s.chef.ship === sh.id ? 20 : 0)) - 50); } }
-        const cf = capFx(s, sh);
-        capT += ct; deps += tr.trips; spdW += tr.spd * (1 + FAHRT_SPD * (fz - 1)) / fz * ct; comW += (t.comfort * (0.7 + 0.3 * sh.cond / 100) + cf.com) * ct; if (cf.first) firstB = Math.max(firstB, cf.first);
-        seaW += ct * (1 / fz - 1); seaX += ct * Math.max(0, 1 / fz - 1);
-        return { sh, tr, c, ct, cf, fz };
-      });
-      const kCost = [0, 1, 2].map(o => 1 + (capC[o] ? kCw[o] / capC[o] : 0)), kSc = [0, 1, 2].map(o => 50 + (capC[o] ? kSw[o] / capC[o] : 0));
-      const seaF = 1 + (capT ? seaW / capT : 0), pen = [0, 1, 2].map(o => info.cruise ? 0 : SEA_REV * (capT ? seaX / capT : 0) * (o === 0 ? 2 : 1)), meal = info.cruise || info.dist >= 40 ? 1 : 0;
-      const nLegs = info.multi ? info.legs.length : 1, ods = odsOf(info), mainRef = info.refC;
-      const compMod = modFactor(s, r, info, "comp"), myBonusBase = ((r.b === "ny" || r.a === "ny") && s.stats.band ? .3 : 0) + mkBonus(s, r, info);
-      const spd0 = capT ? spdW / capT : 0, com = capT ? comW / capT + SVC_LV[st.service] : 0;
-      const want = ods.map(() => [0, 0, 0]), odPrice = [];
-      let Dsum = 0;
-      for (let q = 0; q < ods.length; q++) {
-        const od = ods[q], oi = od.info, w = oi.w, cs = oi.comp;
-        const D = demandNow(s, r, oi, mo) * fd / (odCount[pairKey(od.a, od.b) + (info.cruise ? "c" : "")] || 1) * (info.multi && od.hops < nLegs ? .6 : 1); Dsum += D;
-        const compDeps = compDepsOf(s, r, oi);
-        const holder = info.multi ? ((r.odRiv = r.odRiv || {})[od.key] = r.odRiv[od.key] || {}) : r;
-        const rv = rivalsOf(s, r, oi, holder).map(x => Object.assign({ k: x.k, w: x.w }, rivalStats(s, r, oi, x.k)));
-        const base = (speed, comfort, repu, c) => w.s * 4 * (speed / cs.speed - 1) + w.c * CLS_WC[c] * .5 * (comfort - 3) + w.r * (repu - 50) / 50;
-        const price = [0, 1, 2].map(o => r.price[o] * (oi.refC[o] / (mainRef[o] || oi.refC[o] || 1))); odPrice.push(price);
-        const spd = spd0 * (oi.dist / Math.max(oi.dist, od.along)) * Math.pow(.94, od.hops - 1);
+  /* ---------- Fahrplan, Bekohlung und Pünktlichkeit (v5.0) ----------
+     Jedes Schiff fährt im Umlauf: Abfahrt, Seezeit, Ankunft, Liegezeit (Abfertigung und Bekohlen), Rückfahrt.
+     Fahrgäste sammeln sich je Linie und Richtung bis zur nächsten Abfahrt, Fahrkarten werden bei der Abfahrt bezahlt.
+     Kohle kostet erst beim Bekohlen (Menge × Hafenpreis × Kohlepreis-Index). Linien mit einem Umlauf unter einem Tag
+     laufen als Tagespaket: alle Fahrten eines Tages in einem Schritt, Pünktlichkeit als Quote. */
+  const COAL_T = 15; // Mark je Tonne bei Index 100 % im Zechenhafen (so kostet die Seemeile so viel wie bis v4.6)
+  const TIER = { zeche: 1, europa: 1.06, station: 1.18, ferne: 1.4 };
+  const TIER_NAME = { zeche: "Zechenhafen", europa: "Europa", station: "Kohlestation", ferne: "Ferne" };
+  const TIER_PORTS = {
+    zeche: ["ham", "bhv", "ste", "rot", "ams", "ant", "lon", "grv", "til", "sou", "lpl", "bir", "gla", "lei", "hul"],
+    station: ["fun", "lpa", "sct", "sth", "lis", "ny", "gen", "nea", "pal", "ale", "hva", "kin", "bgi", "rig", "stp"],
+    ferne: ["rio", "bue", "kap", "sha", "kon", "hmf", "fue"] };
+  const portTier = p => TIER_PORTS.zeche.includes(p) ? "zeche" : TIER_PORTS.station.includes(p) ? "station" : TIER_PORTS.ferne.includes(p) ? "ferne" : "europa";
+  const bunkRate = p => portTier(p) === "zeche" ? 1500 : 800; // Tonnen am Tag
+  const BUNK_RES = { heim: .15, billig: .15, noetig: .08 }, BUNK_ORDER = ["heim", "billig", "noetig"];
+  const BUNK = { heim: { name: "im Heimathafen volltanken" }, billig: { name: "wo es am billigsten ist" }, noetig: { name: "immer nur das Nötige" } };
+  const BUF = [0, .05, .1, .2], BUF_NAME = ["keine", "klein", "mittel", "groß"];
+  const NOTKOHLE = 1.3, LADUNG = .06;
+  // Wetter je Seegebiet: Sturmtage je Seetag [Okt–März, Apr–Sept], Verzögerung in Tagen und Mehrverbrauch je Sturmtag
+  const STORM_MO = [9, 10, 11, 0, 1, 2], ICE_MO = [0, 1, 2], HURR_MO = [7, 8, 9], FOGCH_MO = [10, 11, 0, 1];
+  const WX = {
+    atlantic: { p: [.25, .07], eff: .5, coal: .2 }, north: { p: [.14, .04], eff: .33, coal: .15 },
+    baltic: { p: [.1, .03], eff: .33, coal: .15, ice: .08, iceEff: .5 }, balticn: { p: [.12, .03], eff: .33, coal: .15, ice: .3, iceEff: 1 },
+    channel: { p: [.06, .02], eff: .2, coal: .1 }, med: { p: [.04, .01], eff: .33, coal: .1 }, tropic: { p: [.03, .03], eff: .5, coal: .15 },
+    coast: { p: [.04, .01], eff: .15, coal: .05 } };
+  const FOG = { channel: [.12, .03], coast: [.08, .01], river: [.08, .01] }; // je Abfahrt: Kanal Nov–Feb, Küste und Fluss Okt–März
+  const CARIB = ["sth", "hva", "kin", "bgi"];
+  const BRK = .03, BRK_LV = [1.5, 1, .75, .55], BRK_MAINT = [1.4, 1, .7];
+  const IMPAT = { biz: .1, transit: .08, local: .08, gen: .05, bath: .05, ausw: .03, tour: .02 }; // Abspringen je Tag bei überfälliger Abfahrt
+  const PK_SEG = { biz: 1, transit: .8, local: .6, gen: .5, bath: .4, tour: .3, ausw: .2 }, PK_CLS = [1, .6, .25], W_PK = .35, PK_REF = .85;
+  const CMP = [.1, .06, .03], LATE_OK = .5, PK_MEM = 90;
+  const RIV_PK = { weser: .92, elbe: .78, balt: .82, kopen: .95, brandt: .9, themse: .88 };
+  const DIFF = {
+    leicht: { name: "Leicht", loan: 550000, riv: .9, delay: .5, risk: .7, zins: -.5 },
+    normal: { name: "Normal", loan: 450000, riv: 1, delay: 1, risk: 1, zins: 0 },
+    schwer: { name: "Schwer", loan: 350000, riv: 1.2, delay: 1.4, risk: 1.3, zins: 1 } };
+  const DIFF_ORDER = ["leicht", "normal", "schwer"];
+  const diffOf = s => DIFF[s.diff] || DIFF.normal;
+  const PAUSE_DEF = { late: 2, coal: true, month: false, mark: true };
+  const mod = (x, m) => ((x % m) + m) % m;
+  function poisson(s, lam) { if (lam <= 0) return 0; if (lam > 30) return Math.max(0, Math.round(lam + Math.sqrt(lam) * (rnd(s) + rnd(s) + rnd(s) - 1.5) * 2)); const L = Math.exp(-lam); let k = 0, p = 1; do { k++; p *= rnd(s); } while (p > L && k < 100); return k - 1; }
+
+  // Geometrie einer Linie: Häfen, Teilstrecken, Liegezeiten, Fahrgast-Strecken
+  let geoCache = { key: null, map: {} };
+  function lineGeo(s, r) {
+    const ck = s.m + ":" + (s.pmVer || 0); if (geoCache.key !== ck) geoCache = { key: ck, map: {} };
+    const key = (s.home || "ham") + "|" + r.a + ">" + r.b + "|" + (r.stops || []).join(",") + (r.cruise ? "|c" : "");
+    if (geoCache.map[key] !== undefined) return geoCache.map[key];
+    const info = rInfo(s, r); if (!info) return (geoCache.map[key] = null);
+    const ports = info.multi ? info.ports.slice() : [r.a, r.b], n = ports.length, legs = info.multi ? info.legs : [info];
+    const hi = ports.indexOf(s.home || "ham");
+    const ods = info.multi ? info.ods.map(o => ({ i: o.i, j: o.j, info: o.info, legs: o.legs })) : [{ i: 0, j: 1, info, legs: [0] }];
+    const meal = !!info.cruise || info.dist >= 40;
+    const g = { info, ports, n, legs, legDist: legs.map(l => l.dist), legAreas: legs.map(l => l.path.areas), homeIdx: hi >= 0 ? hi : 0, resEnd: hi === n - 1 ? n - 1 : 0,
+      stopT: .25, endLiege: Math.max(.1, (info.turn - (info.multi ? .5 * (n - 2) : 0)) / 2), ods, meal, cruise: !!r.cruise, dist: info.dist };
+    return (geoCache.map[key] = g);
+  }
+  const isEnd = (G, i) => i === 0 || i === G.n - 1;
+  const legOf = (i, d) => d > 0 ? i : i - 1;
+  function shipSpd(s, sh, fz) { const t = TYPES[sh.type]; return (t.speed + (sh.spd || 0)) * (0.85 + 0.15 * sh.cond / 100) * SPD_LV[staff(s).maschine] * capFx(s, sh).spd * fz; }
+  const legDays = (s, sh, G, k, fz) => G.legDist[k] / (shipSpd(s, sh, fz) * 24);
+  function seaDays(s, sh, G, fz) { let d = 0; for (let k = 0; k < G.legDist.length; k++) d += legDays(s, sh, G, k, fz); return d; }
+  function shipCycle(s, sh, G) { return 2 * seaDays(s, sh, G, fahrtF(s, sh)) + 2 * G.endLiege + 2 * (G.n - 2) * G.stopT; }
+  const coalCap = sh => { const t = TYPES[sh.type]; return Math.max(1, (t.range || 100) * (t.coal || .1) * .85 / COAL_T); };
+  function coalSm(s, sh, fz) {
+    const t = TYPES[sh.type], st = staff(s); if (!(t.coal > 0)) return 0;
+    return t.coal * .85 / COAL_T * fz * fz * (sh.majLate && sh.majLate.kessel ? 1.1 : 1) * COAL_LV[st.maschine] * capFx(s, sh).coal * (st.mi === 3 ? .97 : 1);
+  }
+  const legCoal = (s, sh, G, k) => G.legDist[k] * coalSm(s, sh, fahrtF(s, sh)) * (1 + LADUNG / 2);
+  // Schiffe im Fahrplan einer Linie (auch solche in der Werft: Ihre Abfahrten fallen aus oder übernimmt das Reserveschiff)
+  function lineShips(s, r) { return s.ships.filter(sh => sh.line === r.id && !sh.laid && sh.ready <= s.m && !sh.museum && sh.id !== r.res && !(sh.charter >= s.m)); }
+  const usable = (s, sh) => !inDock(s, sh) && !offDuty(s, sh) && !detained(s, sh) && !(sh.charter >= s.m) && !sh.laid && !sh.museum;
+  function lineTT(s, r, G) {
+    const ships = lineShips(s, r); let P = 0, ref = null;
+    for (const sh of ships) { const c = shipCycle(s, sh, G); if (c > P) { P = c; ref = sh; } }
+    P *= 1 + BUF[r.buf || 0];
+    const n = ships.length;
+    return { ships, P, n, H: n ? P / n : 0, ref, short: n > 0 && P < 1 };
+  }
+  // Zeitpunkte im Umlauf (ab Abfahrt in Hafen 0), zu denen ein Schiff aus Hafen i in Richtung d abfährt – für Takt und Lücken
+  function lineOffsets(s, G, P, ref) {
+    const ld = G.legDist.map((_, k) => legDays(s, ref, G, k, fahrtF(s, ref))), sea = ld.reduce((a, b) => a + b, 0);
+    const endW = Math.max(G.endLiege, (P - 2 * sea - 2 * (G.n - 2) * G.stopT) / 2), off = { "0+": 0 };
+    let t = 0;
+    for (let i = 1; i < G.n; i++) { t += ld[i - 1]; if (i < G.n - 1) { t += G.stopT; off[i + "+"] = t; } }
+    t += endW; off[(G.n - 1) + "-"] = t;
+    for (let i = G.n - 2; i >= 1; i--) { t += ld[i] + G.stopT; off[i + "-"] = t; }
+    return off;
+  }
+  const dkey = (i, d) => i + (d > 0 ? "+" : "-");
+  // nächste geplante Abfahrt eines Schiffs: Hafen, Richtung, Zeit
+  function nextPlan(G, v) {
+    if (v.st === "see") { const d = isEnd(G, v.to) ? (v.to === 0 ? 1 : -1) : v.d; return { i: v.to, d, t: v.pln }; }
+    return { i: v.i, d: v.d, t: v.pl };
+  }
+  function phaseOf(G, v, off, P) { const np = nextPlan(G, v); return mod(np.t - (off[dkey(np.i, np.d)] || 0), P); }
+  // Wartezeit am Ende so, dass jedes Schiff den Takt der Linie fährt
+  function endWait(s, sh, G, P) { return Math.max(G.endLiege, (P - 2 * seaDays(s, sh, G, fahrtF(s, sh)) - 2 * (G.n - 2) * G.stopT) / 2); }
+
+  // Ein Schiff reiht sich in den Takt seiner Linie ein (neu, nach Werft, Linienwechsel, Überführung)
+  function joinLine(s, sh, r, G, tReady, end) {
+    const v = sh.v, tt = lineTT(s, r, G);
+    v.r = r.id; v.i = end; v.d = end === 0 ? 1 : -1; v.p = G.ports[end]; v.st = "hafen"; v.rdy = Math.max(v.rdy || 0, tReady); v.res = false;
+    const others = tt.ships.filter(x => x !== sh && x.v && x.v.r === r.id && (x.v.st === "hafen" || x.v.st === "see"));
+    if (tt.short || !others.length || !(tt.P > 0)) { v.pl = tReady; return; }
+    const P = tt.P, off = lineOffsets(s, G, P, tt.ref), phs = others.map(x => phaseOf(G, x.v, off, P)).sort((a, b) => a - b);
+    const gaps = phs.map((p, k) => { const q = k + 1 < phs.length ? phs[k + 1] : phs[0] + P; return { mid: mod((p + q) / 2, P), len: q - p }; });
+    const need = 2 * .8 * P / (others.length + 1), my = off[dkey(end, v.d)] || 0;
+    let cand = gaps.filter(g => g.len >= need); if (!cand.length) cand = [gaps.slice().sort((a, b) => b.len - a.len)[0]];
+    v.pl = Math.min(...cand.map(g => tReady + mod(g.mid + my - tReady, P)));
+  }
+  // Takt neu verteilen, wenn sich die Zahl der Schiffe ändert (nur wenn die Abstände deutlich schief sind)
+  function respace(s, r) {
+    const G = lineGeo(s, r); if (!G) return; const tt = lineTT(s, r, G); if (tt.short || tt.n < 2) return;
+    const P = tt.P, off = lineOffsets(s, G, P, tt.ref);
+    const it = tt.ships.filter(x => x.v && x.v.r === r.id && (x.v.st === "hafen" || x.v.st === "see")).map(x => ({ x, ph: phaseOf(G, x.v, off, P) })).sort((a, b) => a.ph - b.ph);
+    if (it.length < 2) return;
+    let maxGap = 0; it.forEach((a, k) => { const q = k + 1 < it.length ? it[k + 1].ph : it[0].ph + P; maxGap = Math.max(maxGap, q - a.ph); });
+    if (maxGap < 1.5 * P / it.length) return;
+    it.forEach((a, k) => { let sh = mod(it[0].ph + k * P / it.length - a.ph, P); if (sh > P / 2) sh -= P; const v = a.x.v; if (v.st === "see") v.pln += sh; else v.pl += sh; });
+  }
+
+  // Bekohlung: Hafenpreis, Verträge, Hauszeche, Regeln
+  const coalPortPrice = (s, p) => COAL_T * TIER[portTier(p)] * s.coal;
+  function hzRegion(s, p) {
+    const reg = PORTS[p] && PORTS[p].reg;
+    if ((s.country || "de") === "gb") return reg === "Britische Inseln" || ["lon", "grv", "til", "dov", "por", "ryd", "ply", "har", "hul", "lei", "sou"].includes(p);
+    return reg === "Deutsche Nordsee" || reg === "Deutsche Ostsee" || ["rot", "ams", "hoe", "ant"].includes(p);
+  }
+  // effektiver Preis je Tonne in einem Hafen für ein Schiff (für die Regel „wo es am billigsten ist“)
+  function coalEff(s, sh, p) {
+    let pr = coalPortPrice(s, p);
+    for (const k of coalActive(s)) if ((k.port || s.home) === p && !(k.stop >= s.m)) pr = Math.min(pr, k.pt);
+    if (s.bo && s.bo.hz && !(s.bo.hzStop >= s.m) && coalShip(TYPES[sh.type]) && hzRegion(s, p)) pr = Math.min(pr, coalPortPrice(s, p) * (1 - BO_HZ));
+    return pr;
+  }
+  function buyCoal(s, sh, p, tons, emergency) {
+    const cur = s.cur, mkt = coalPortPrice(s, p) * (emergency ? NOTKOHLE : 1);
+    let left = tons, cost = 0;
+    if (!emergency) for (const k of coalActive(s)) {
+      if ((k.port || s.home) !== p || k.stop >= s.m || left <= 0) continue;
+      const kU = cur.kU || (cur.kU = {}), used = kU[k.id] || 0, take = Math.min(left, Math.max(0, k.qty - used));
+      if (take > 0) { cost += take * k.pt; left -= take; kU[k.id] = used + take; }
+    }
+    if (left > 0 && !emergency && s.bo && s.bo.hz && !(s.bo.hzStop >= s.m) && coalShip(TYPES[sh.type]) && hzRegion(s, p)) {
+      const capT = BO_HZ_CAP * BO[s.bo.hz].g / 12 * boGrow(s) / COAL_T, use = Math.min(left, Math.max(0, capT - (cur.hzUsed || 0)));
+      if (use > 0) { cur.hzUsed = (cur.hzUsed || 0) + use; cur.hzSave = (cur.hzSave || 0) + use * mkt * BO_HZ; cost += use * mkt * (1 - BO_HZ); left -= use; }
+    }
+    cost += left * mkt;
+    expense(s, "Bekohlung " + PORTS[p].name, cost);
+    cur.cbT = (cur.cbT || 0) + tons; cur.cbM = (cur.cbM || 0) + cost;
+    const cp = cur.cp || (cur.cp = {}); cp[p] = (cp[p] || 0) + tons;
+    const sc = sh.cur || (sh.cur = { pax: 0, cap: 0, rev: 0, cost: 0 }); sc.coal = (sc.coal || 0) + cost; sc.cost = (sc.cost || 0) + cost;
+    const r = routeOf(s, sh); if (r && r.cur) { r.cur.coal = (r.cur.coal || 0) + cost; r.cur.cost = (r.cur.cost || 0) + cost; }
+    return cost;
+  }
+  const bunkRule = (s, sh) => sh.bunk && BUNK_RES[sh.bunk] != null ? sh.bunk : BUNK_RES[s.bunk] != null ? s.bunk : "heim";
+  function cheapestIdx(s, sh, G) { let b = 0, bp = Infinity; G.ports.forEach((p, i) => { const pr = coalEff(s, sh, p); if (pr < bp - 1e-9) { bp = pr; b = i; } }); return b; }
+  // Kohle bis zum Hafen „target“ entlang des Umlaufs (mit Wenden an den Enden)
+  function coalUntil(s, sh, G, from, d, target) {
+    let i = from, dd = d, sum = 0;
+    for (let n = 0; n < 2 * G.n; n++) { const k = legOf(i, dd); sum += legCoal(s, sh, G, k); i += dd; if (isEnd(G, i)) dd = -dd; if (i === target) break; }
+    return sum;
+  }
+  // Bekohlen im Hafen: Menge nach Regel, Kosten, Dauer in Tagen
+  function bunkerAt(s, sh, G, X, d) {
+    const v = sh.v, rule = bunkRule(s, sh), cap = coalCap(sh), res = BUNK_RES[rule];
+    const next = legCoal(s, sh, G, legOf(X, d)) * (1 + res);
+    let target = next;
+    if (rule !== "noetig") { const h = rule === "heim" ? G.homeIdx : cheapestIdx(s, sh, G); target = X === h ? cap : coalUntil(s, sh, G, X, d, h) * (1 + res); }
+    target = Math.min(cap, Math.max(target, next));
+    const buy = target - v.b;
+    if (buy < .05) return 0;
+    const cost = buyCoal(s, sh, G.ports[X], buy, false);
+    v.b += buy; v.bv += cost;
+    return Math.max(1 / 12, buy / bunkRate(G.ports[X]));
+  }
+  // Wert des Bunkervorrats (zum Einkaufspreis) – zählt zum Eigenkapital
+  function bunkerValue(s) { let v = 0; for (const sh of s.ships) if (sh.v && sh.v.bv > 0) v += sh.v.bv; return v; }
+  function burnCoal(s, sh, tons) {
+    const v = sh.v, use = Math.min(v.b, Math.max(0, tons)), val = v.b > 0 ? v.bv * use / v.b : 0;
+    v.b -= use; v.bv -= val; const cur = s.cur; cur.cuT = (cur.cuT || 0) + use; cur.cuM = (cur.cuM || 0) + val;
+    return val;
+  }
+
+  // Wetter, Nebel und Pannen auf einer Teilstrecke. det = ohne Zufall (Vorschau): Erwartungswerte
+  function wxLeg(s, sh, G, k, days, mo, det) {
+    const areas = G.legAreas[k], tot = G.legDist[k] || 1, f = diffOf(s).delay * modWx(s, G), win = STORM_MO.includes(mo);
+    let extra = 0, storm = 0, coalX = 0;
+    for (const a in areas) {
+      const w = WX[a]; if (!w) continue; const dd = days * areas[a] / tot;
+      let p = w.p[win ? 0 : 1] * f;
+      if (a === "tropic" && HURR_MO.includes(mo) && G.ports.some(x => CARIB.includes(x))) p = .08 * f;
+      const n = det ? dd * p : poisson(s, dd * p); storm += n; extra += n * w.eff; coalX += n * w.coal;
+      if (w.ice && ICE_MO.includes(mo)) { const ni = det ? dd * w.ice * f : poisson(s, dd * w.ice * f); extra += ni * w.iceEff; coalX += ni * .1; }
+    }
+    let fog = 0, pf = 0;
+    for (const a in areas) if (FOG[a]) pf = Math.max(pf, FOG[a][(a === "channel" ? FOGCH_MO : STORM_MO).includes(mo) ? 0 : 1] * f);
+    fog = det ? pf * 5 / 24 : (rnd(s) < pf ? (2 + rnd(s) * 6) / 24 : 0);
+    const st = staff(s), q = Math.min(.5, BRK * (1 + 3 * Math.pow(1 - sh.cond / 100, 2)) * BRK_LV[st.maschine] * BRK_MAINT[sh.maint] * (sh.majLate && sh.majLate.kessel ? 1.5 : 1) * diffOf(s).delay);
+    const brk = det ? q * 1.25 : (rnd(s) < q ? .5 + rnd(s) * 1.5 : 0);
+    return { extra, storm, coalX, fog, brk };
+  }
+  function modWx(s, G) { let f = 1; for (const md of s.mods) if (md.key === "wx" && md.until >= s.m && (md.line === "*" || (md.area && G.legAreas.some(a => a[md.area])))) f *= md.f; return f; }
+  // erwarteter Anteil verspäteter Fahrten für ein durchschnittliches Schiff (für die Pünktlichkeit der Rivalen)
+  function wxLate(s, G, mo) {
+    let late = 0;
+    for (let k = 0; k < G.legDist.length; k++) {
+      const days = G.legDist[k] / (12 * 24), areas = G.legAreas[k], tot = G.legDist[k] || 1, win = STORM_MO.includes(mo);
+      let lam = 0; for (const a in areas) { const w = WX[a]; if (!w) continue; lam += days * areas[a] / tot * (w.p[win ? 0 : 1] + (w.ice && ICE_MO.includes(mo) ? w.ice : 0)) * Math.min(1, w.eff / LATE_OK); }
+      let pf = 0; for (const a in areas) if (FOG[a]) pf = Math.max(pf, FOG[a][(a === "channel" ? FOGCH_MO : STORM_MO).includes(mo) ? 0 : 1]);
+      late = Math.max(late, 1 - Math.exp(-lam) + pf * .3);
+    }
+    return Math.min(.8, late * diffOf(s).delay);
+  }
+  function rivalPk(s, k, G, mo) { return clamp(RIV_PK[k] - .6 * wxLate(s, G, mo), .3, .99); }
+  // Pünktlichkeit im Nutzen der Fahrgäste
+  function pkSeg(info) { let v = 0, n = 0; for (const k in PK_SEG) { const w = info.share[k] || 0; v += w * PK_SEG[k]; n += w; } return n ? v / n : .5; }
+  function pkU(s, r, info, c, pkLine, expP) { const post = Object.values(s.contracts || {}).some(x => (x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a)) ? 1.5 : 1; return W_PK * PK_CLS[c] * pkSeg(info) * post * (.6 * (pkLine - PK_REF) / .2 + .4 * (expP - 50) / 50); }
+  function pkUpdate(s, r, ok, dt) { const a = 1 - Math.exp(-Math.max(.05, dt) / PK_MEM); r.pk = (r.pk == null ? .9 : r.pk) + (ok - (r.pk == null ? .9 : r.pk)) * a; }
+
+  // Pausen und Fahrtenbuch
+  function pauseReq(s, k, text, ship) { const P = s.pause || PAUSE_DEF; if (s.sim) return; if (k === "late" ? P.late > 0 : P[k]) (s.pauseQ = s.pauseQ || []).push({ k, text, ship }); }
+  function logVoyage(s, rec) { if (s.sim) return; const F = s.fahrten || (s.fahrten = []); F.unshift(rec); if (F.length > 40) F.length = 40; }
+
+  function pkStart(s, r) { const G = lineGeo(s, r); return G ? clamp(.97 - .8 * wxLate(s, G, cal(s.m).mo), .5, .97) : .9; }
+  // Einstellungen (v5.0)
+  function setBunkRule(s, rule) { if (!BUNK_RES[rule]) return "Unbekannte Regel."; s.bunk = rule; return null; }
+  function setShipBunk(s, id, rule) { const sh = s.ships.find(x => x.id === id); if (!sh) return; if (rule && BUNK_RES[rule]) sh.bunk = rule; else delete sh.bunk; }
+  function setBuffer(s, id, lvl) { const r = s.routes.find(x => x.id === id); if (!r) return; r.buf = clamp(lvl | 0, 0, BUF.length - 1); }
+  function setCatchUp(s, id, on) { const r = s.routes.find(x => x.id === id); if (r) r.auf = !!on; }
+  function markShip(s, id, on) { const sh = s.ships.find(x => x.id === id); if (sh) { if (on) sh.mark = true; else delete sh.mark; } }
+  function setPause(s, k, v) { s.pause = Object.assign({}, PAUSE_DEF, s.pause || {}); if (k === "late") s.pause.late = clamp(+v || 0, 0, 9); else if (k in PAUSE_DEF) s.pause[k] = !!v; }
+  function setReserve(s, id, shipId) {
+    const r = s.routes.find(x => x.id === id); if (!r) return "Linie unbekannt.";
+    const old = r.res && s.ships.find(x => x.id === r.res);
+    if (!shipId) { r.res = null; if (old && old.v) { old.v.res = false; if (old.v.st === "res") { old.v.st = "hafen"; old.v.r = null; } } return null; }
+    const sh = s.ships.find(x => x.id === shipId); if (!sh) return "Schiff unbekannt.";
+    if (sh.ready > s.m) return "Das Schiff ist noch im Bau.";
+    const why = canServe(s, sh.type, r.a, r.b, r.cruise, r.stops); if (why) return why;
+    if (old && old !== sh) setReserve(s, id, null);
+    for (const x of s.routes) if (x !== r && x.res === sh.id) x.res = null;
+    sh.line = r.id; sh.laid = false; r.res = sh.id;
+    if (sh.v) { if (sh.v.st === "see") sh.v.res = true; else sh.v.r = null; }
+    return null;
+  }
+  function setDifficulty(s, d) {
+    if (!DIFF[d]) return "Unbekannter Schwierigkeitsgrad.";
+    if (s.diffSet) return "Der Schwierigkeitsgrad lässt sich nur einmal umstellen.";
+    if (d === (s.diff || "normal")) return null;
+    s.diff = d; s.diffSet = true;
+    s.log.unshift({ m: s.m, head: "Schwierigkeitsgrad: " + DIFF[d].name, text: "Ab sofort gelten Rivalen, Verspätungen, Unglücke und Zinsen für „" + DIFF[d].name + "“. Der Gründungskredit bleibt, wie er ist.", kind: "own" });
+    return null;
+  }
+  // Werft: Serien und Takt je Schiffstyp. Von jedem Typ liefert eine Werft höchstens ein Schiff je Abstand.
+  const yardGap = t => Math.max(1, Math.round((t.build || 3) / 3));
+  const yardBuild = (t, brandt) => Math.max(2, (t.build || 3) - (brandt ? 1 : 0));
+  function yardPlan(s, type, brandt, n) {
+    const t = TYPES[type], gap = yardGap(t); let last = -Infinity;
+    for (const sh of s.ships) if (sh.type === type && !!sh.brandt === !!brandt && sh.ready > s.m) last = Math.max(last, sh.ready);
+    const out = []; let m = Math.max(s.m + yardBuild(t, brandt), last + gap);
+    for (let i = 0; i < n; i++) { out.push(m); m += gap; }
+    return out;
+  }
+  const seriesDisc = (type, n) => TYPES[type] && TYPES[type].design ? 0 : Math.min(.1, .02 * Math.max(0, n - 1));
+  // Preise je Schiff einer Bestellung (eigene Entwürfe werden mit jedem Schiff billiger, sonst Serienrabatt)
+  function orderPrices(s, type, brandt, n, eqSel) {
+    const t = TYPES[type], eq = (eqSel || []).reduce((a, k) => a + factoryEqCost(s, type, k), 0), disc = seriesDisc(type, n), out = [];
+    for (let i = 0; i < n; i++) {
+      let base;
+      if (t.design && s.designs && s.designs[t.design]) { const d = s.discount && s.discount.until >= s.m ? s.discount.f : 1; base = Math.round(P(s, t) * d * (1 - Math.min(.2, .08 * (s.designs[t.design].built + i))) / 1000) * 1000; if (brandt) base = Math.round(base * 1.12 / 1000) * 1000; }
+      else base = brandt ? brandtPrice(s, type) : newPrice(s, type);
+      out.push(Math.round(base * (1 - disc) / 1000) * 1000 + eq);
+    }
+    return out;
+  }
+  function orderInfo(s, type, brandt, n, eqSel) { n = clamp(n | 0 || 1, 1, 10); const prices = orderPrices(s, type, brandt, n, eqSel), plan = yardPlan(s, type, brandt, n); return { n, prices, total: prices.reduce((a, b) => a + b, 0), plan, gap: yardGap(TYPES[type]), disc: seriesDisc(type, n) }; }
+  // Abbestellen, solange der Bau noch nicht begonnen hat (15 % Gebühr)
+  function cancelInfo(s, sh) { const t = TYPES[sh.type]; if (!sh || sh.ready <= s.m) return null; const start = sh.ready - yardBuild(t, sh.brandt); const fee = Math.round((sh.paid || 0) * .15 / 100) * 100; return { can: start > s.m, start, fee }; }
+  function cancelOrder(s, id) {
+    const sh = s.ships.find(x => x.id === id); const ci = cancelInfo(s, sh); if (!ci) return "Das Schiff ist schon abgeliefert.";
+    if (!ci.can) return "Der Bau hat schon begonnen – abbestellen geht nicht mehr.";
+    let back = (sh.paid || 0) - ci.fee; for (const l of s.loans.filter(l => l.ship === id)) back -= l.out;
+    s.loans = s.loans.filter(l => l.ship !== id); s.cash += back; s.ships = s.ships.filter(x => x !== sh);
+    { const c = caps(s).find(x => x.ship === id); if (c) s.caps = caps(s).filter(x => x !== c); }
+    s.log.unshift({ m: s.m, head: "Neubau „" + sh.name + "“ abbestellt", text: "Die Werft behält " + fmt(ci.fee) + " Mark. " + (back >= 0 ? "Zurück in die Kasse: " + fmt(back) + " Mark." : "Die Restschuld von " + fmt(-back) + " Mark wird fällig."), kind: "own", img: "wf_buero" });
+    return null;
+  }
+  // Monatswerte einer Linie
+  const newRcur = () => ({ pax: 0, cap: 0, rev: 0, cost: 0, fixed: 0, D: 0, cp: [0, 0, 0], cc: [0, 0, 0], dem: [0, 0, 0], ships: 0, rp: {}, legPax: 0, dep: 0, late: 0, arr: 0, lateA: 0, lateSum: 0, comp: 0, cancel: 0 });
+  const shipCur = sh => sh.cur || (sh.cur = { pax: 0, cap: 0, rev: 0, cost: 0 });
+  const odKey = (i, j) => i + ">" + j;
+  const mainRivalK = (s, r, info) => { const rv = rivalsOf(s, r, info); return rv.length ? rv.slice().sort((a, b) => b.w - a.w)[0].k : null; };
+  function lostToRival(s, r, G, n) { if (!(n > 0)) return; const k = mainRivalK(s, r, G.info); if (k && r.cur) r.cur.rp[k] = (r.cur.rp[k] || 0) + n; }
+
+  // Nachfrage eines Tages: Wer bei Ihnen bucht, wartet auf Ihre nächste Abfahrt in seine Richtung.
+  function demandDay(s, r, G, tt, ctx) {
+    const { mo, fd, pid, st, myEx, kuX, odCount, T0 } = ctx, info = G.info, acc = r.cur;
+    const avail = tt.ships.filter(sh => usable(s, sh) && sh.v && sh.v.r === r.id);
+    const capC = [0, 0, 0], kSw = [0, 0, 0]; let capT = 0, spdW = 0, comW = 0, firstB = 0;
+    const legsPer = tt.P > 0 ? (G.cruise ? 1 : 2) / tt.P : 0;
+    for (const sh of avail) {
+      const fz = fahrtF(s, sh), t = TYPES[sh.type], c = t.sb.map(x => x * legsPer), ct = c[0] + c[1] + c[2], cf = capFx(s, sh);
+      for (let i = 0; i < 3; i++) { capC[i] += c[i]; if (c[i]) { const q = kqEff(s, sh, i); kSw[i] += c[i] * (Math.min(100, kScore(s, q, i) + (i === 0 && s.chef && s.chef.ship === sh.id ? 20 : 0)) - 50); } }
+      capT += ct; spdW += shipSpd(s, sh, fz) * (1 + FAHRT_SPD * (fz - 1)) / fz * ct; comW += (t.comfort * (0.7 + 0.3 * sh.cond / 100) + cf.com) * ct; if (cf.first) firstB = Math.max(firstB, cf.first);
+    }
+    if (avail.length) r.used = true;
+    const kSc = [0, 1, 2].map(o => 50 + (capC[o] ? kSw[o] / capC[o] : 0)), meal = G.meal ? 1 : 0;
+    const nLegs = G.legDist.length, mainRef = info.refC, compMod = modFactor(s, r, info, "comp");
+    const myBonusBase = ((r.b === "ny" || r.a === "ny") && s.stats.band ? .3 : 0) + mkBonus(s, r, info);
+    const spd0 = capT ? spdW / capT : 0, com = capT ? comW / capT + SVC_LV[st.service] : 0;
+    const pkLine = r.pk == null ? .9 : r.pk, expP = s.exp && s.exp.p != null ? s.exp.p : 50, rf = diffOf(s).riv;
+    const q0 = r.q || (r.q = {}), first = !r.qi && !tt.short && tt.n > 0;
+    let Dsum = 0;
+    for (const od of G.ods) {
+      const oi = od.info, w = oi.w, cs = oi.comp, a = G.ports[od.i], b = G.ports[od.j], hops = od.j - od.i;
+      let along = 0; for (const k of od.legs) along += G.legDist[k];
+      const D = demandNow(s, r, oi, mo) * fd / (odCount[pairKey(a, b) + (G.cruise ? "c" : "")] || 1) * (info.multi && hops < nLegs ? .6 : 1); Dsum += D;
+      const compDeps = compDepsOf(s, r, oi);
+      const holder = info.multi ? ((r.odRiv = r.odRiv || {})[od.i + "-" + od.j] = r.odRiv[od.i + "-" + od.j] || {}) : r;
+      const rv = rivalsOf(s, r, oi, holder).map(x => Object.assign({ k: x.k, w: x.w }, rivalStats(s, r, oi, x.k)));
+      const base = (speed, comfort, repu, c) => w.s * 4 * (speed / cs.speed - 1) + w.c * CLS_WC[c] * .5 * (comfort - 3) + w.r * (repu - 50) / 50;
+      const price = [0, 1, 2].map(o => r.price[o] * (oi.refC[o] / (mainRef[o] || oi.refC[o] || 1)));
+      const spd = spd0 * (oi.dist / Math.max(oi.dist, along)) * Math.pow(.94, hops - 1);
+      const want = [0, 0, 0];
+      for (let c = 0; c < 3; c++) {
+        const Dc = D * oi.mix[c]; if (Dc <= 0) continue;
+        acc.dem[c] += Dc;
+        const ccBase = compDeps * oi.compSeats * (G.cruise ? 1 : 2) * fd * oi.mix[c];
+        let them = 0; const themK = [];
+        for (const x of rv) { const rp = rivalPk(s, x.k, G, mo), u = w.p * CLS_WP[c] * (1 - x.pf * compMod) + base(x.spd, x.com, x.rep, c) + x.eu + pkU(s, r, oi, c, rp, clamp(50 + (RIV_PK[x.k] - PK_REF) * 300, 5, 95)); const v = ccBase * x.w * x.capF * rf * Math.exp(u); them += v; themK.push([x.k, v]); }
+        let my = 0, bo = -1;
+        if (capT > 0) {
+          const bonus = myBonusBase + expU(oi, myEx) + pkU(s, r, oi, c, pkLine, expP);
+          let best = -Infinity;
+          for (let o = 0; o < 3; o++) { if (capC[o] <= 0) continue; const u = w.p * CLS_WP[c] * (1 - price[o] / (oi.refC[c] * pid)) + base(spd, com, s.rep, c) - (o > c ? (.7 + 1.0 * CLS_T(oi.dist)) * (o - c) : 0) + bonus + (c === 0 ? firstB : 0) + (meal ? KU_W * KU_CLS[c] * (.5 * (kSc[o] - 50) / 50 + .5 * kuX) : 0); if (u > best) { best = u; bo = o; } }
+          if (bo >= 0) my = capC[bo] * Math.exp(best);
+        }
+        const den = my + them + KAPPA * Dc;
+        if (bo >= 0) want[bo] += Dc * my / den;
+        for (const [k, v] of themK) acc.rp[k] = (acc.rp[k] || 0) + Dc * v / den;
+      }
+      // in die Warteschlangen je Richtung; ist die nächste Abfahrt überfällig, buchen Neue lieber woanders und Wartende springen ab
+      const dirs = G.cruise ? [["c", 0, 1, 1]] : [[odKey(od.i, od.j), od.i, 1, .5], [odKey(od.j, od.i), od.j, -1, .5]];
+      let imp = 0, iw = 0; for (const k in IMPAT) { const x = oi.share[k] || 0; imp += x * IMPAT[k]; iw += x; } imp = iw ? imp / iw : .05;
+      for (const [key, from, d, part] of dirs) {
+        const pool = q0[key] || (q0[key] = [0, 0, 0]);
+        const nx = r.nx ? r.nx[dkey(from, d)] : undefined, over = !tt.short && (nx == null || T0 > nx + LATE_OK);
+        let lost = 0;
         for (let c = 0; c < 3; c++) {
-          const Dc = D * oi.mix[c]; if (Dc <= 0) continue;
-          acc.dem[c] += Dc;
-          const ccBase = compDeps * oi.compSeats * (info.cruise ? 1 : 2) * fd * oi.mix[c];
-          let them = 0; const themK = [];
-          for (const x of rv) { const u = w.p * CLS_WP[c] * (1 - x.pf * compMod) + base(x.spd, x.com, x.rep, c) + x.eu; const v = ccBase * x.w * x.capF * Math.exp(u); them += v; themK.push([x.k, v]); }
-          let my = 0, bo = -1;
-          if (capT > 0) {
-            const bonus = myBonusBase + expU(oi, myEx);
-            let best = -Infinity;
-            for (let o = 0; o < 3; o++) { if (capC[o] <= 0) continue; const u = w.p * CLS_WP[c] * (1 - price[o] / (oi.refC[c] * pid)) + base(spd, com, s.rep, c) - (o > c ? (.7 + 1.0 * CLS_T(oi.dist)) * (o - c) : 0) + bonus + (c === 0 ? firstB : 0) + (meal ? KU_W * KU_CLS[c] * (.5 * (kSc[o] - 50) / 50 + .5 * kuX) : 0); if (u > best) { best = u; bo = o; } }
-            if (bo >= 0) my = capC[bo] * Math.exp(best);
-          }
-          const den = my + them + KAPPA * Dc;
-          if (bo >= 0) want[q][bo] += Dc * my / den;
-          for (const [k, v] of themK) acc.rp[k] = (acc.rp[k] || 0) + Dc * v / den;
+          let add = want[c] * part;
+          if (over) { const l = pool[c] * (1 - Math.exp(-imp * diffOf(s).delay)) + add * .5; pool[c] -= pool[c] * (1 - Math.exp(-imp * diffOf(s).delay)); add *= .5; lost += l; }
+          if (first) pool[c] += add * Math.max(0, tt.H / 2 - 1);
+          pool[c] += add;
+        }
+        lostToRival(s, r, G, lost);
+      }
+    }
+    if (first) r.qi = 1;
+    acc.D += Dsum; acc.ships = Math.max(acc.ships, avail.length);
+    return { capC, kSc };
+  }
+
+  // Fahrpreis, Verpflegung je Seetag und Küchenwerte einer Fahrgast-Strecke für ein Schiff
+  function fareOf(s, r, G, odi, odj, o) { const oi = odInfo(G, odi, odj); return r.price[o] * (oi.refC[o] / (G.info.refC[o] || oi.refC[o] || 1)); }
+  function odInfo(G, i, j) { const a = Math.min(i, j), b = Math.max(i, j); const od = G.ods.find(x => x.i === a && x.j === b); return od ? od.info : G.info; }
+  function caterDay(s, sh, G, odi, odj, o) {
+    if (!G.meal) return 0;
+    const oi = odInfo(G, odi, odj), a = Math.min(odi, odj), b = Math.max(odi, odj);
+    let along = 0; for (let k = a; k < b; k++) along += G.legDist[k];
+    const days = G.cruise ? 2 * legDays(s, sh, G, 0, 1) + 2 * G.endLiege : Math.max(.05, along / (shipSpd(s, sh, 1) * 24));
+    return oi.caterC[o] * kCostF(s, kqEff(s, sh, o), o) * s.wage / days;
+  }
+  // Einsteigen bei der Abfahrt aus Hafen X in Richtung d: Wer Platz findet, fährt mit, der Rest fährt mit der Konkurrenz
+  function boardAt(s, sh, r, G, X, d, t, fzP) {
+    const v = sh.v, T = TYPES[sh.type], acc = r.cur, cur = s.cur, sc = shipCur(sh), q0 = r.q || (r.q = {});
+    const onb = [0, 0, 0]; for (const g of v.pax) for (let c = 0; c < 3; c++) onb[c] += g.n[c];
+    const free = T.sb.map((x, c) => Math.max(0, x - onb[c]));
+    const keys = G.cruise ? (X === 0 ? [["c", 0]] : []) : [];
+    if (!G.cruise) for (let j = X + d; j >= 0 && j < G.n; j += d) keys.push([odKey(X, j), j]);
+    const tot = [0, 0, 0]; for (const [k] of keys) { const p = q0[k]; if (p) for (let c = 0; c < 3; c++) tot[c] += p[c]; }
+    const f = tot.map((x, c) => x > free[c] ? free[c] / x : 1), pen = [0, 1, 2].map(o => G.cruise ? 0 : SEA_REV * Math.max(0, 1 / fzP - 1) * (o === 0 ? 2 : 1));
+    let rev = 0, n = 0, lost = 0;
+    const kSc = [0, 1, 2].map(o => Math.min(100, kScore(s, kqEff(s, sh, o), o) + (o === 0 && s.chef && s.chef.ship === sh.id ? 20 : 0)));
+    for (const [k, j] of keys) {
+      const p = q0[k]; if (!p) continue;
+      const g = { j: G.cruise ? 0 : j, n: [0, 0, 0], f: [0, 0, 0], cr: [0, 0, 0], t0: t, cruise: G.cruise ? 1 : 0 };
+      for (let c = 0; c < 3; c++) {
+        const nb = p[c] * f[c]; lost += p[c] - nb; p[c] = 0; if (!(nb > 0)) continue;
+        const fare = fareOf(s, r, G, X, G.cruise ? 1 : j, c) * (1 - pen[c]);
+        g.n[c] = nb; g.f[c] = fare; g.cr[c] = caterDay(s, sh, G, X, G.cruise ? 1 : j, c);
+        rev += nb * fare; n += nb; acc.cp[c] += nb;
+        if (G.meal && g.cr[c] > 0) { cur.kuS = (cur.kuS || 0) + nb * KU_CLS[c] * (kSc[c] - 50); cur.kuW = (cur.kuW || 0) + nb * KU_CLS[c]; if (kSc[c] >= 75) cur.fine = true; }
+      }
+      if (g.n[0] + g.n[1] + g.n[2] > 0) v.pax.push(g);
+    }
+    lostToRival(s, r, G, lost);
+    for (let c = 0; c < 3; c++) acc.cc[c] += T.sb[c];
+    if (rev) { s.cash += rev; cur.rev += rev; acc.rev += rev; sc.rev = (sc.rev || 0) + rev; }
+    let aboardNow = 0; for (const g of v.pax) aboardNow += g.n[0] + g.n[1] + g.n[2];
+    acc.pax += n; acc.cap += T.seats; acc.legPax += aboardNow; sc.pax += n; sc.cap += T.seats; s.stats.pax += n;
+    return { rev, n, aboard: aboardNow };
+  }
+  // Aussteigen: Verpflegung für die tatsächlichen Tage an Bord, Entschädigung ab zwei Tagen Verspätung
+  function alightAt(s, sh, r, G, Y, t, lateA) {
+    const v = sh.v, acc = r.cur, sc = shipCur(sh); let cater = 0, comp = 0, n = 0;
+    v.pax = v.pax.filter(g => {
+      if (g.j !== Y || (g.cruise && Y !== 0)) return true;
+      const days = Math.max(0, t - g.t0);
+      for (let c = 0; c < 3; c++) { if (!g.n[c]) continue; cater += g.n[c] * g.cr[c] * days; n += g.n[c]; if (lateA > 2) comp += g.n[c] * g.f[c] * Math.min(.5, (lateA - 2) * CMP[c]); }
+      return false;
+    });
+    if (cater > 0) { expense(s, "Verpflegung", cater); acc.cost += cater; sc.cost = (sc.cost || 0) + cater; sc.cater = (sc.cater || 0) + cater; sc.catC = sc.catC || [0, 0, 0]; }
+    if (comp > 0) { expense(s, "Entschädigungen", comp); acc.comp += comp; acc.cost += comp; sc.cost = (sc.cost || 0) + comp; }
+    return { cater, comp, n };
+  }
+  function legFee(s, sh, G, k) {
+    const T = TYPES[sh.type], size = Math.max(.15, T.seats / 500), d = G.legDist[k], nL = G.legDist.length;
+    return ((G.info.fee * Math.min(1, .25 + d / 40) + 60 * Math.min(1, d / 100) * Math.sqrt(s.sizeM || 1)) + (nL > 1 ? 120 * (nL - 1) / nL : 0)) * size * s.feeMult * s.wage;
+  }
+  function legFreight(s, sh, G, k) {
+    const T = TYPES[sh.type], d = G.legDist[k], pid = s.pidx; let x = 0;
+    if (T.trajekt && G.info.rail) x += 250 * pid;
+    if (T.cargo && !G.cruise) x += T.cargo * 1.9 * d * pid * s.konj;
+    if (T.cars && !G.cruise && G.dist < 700) x += T.cars * (60 + 1.5 * d) * pid * s.konj;
+    return x;
+  }
+  function postServed(s, r, sh) {
+    for (const k of Object.keys(s.contracts || {})) { const c = s.contracts[k]; if (((r.a === c.a && r.b === c.b) || (r.a === c.b && r.b === c.a)) && TYPES[sh.type].speed * fahrtF(s, sh) >= (c.minSpeed || 0)) c.served = (c.served || 0) + 1; }
+  }
+
+  // Abfahrt aus dem Hafen v.i in Richtung v.d
+  function depart(s, sh, r, G, tt, t, ctx) {
+    const v = sh.v, X = v.i, d = v.d, to = X + d, k = legOf(X, d), acc = r.cur, sc = shipCur(sh);
+    const fzP = fahrtF(s, sh), late = Math.max(0, t - v.pl), catchUp = r.auf && late > .25 && fzP < FAHRT.voll.f, fz = catchUp ? FAHRT.voll.f : fzP;
+    const B = boardAt(s, sh, r, G, X, d, t, fzP);
+    const fee = legFee(s, sh, G, k); expense(s, "Hafengebühren", fee); acc.cost += fee; sc.cost = (sc.cost || 0) + fee;
+    const fr = legFreight(s, sh, G, k); if (fr) { s.cash += fr; s.cur.rev += fr; s.cur.freight = (s.cur.freight || 0) + fr; acc.rev += fr; sc.rev = (sc.rev || 0) + fr; }
+    // Fahrzeit: geplant mit der eigenen Fahrstufe, tatsächlich mit Wetter, Nebel und Pannen
+    const pd = legDays(s, sh, G, k, fzP), ad0 = legDays(s, sh, G, k, fz), wx = wxLeg(s, sh, G, k, ad0, ctx.mo, !!s.sim);
+    let ad = ad0 + wx.extra + wx.fog + wx.brk;
+    // Kohle für die Strecke: Wetter frisst mit, ein voller Bunker wiegt
+    const daily = G.legDist[k] * coalSm(s, sh, fz) / Math.max(.05, ad0);
+    let burn = G.legDist[k] * coalSm(s, sh, fz) * (1 + LADUNG * Math.min(1, v.b / coalCap(sh))) + wx.coalX * daily;
+    let short = 0;
+    if (burn > v.b + .01) { short = burn - v.b; const slow = .5 + short / Math.max(.01, burn) * ad0 * 1.5; ad += slow; burn = v.b; v.kn = { short, slow }; }
+    v.burn = burn; v.st = "see"; v.toP = G.ports[to]; v.t0 = t; v.eta = t + ad; v.pa = v.pl + pd; v.to = to; v.k = k; v.fzA = fz; v.late = late;
+    v.pln = v.pl + pd + (isEnd(G, to) ? endWait(s, sh, G, tt.P) : G.stopT);
+    v.lg = { from: X, rev: B.rev + fr, n: B.n, cap: TYPES[sh.type].seats, fee, aboard: B.aboard };
+    acc.dep += 1; if (late > LATE_OK) acc.late += 1; sc.dep = (sc.dep || 0) + 1;
+    postServed(s, r, sh);
+    if (short > 0) coalShort(s, sh, r, G);
+  }
+  // Ankunft im Hafen v.to
+  function arrive(s, sh, r, G, tt, t, ctx) {
+    const v = sh.v, Y = v.to, lateA = t - v.pa, acc = r.cur;
+    const coalV = burnCoal(s, sh, v.burn || 0);
+    v.st = "hafen"; v.i = Y; v.p = G.ports[Y]; v.burn = 0;
+    const A = alightAt(s, sh, r, G, Y, t, lateA);
+    if (isEnd(G, Y)) v.d = Y === 0 ? 1 : -1;
+    acc.arr += 1; if (lateA > LATE_OK) acc.lateA += 1; acc.lateSum += Math.max(0, lateA);
+    pkUpdate(s, r, lateA <= LATE_OK ? 1 : 0, tt.H > 0 ? tt.H / (G.cruise ? 1 : 2) : 1);
+    const lg = v.lg || {};
+    logVoyage(s, { t, sh: sh.id, nm: sh.name, r: r.id, a: G.ports[lg.from != null ? lg.from : Y], b: G.ports[Y], n: Math.round(lg.n || 0), aboard: Math.round(lg.aboard || 0), cap: lg.cap || TYPES[sh.type].seats,
+      rev: Math.round(lg.rev || 0), late: Math.round(Math.max(0, lateA) * 10) / 10, res: Math.round((lg.rev || 0) - (lg.fee || 0) - coalV - A.cater - A.comp) });
+    if (!s.sim) {
+      if (lateA >= 3 && (r.newsM == null || r.newsM < s.m)) { r.newsM = s.m; s.mk.brand = clamp(s.mk.brand - 1, 0, 100); up(s, "rep", -.5);
+        s.log.unshift({ m: s.m, head: "Große Verspätung: „" + sh.name + "“", text: "Die „" + sh.name + "“ erreicht " + PORTS[G.ports[Y]].name + " mit " + fmtD(lateA) + " Verspätung. Die Zeitungen berichten, die Fahrgäste schimpfen.", kind: "bad", img: "ev_verspaetung" }); }
+      if (A.comp >= 2000 * (s.pidx || 1) && (s.compM == null || s.compM < s.m)) { s.compM = s.m; s.log.unshift({ m: s.m, head: "Entschädigung für die Fahrgäste der „" + sh.name + "“", text: fmtD(lateA) + " Verspätung: Die Reederei zahlt " + fmt(A.comp) + " Mark Entschädigung.", kind: "bad", img: "ev_entschaedigung" }); }
+      if (sh.mark) pauseReq(s, "mark", "Die „" + sh.name + "“ ist in " + PORTS[G.ports[Y]].name + " angekommen.", sh.id);
+      const P = s.pause || PAUSE_DEF; if (P.late > 0 && lateA >= P.late) pauseReq(s, "late", "Die „" + sh.name + "“ kommt mit " + fmtD(lateA) + " Verspätung in " + PORTS[G.ports[Y]].name + " an.", sh.id);
+    }
+    v.pl = v.pln;
+    if (v.res) { toReserve(s, sh, r, G, t); return; }
+    const bt = bunkerAt(s, sh, G, Y, v.d), handle = isEnd(G, Y) ? G.endLiege * .4 : G.stopT * .5;
+    v.rdy = t + Math.max(handle, bt);
+  }
+  const fmtD = d => { const x = Math.round(d * 10) / 10; return (x === 1 ? "1 Tag" : String(x).replace(".", ",") + " Tage"); };
+
+  // Kohle reicht nicht für die Strecke (Sturm hat die Reserve gefressen)
+  function coalShort(s, sh, r, G) {
+    const v = sh.v, kn = v.kn; if (!kn || s.sim) return;
+    pauseReq(s, "coal", "Auf der „" + sh.name + "“ wird die Kohle knapp.", sh.id);
+    const st = staff(s);
+    if (st.mi >= 0) { // der Maschineninspektor entscheidet nach Regel: nachbunkern, wenn es mehr als einen Tag spart
+      const pick = kn.slow > 1.2 ? 1 : 0; coalShortResolve(s, sh, pick);
+      s.log.unshift({ m: s.m, head: "Kohle knapp auf der „" + sh.name + "“", text: "Ihr Maschineninspektor " + (pick ? "lässt den nächsten Hafen anlaufen und teuer nachbunkern." : "lässt langsam weiterfahren."), kind: "own", img: "ev_kohle_knapp" });
+      return;
+    }
+    if (!s.pending.some(p => p.id === "kohleknapp" && p.ship === sh.id)) s.pending.unshift({ id: "kohleknapp", day: s.day, ship: sh.id, img: "ev_kohle_knapp", head: "Kohle wird knapp auf der „" + sh.name + "“",
+      text: "Schwere See hat mehr Kohle gekostet als geplant. Der Chief meldet: Bis " + PORTS[G.ports[v.to]].name + " reicht der Vorrat nur bei langsamer Fahrt." });
+  }
+  function coalShortResolve(s, sh, idx) {
+    const v = sh && sh.v, kn = v && v.kn; if (!kn || v.st !== "see") return "";
+    v.kn = null;
+    if (idx === 1) { const G = lineGeo(s, routeOf(s, sh) || {}); const p = G ? G.ports[v.to] : s.home; const cost = buyCoal(s, sh, p, kn.short, true); v.b += kn.short; v.bv += cost; v.burn += kn.short; v.eta -= Math.max(0, kn.slow - .6); return "Nachbunkern kostet " + fmt(cost) + " Mark, die Verspätung wird kürzer."; }
+    if (idx === 2) { v.eta -= Math.max(0, kn.slow - .25); sh.cond = Math.max(5, sh.cond - 4); const hit = s.expHit || (s.expHit = { si: 0, k: 0 }); hit.k = (hit.k || 0) + 3; return "Holz und Mobiliar halten die Kessel unter Dampf. Der Komfort leidet."; }
+    return "Das Schiff fährt mit halber Kraft weiter.";
+  }
+  // Reserveschiff: wartet am Heimatende der Linie und übernimmt eine Abfahrt, wenn ein Schiff ausfällt oder stark verspätet ist
+  function toReserve(s, sh, r, G, t) {
+    const v = sh.v; v.res = false;
+    if (r.res !== sh.id) return;
+    if (v.i !== G.resEnd) { const d = coalUntil(s, sh, G, v.i, v.d, G.resEnd); const days = Math.ceil(G.dist / (shipSpd(s, sh, 1) * 24)); burnCoal(s, sh, d); sh.offUntil = Math.max(sh.offUntil || 0, Math.ceil(t) + days); v.i = G.resEnd; v.p = G.ports[G.resEnd]; }
+    v.st = "res"; v.d = G.resEnd === 0 ? 1 : -1; v.rdy = t;
+  }
+  function reserveCheck(s, r, G, tt, T0, T1) {
+    const rs = r.res && s.ships.find(x => x.id === r.res); if (!rs || !rs.v) return;
+    if (rs.v.st !== "res" || !usable(s, rs) || rs.line !== r.id) return;
+    const thr = Math.max(1, tt.H / 4), e = G.resEnd, dE = e === 0 ? 1 : -1;
+    for (const sh of tt.ships) {
+      const v = sh.v; if (!v || v.r !== r.id || v.res) continue;
+      const np = nextPlan(G, v); if (np.i !== e || np.d !== dE || np.t >= T1) continue;
+      const ok = usable(s, sh), te = !ok ? Infinity : v.st === "see" ? v.eta + G.endLiege * .4 : Math.max(v.pl, v.rdy || 0, (s.blk && s.blk[v.p]) || 0);
+      if (te - np.t < thr) continue;
+      // Rollen tauschen
+      const rv = rs.v; rv.r = r.id; rv.st = "hafen"; rv.i = e; rv.d = dE; rv.p = G.ports[e]; rv.pl = np.t; rv.res = false;
+      if (rv.b < legCoal(s, rs, G, legOf(e, dE)) * 1.15) { const bt = bunkerAt(s, rs, G, e, dE); rv.rdy = Math.max(T0, T0 + bt * .5); } else rv.rdy = T0;
+      v.res = true; r.res = sh.id;
+      if (v.st === "hafen" && v.i === e && ok) { v.st = "res"; }
+      if (!s.sim) s.log.unshift({ m: s.m, head: "Reserveschiff „" + rs.name + "“ springt ein", text: "Die „" + sh.name + "“ " + (ok ? "ist zu spät dran" : "fällt aus") + ". Die „" + rs.name + "“ übernimmt ihre Abfahrt" + (G.info ? " auf " + G.info.name : "") + ".", kind: "own", img: "ship_" + rs.type });
+      return;
+    }
+  }
+
+  // Tagespaket für kurze Linien (Umlauf unter einem Tag): alle Fahrten des Tages in einem Schritt
+  function shortDay(s, r, G, tt, ctx) {
+    const acc = r.cur, mo = ctx.mo, f = diffOf(s).delay, det = !!s.sim;
+    const ships = tt.ships.filter(sh => usable(s, sh) && sh.v && sh.v.r === r.id), q0 = r.q || (r.q = {});
+    if (!ships.length) { for (const k in q0) { lostToRival(s, r, G, q0[k][0] + q0[k][1] + q0[k][2]); q0[k] = [0, 0, 0]; } return; }
+    // Wetter, Nebel und Pannen des Tages
+    let late = 0, cancel = 0;
+    const areas = {}; for (const A of G.legAreas) for (const a in A) areas[a] = (areas[a] || 0) + A[a];
+    let pf = 0, ps = 0, top = null; for (const a in areas) { if (FOG[a]) pf = Math.max(pf, FOG[a][(a === "channel" ? FOGCH_MO : STORM_MO).includes(mo) ? 0 : 1] * f); if (WX[a] && (!top || areas[a] > areas[top])) top = a; }
+    if (top) ps = (WX[top].p[STORM_MO.includes(mo) ? 0 : 1] + (WX[top].ice && ICE_MO.includes(mo) ? WX[top].ice : 0)) * f;
+    if (det) { late += pf * .55 + ps * .35; cancel += pf * .12 + ps * .25; }
+    else { if (rnd(s) < pf) { late += .3 + rnd(s) * .5; cancel += rnd(s) * .25; } if (rnd(s) < ps) { late += .2 + rnd(s) * .3; cancel += .1 + rnd(s) * .3; } }
+    const st = staff(s); let qb = 0; for (const sh of ships) qb += Math.min(.5, BRK * (1 + 3 * Math.pow(1 - sh.cond / 100, 2)) * BRK_LV[st.maschine] * BRK_MAINT[sh.maint] * f); qb /= ships.length;
+    late += det ? qb : qb * (.5 + rnd(s));
+    const rs = r.res && s.ships.find(x => x.id === r.res); if (rs && usable(s, rs)) { late *= .3; cancel *= .3; }
+    if (G.ports.some(p => s.blk && s.blk[p] > ctx.T0)) cancel = 1;
+    cancel = clamp(cancel, 0, 1); late = clamp(late, 0, 1 - cancel);
+    pkUpdate(s, r, 1 - late - cancel, 1);
+    // Fahrten: jedes Schiff fährt den Takt der Linie; Platz je Teilstrecke und Richtung begrenzt
+    const nd = 1 / tt.P * (1 - cancel), capS = ships.map(sh => TYPES[sh.type].sb.map(x => x * nd)), cap = [0, 1, 2].map(c => capS.reduce((a, x) => a + x[c], 0));
+    const pen = [0, 1, 2].map(o => SEA_REV * (ships.reduce((a, sh) => a + Math.max(0, 1 / fahrtF(s, sh) - 1), 0) / ships.length) * (o === 0 ? 2 : 1));
+    let rev = 0, n = 0, cater = 0, legPax = 0;
+    for (const d of [1, -1]) {
+      const keys = []; for (const od of G.ods) keys.push(d > 0 ? [odKey(od.i, od.j), od] : [odKey(od.j, od.i), od]);
+      const load = Array.from({ length: G.legDist.length }, () => [0, 0, 0]);
+      for (const [k, od] of keys) { const p = q0[k]; if (!p) continue; for (const L of od.legs) for (let c = 0; c < 3; c++) load[L][c] += p[c]; }
+      for (const [k, od] of keys) {
+        const p = q0[k]; if (!p) continue; const oi = od.info, a = d > 0 ? od.i : od.j, b = d > 0 ? od.j : od.i;
+        for (let c = 0; c < 3; c++) {
+          const fac = Math.min(1, ...od.legs.map(L => load[L][c] > cap[c] ? cap[c] / load[L][c] : 1)), sv = p[c] * fac;
+          lostToRival(s, r, G, p[c] - sv); p[c] = 0; if (!(sv > 0)) continue;
+          rev += sv * fareOf(s, r, G, a, b, c) * (1 - pen[c]); n += sv; acc.cp[c] += sv; legPax += sv * od.legs.length;
+          if (G.meal) { const cc = sv * oi.caterC[c] * kCostF(s, kqEff(s, ships[0], c), c) * s.wage; cater += cc; }
         }
       }
-      // Platz auf jeder Teilstrecke begrenzt die Buchungen
-      const fac = Array.from({ length: nLegs }, () => [1, 1, 1]);
-      for (let L = 0; L < nLegs; L++) for (let o = 0; o < 3; o++) { let load = 0; for (let q = 0; q < ods.length; q++) if (ods[q].legs.includes(L)) load += want[q][o]; fac[L][o] = load > capC[o] ? capC[o] / load : 1; }
-      const served = [0, 0, 0], catC = [0, 0, 0]; let pax = 0, rev = 0, cater = 0, legPax = 0;
-      for (let q = 0; q < ods.length; q++) for (let o = 0; o < 3; o++) {
-        const f = Math.min(...ods[q].legs.map(L => fac[L][o])), sv = want[q][o] * f; if (!sv) continue;
-        const cc = sv * ods[q].info.caterC[o] * kCost[o];
-        served[o] += sv; pax += sv; rev += sv * odPrice[q][o] * (1 - pen[o]); cater += cc; catC[o] += cc; legPax += sv * ods[q].legs.length;
-        if (meal && cc > 0) { cur.kuS = (cur.kuS || 0) + sv * KU_CLS[o] * (kSc[o] - 50); cur.kuW = (cur.kuW || 0) + sv * KU_CLS[o]; if (kSc[o] >= 75) cur.fine = true; }
-      }
-      cater *= s.wage * seaF; for (let o = 0; o < 3; o++) catC[o] *= s.wage * seaF;
-      let cost = 0;
-      if (cater) { add("Verpflegung", cater); cost += cater; }
-      for (const p of per) {
-        const t = TYPES[p.sh.type], size = Math.max(.15, t.seats / 500);
-        const coal = coalPrice(s, cur, t.coal * .85 * 2 * info.dist * p.tr.trips * fd * s.coal * (p.sh.majLate && p.sh.majLate.kessel ? 1.1 : 1) * COAL_LV[st.maschine] * p.cf.coal * p.fz * p.fz * (st.mi === 3 ? .97 : 1), t);
-        const fees = ((info.fee * Math.min(1, .25 + info.dist / nLegs / 40) + 60 * Math.min(1, info.dist / nLegs / 100) * Math.sqrt(s.sizeM || 1)) * 2 * nLegs + 120 * 2 * (nLegs - 1)) * p.tr.trips * fd * size * s.feeMult * s.wage;
-        let shipRev = 0;
-        if (t.trajekt && info.rail) { const x = 250 * pid * 2 * p.tr.trips * fd; rev += x; shipRev += x; }
-        if (t.cargo && !info.cruise) { const fr = t.cargo * 1.9 * info.dist * pid * s.konj * 2 * p.tr.trips * fd; rev += fr; shipRev += fr; cur.freight = (cur.freight || 0) + fr; }
-        if (t.cars && !info.cruise && info.dist < 700) { const cr = t.cars * (60 + 1.5 * info.dist) * pid * s.konj * 2 * p.tr.trips * fd; rev += cr; shipRev += cr; cur.freight = (cur.freight || 0) + cr; }
-        add("Kohle", coal); add("Hafengebühren", fees); cost += coal + fees;
-        const share = capT ? p.ct / capT : 0, sp = pax * share;
-        let tick = 0; for (let q = 0; q < ods.length; q++) for (let o = 0; o < 3; o++) if (capC[o] > 0) { const f = Math.min(...ods[q].legs.map(L => fac[L][o])); tick += want[q][o] * f * odPrice[q][o] * p.c[o] / capC[o] * (1 - pen[o] * (seaX ? Math.max(0, 1 / p.fz - 1) * capT / seaX : 0)); }
-        shipRev += tick;
-        const sc = p.sh.cur || (p.sh.cur = { pax: 0, cap: 0, rev: 0, cost: 0 });
-        sc.pax += sp; sc.cap += p.ct; sc.rev = (sc.rev || 0) + shipRev; sc.cost = (sc.cost || 0) + coal + fees + cater * share;
-        sc.coal = (sc.coal || 0) + coal; sc.cater = (sc.cater || 0) + cater * share; acc.coal = (acc.coal || 0) + coal;
-        sc.catC = sc.catC || [0, 0, 0]; for (let o = 0; o < 3; o++) if (capC[o] > 0) sc.catC[o] += catC[o] * p.c[o] / capC[o];
-      }
-      s.stats.pax += pax;
-      acc.pax += pax; acc.cap += capT * nLegs; acc.rev += rev; acc.cost += cost; acc.D += Dsum; acc.ships = Math.max(acc.ships, ships.length);
-      acc.legPax = (acc.legPax || 0) + legPax;
-      for (let o = 0; o < 3; o++) { acc.cp[o] += served[o]; acc.cc[o] += capC[o]; }
-      dRev += rev;
     }
+    for (let c = 0; c < 3; c++) acc.cc[c] += cap[c] * 2;
+    if (rev) { s.cash += rev; s.cur.rev += rev; acc.rev += rev; }
+    if (cater) { expense(s, "Verpflegung", cater); acc.cost += cater; }
+    acc.pax += n; acc.legPax += legPax; s.stats.pax += n;
+    const capTot = cap.reduce((a, x) => a + x, 0) * 2 * G.legDist.length; acc.cap += capTot;
+    // je Schiff: Einnahmen anteilig, Kohle (wird täglich nachgebunkert), Gebühren, Fracht
+    const legsDay = 2 * G.legDist.length * nd, capSum = capS.reduce((a, x) => a + x[0] + x[1] + x[2], 0) || 1;
+    for (let i = 0; i < ships.length; i++) {
+      const sh = ships[i], v = sh.v, sc = shipCur(sh), share = (capS[i][0] + capS[i][1] + capS[i][2]) / capSum;
+      sc.rev = (sc.rev || 0) + rev * share; sc.pax += n * share; sc.cap += TYPES[sh.type].seats * legsDay; sc.cater = (sc.cater || 0) + cater * share; sc.cost = (sc.cost || 0) + cater * share;
+      let tons = 0, fee = 0, fr = 0; for (let k = 0; k < G.legDist.length; k++) { tons += G.legDist[k] * coalSm(s, sh, fahrtF(s, sh)) * (1 + LADUNG / 2) * 2 * nd; fee += legFee(s, sh, G, k) * 2 * nd; fr += legFreight(s, sh, G, k) * 2 * nd; }
+      if (tons > 0) { const rule = bunkRule(s, sh), p = G.ports[rule === "billig" ? cheapestIdx(s, sh, G) : G.homeIdx]; const cost = buyCoal(s, sh, p, tons, false); v.b += tons; v.bv += cost; burnCoal(s, sh, tons); }
+      expense(s, "Hafengebühren", fee); acc.cost += fee; sc.cost = (sc.cost || 0) + fee;
+      if (fr) { s.cash += fr; s.cur.rev += fr; s.cur.freight = (s.cur.freight || 0) + fr; acc.rev += fr; sc.rev = (sc.rev || 0) + fr; }
+      sc.dep = (sc.dep || 0) + legsDay; if (legsDay > 0) postServed(s, r, sh);
+      v.st = "pendel"; v.p = G.ports[0];
+    }
+    acc.dep += legsDay * ships.length; acc.late += legsDay * ships.length * late; acc.cancel += 2 * G.legDist.length / tt.P * cancel * ships.length;
+    acc.arr += legsDay * ships.length; acc.lateA += legsDay * ships.length * late;
+  }
+
+  // Zustand eines Schiffs anlegen (neu abgeliefert oder alter Spielstand)
+  function initV(s, sh, port, half) {
+    const cap = coalCap(sh), b = half ? cap / 2 : 0;
+    sh.v = { st: "hafen", p: port || s.home || "ham", i: -1, d: 1, pl: s.t, rdy: s.t, b, bv: b * coalPortPrice(s, port || s.home || "ham"), pax: [], r: null, res: false };
+    return sh.v;
+  }
+  // Schiff an seine Linie bringen: Überführung bis zum nächsten Ende, dann in den Takt
+  function toLine(s, sh, r, G, T0, end) {
+    const v = sh.v, here = v.p;
+    let e = end, dist = 0;
+    if (e == null) {
+      const i0 = G.ports.indexOf(here);
+      if (i0 === 0 || i0 === G.n - 1) e = i0;
+      else { let best = Infinity; for (const x of [0, G.n - 1]) { const p = G.ports[x] === here ? { dist: 0 } : seaPath(here, G.ports[x], yearOf(s)); const dd = p ? p.dist : 1e9; if (dd < best) { best = dd; e = x; } } dist = best < 1e9 ? best : 0; }
+    }
+    let ready = T0;
+    if (dist > 0) { const days = Math.ceil(dist / (TYPES[sh.type].speed * 24)); const tons = dist * coalSm(s, sh, 1); if (v.b < tons) { const c = buyCoal(s, sh, here, tons - v.b, false); v.bv += c; v.b = tons; } burnCoal(s, sh, tons); sh.offUntil = Math.max(sh.offUntil || 0, Math.ceil(T0) + days); ready = T0 + days; }
+    v.pax = []; v.st = "hafen";
+    joinLine(s, sh, r, G, ready, e);
+    if (r.res === sh.id) { v.st = "res"; v.i = G.resEnd; v.p = G.ports[G.resEnd]; v.d = G.resEnd === 0 ? 1 : -1; }
+    else if (!s.sim) respace(s, r);
+  }
+
+  // Ereignisse eines Schiffs an einem Tag: Ankunft → Bekohlen → Abfahrt (auch mehrere, wenn es schnell geht)
+  function shipEvents(s, sh, r, G, tt, T0, T1, ctx) {
+    const v = sh.v;
+    for (let n = 0; n < 8; n++) {
+      if (v.st === "see") { if (v.eta < T1) { arrive(s, sh, r, G, tt, Math.max(T0, v.eta), ctx); if (!s.ships.includes(sh)) return; continue; } return; }
+      if (v.st !== "hafen" || v.res || sh.line !== r.id || !usable(s, sh) || !(v.i >= 0)) return;
+      const td = Math.max(v.pl, v.rdy || 0, (s.blk && s.blk[v.p]) || 0);
+      if (td >= T1) return;
+      depart(s, sh, r, G, tt, Math.max(T0, td), ctx);
+    }
+  }
+  // Fahrt ohne Linie zu Ende bringen (Linie geschlossen, während das Schiff unterwegs war)
+  function orphanArrive(s, sh, T1) { const v = sh.v; if (v.st !== "see" || v.eta >= T1) return; burnCoal(s, sh, v.burn || 0); v.st = "hafen"; v.p = v.toP || v.p; v.r = null; v.pax = []; v.burn = 0; v.i = -1; }
+
+  function dayTick(s) {
+    const mo = cal(s.m).mo, winter = WINTER.includes(mo), fd = 1 / dim(s.m), cur = s.cur, pid = s.pidx, st = staff(s), myEx = myExp(s), kuX = ((s.exp && s.exp.ku != null ? s.exp.ku : 50) - 50) / 50;
+    const T0 = s.t || 0, T1 = T0 + 1;
+    let dCost = 0;
+    const add = (k, v) => { cur.cost[k] = (cur.cost[k] || 0) + v; dCost += v; };
+    cur.days += 1;
+    const odCount = {}, lines = [];
+    for (const r of s.routes) { const G = lineGeo(s, r); if (!G) continue; for (const od of G.ods) { const k = pairKey(G.ports[od.i], G.ports[od.j]) + (G.cruise ? "c" : ""); odCount[k] = (odCount[k] || 0) + 1; } }
+    const ctx = { mo, fd, pid, st, myEx, kuX, odCount, T0, T1 };
+    // neu abgelieferte Schiffe bekommen ihren Zustand, Schiffe ohne Fahrt auf ihrer Linie werden dorthin gebracht
+    for (const sh of s.ships) if (sh.ready <= s.m && !sh.museum && !sh.v) initV(s, sh, s.home, false);
+    for (const r of s.routes) {
+      const G = lineGeo(s, r); if (!G) continue;
+      const acc = r.cur || (r.cur = newRcur()); for (const k in RCUR0) if (acc[k] == null) acc[k] = Array.isArray(RCUR0[k]) ? [0, 0, 0] : typeof RCUR0[k] === "object" ? {} : 0; acc.rp = acc.rp || {};
+      for (const sh of s.ships) {
+        const v = sh.v; if (sh.line !== r.id || !v || sh.laid || sh.museum || v.st === "see" || v.r === r.id || !usable(s, sh)) continue;
+        if (v.mig) { const k = (r.migN = (r.migN || 0) + 1) - 1, e = k % 2 ? G.n - 1 : 0; v.mig = 0; v.p = G.ports[e]; v.i = e; toLine(s, sh, r, G, T0 + 1, e); }
+        else toLine(s, sh, r, G, T0, null);
+      }
+      const tt = lineTT(s, r, G); r.tt = { P: tt.P, H: tt.H, n: tt.n, short: tt.short };
+      lines.push([r, G, tt]);
+    }
+    // Nachfrage: neue Buchungen in die Warteschlangen
+    for (const [r, G, tt] of lines) demandDay(s, r, G, tt, ctx);
+    // Fahrten
+    for (const [r, G, tt] of lines) {
+      if (tt.short) { shortDay(s, r, G, tt, ctx); r.nx = {}; continue; }
+      if (r.res) reserveCheck(s, r, G, tt, T0, T1);
+      for (const sh of s.ships.filter(x => x.v && x.v.r === r.id)) {
+        const v = sh.v;
+        if (v.res && v.st === "hafen" && usable(s, sh)) { toReserve(s, sh, r, G, T0); continue; }
+        if (v.st === "hafen" && !v.res && sh.line === r.id && usable(s, sh) && isEnd(G, v.i) && v.pl < T0 - Math.max(2, tt.H)) joinLine(s, sh, r, G, T0, v.i); // nach langem Ausfall neu einreihen
+        shipEvents(s, sh, r, G, tt, T0, T1, ctx);
+      }
+      r.nx = {};
+      for (const sh of tt.ships) { const v = sh.v; if (!v || v.r !== r.id || v.res || !usable(s, sh)) continue; const np = nextPlan(G, v), k = dkey(np.i, np.d); if (!(r.nx[k] <= np.t)) r.nx[k] = np.t; }
+    }
+    for (const sh of s.ships) if (sh.v && sh.v.st === "see" && !lines.some(([r]) => r.id === sh.v.r)) orphanArrive(s, sh, T1);
+    // laufende Kosten, Verschleiß, Unglücke (nur auf See), Werft
     for (const sh of s.ships.slice()) {
       const t = TYPES[sh.type];
       if (sh.ready > s.m) continue;
       if (sh.museum) { museumShipDay(s, sh, fd, add); continue; }
-      const sc = sh.cur || (sh.cur = { pax: 0, cap: 0, rev: 0, cost: 0 });
+      const sc = shipCur(sh);
       if (sh.charter >= s.m) { const ch = sh.charterRate * fd; income(s, "Charter", ch); sc.rev = (sc.rev || 0) + ch; const hc = crewCost(s, t) * s.crewMult * s.wage * .3 * fd; add("Heuer", hc); sc.cost = (sc.cost || 0) + hc; continue; }
-      const act = active(s, sh), laid = !sh.line || sh.laid, info = infoOf(s, sh), val = shipValue(s, sh);
-      const cfx = capFx(s, sh);
+      const r = routeOf(s, sh), isRes = !!(r && r.res === sh.id), act = active(s, sh), laid = !sh.line || sh.laid, info = r ? rInfo(s, r) : null, val = shipValue(s, sh), cfx = capFx(s, sh);
       let fixed = crewCost(s, t) * s.crewMult * s.wage * (laid ? .25 : 1) * cfx.crew * fd;
       add("Heuer", fixed);
-      const mc = maintCost(s, sh) * (laid ? .5 : 1) * fd + (sh.eq.funk ? 60 * s.wage * fd : 0); add("Wartung", mc); fixed += mc;
+      const mc = maintCost(s, sh) * (laid || isRes ? .5 : 1) * fd + (sh.eq.funk ? 60 * s.wage * fd : 0); add("Wartung", mc); fixed += mc;
       if (sh.insured) {
         const lr = info ? info.risk[winter ? 1 : 0] : .005;
         let pct = 1.2 + lr * 60 + (100 - sh.cond) / 100 * 1.5;
@@ -857,20 +1443,25 @@
         const ic = val * pct / 100 / 12 * (laid ? .4 : 1) * s.insMult * fd; add("Versicherung", ic); fixed += ic;
       }
       sc.cost = (sc.cost || 0) + fixed;
-      if (sh.line && !sh.laid) { const rr = s.routes.find(x => x.id === sh.line); if (rr && rr.cur) rr.cur.fixed = (rr.cur.fixed || 0) + fixed; }
-      if (act && info) {
-        const late = sh.majLate || {}, emil = sh.emil ? .5 : 1;
-        sh.cond -= (info.wear[winter ? 1 : 0] * .6 * MAINT[sh.maint].wear * (t.wear || 1) * (late.rumpf ? 1.3 : 1) * ageWear(sh)) * fd * (fahrtOf(s, sh) === "voll" ? VOLL_WEAR : 1);
+      if (r && r.cur && sh.line && !sh.laid) r.cur.fixed = (r.cur.fixed || 0) + fixed;
+      const v = sh.v, atSea = !!v && (v.st === "see" || v.st === "pendel");
+      if (act && info && !isRes) {
+        const late = sh.majLate || {}, emil = sh.emil ? .5 : 1, voll = (v && v.st === "see" && v.fzA > 1.001) || fahrtOf(s, sh) === "voll";
+        sh.cond -= (info.wear[winter ? 1 : 0] * .6 * MAINT[sh.maint].wear * (t.wear || 1) * (late.rumpf ? 1.3 : 1) * ageWear(sh)) * fd * (voll ? VOLL_WEAR : 1);
         if (late.rumpf) sh.cond = Math.min(sh.cond, 70);
-        const p = info.risk[winter ? 1 : 0] * (1 + 3 * Math.pow(1 - sh.cond / 100, 2)) * modFactor(s, routeOf(s, sh), info, "risk") * (t.safe || 1) * (late.kessel ? 1.4 : 1) * (late.rumpf ? 1.2 : 1) * (sh.defects && sh.defects.includes("maschine") ? 1.15 : 1) * emil * RISK_LV[st.deck] * cfx.risk * (winter ? cfx.winter : 1) * fd * (t.hydro && winter ? 1.6 : 1) * (sh.eq.radar ? .8 : 1) * (t.ice && winter ? .5 : 1);
-        if (!s.sim && rnd(s) < p) incident(s, sh);
+        if (atSea) {
+          const G = lineGeo(s, r), tt = r.tt, sea = G && tt && tt.P > 0 ? Math.min(1, 2 * seaDays(s, sh, G, fahrtF(s, sh)) / tt.P) : 1, scale = v.st === "pendel" ? 1 : 1 / Math.max(.25, sea);
+          const p = info.risk[winter ? 1 : 0] * (1 + 3 * Math.pow(1 - sh.cond / 100, 2)) * modFactor(s, r, info, "risk") * (t.safe || 1) * (late.kessel ? 1.4 : 1) * (late.rumpf ? 1.2 : 1) * (sh.defects && sh.defects.includes("maschine") ? 1.15 : 1) * emil * RISK_LV[st.deck] * cfx.risk * (winter ? cfx.winter : 1) * fd * (t.hydro && winter ? 1.6 : 1) * (sh.eq.radar ? .8 : 1) * (t.ice && winter ? .5 : 1) * diffOf(s).risk * scale;
+          if (!s.sim && rnd(s) < p) incident(s, sh);
+        }
       } else if (!inDock(s, sh)) sh.cond -= .15 * fd;
       if (s.ships.includes(sh)) sh.cond = clamp(sh.cond, 5, 100);
       if (!s.sim && inDock(s, sh) && sh.dockUntil - s.t > 1 && rnd(s) < .025 && !s.pending.some(p => p.ship === sh.id)) werftEvent(s, sh);
     }
+    // Postverträge: Zuschuss täglich, solange ein schnelles Schiff die Linie bedient
     for (const k of Object.keys(s.contracts)) {
       const c = s.contracts[k];
-      if (s.ships.some(sh => { if (!active(s, sh)) return false; const r = routeOf(s, sh); return r && ((r.a === c.a && r.b === c.b) || (r.a === c.b && r.b === c.a)) && TYPES[sh.type].speed * fahrtF(s, sh) >= (c.minSpeed || 0); })) { c.served = (c.served || 0) + 1; income(s, "Postverträge", c.sub * fd); }
+      if (s.ships.some(sh => { if (!active(s, sh) || !sh.v || sh.v.r !== sh.line) return false; const r = routeOf(s, sh); return r && ((r.a === c.a && r.b === c.b) || (r.a === c.b && r.b === c.a)) && TYPES[sh.type].speed * fahrtF(s, sh) >= (c.minSpeed || 0); })) income(s, "Postverträge", c.sub * fd);
     }
     const mkCost = MK_BUDGET[s.mk.budget].cost + Object.keys(s.mk.ag).filter(k => s.mk.ag[k]).reduce((a, k) => a + MK_AGENCY[k].cost, 0);
     const adCost = s.routes.filter(r => r.adOn).reduce((a, r) => a + campaignCost(s, r), 0);
@@ -878,21 +1469,23 @@
     const pers = staffMonthly(s); if (pers) add("Personal", pers * fd);
     const capCost = caps(s).reduce((a, c) => a + capPay(s, c), 0); if (capCost) add("Kapitäne", capCost * fd);
     add("Kontor", (400 + 100 * s.ships.length + 50 * s.routes.length) * fd);
-    cur.rev += dRev;
-    s.cash += dRev - dCost;
+    s.cash -= dCost;
     if (s.cash < 0) { const od = -s.cash * .012 * fd; s.cash -= od; cur.cost["Überziehungszins"] = (cur.cost["Überziehungszins"] || 0) + od; }
   }
+  const RCUR0 = newRcur();
   function finalize(s) {
     const cur = s.cur, ex = cur.extra || {}, exSum = Object.values(ex).reduce((a, b) => a + b, 0);
-    const rep = { m: s.m, hzSave: Math.round(cur.hzSave || 0), lines: {}, rev: cur.rev + exSum, tickets: cur.rev - (cur.freight || 0), freight: cur.freight || 0, extra: Object.assign({}, ex), cost: Object.assign({}, cur.cost), profit: 0, events: [] };
+    const rep = { m: s.m, hzSave: Math.round(cur.hzSave || 0), lines: {}, rev: cur.rev + exSum, tickets: cur.rev - (cur.freight || 0), freight: cur.freight || 0, extra: Object.assign({}, ex), cost: Object.assign({}, cur.cost), profit: 0, events: [],
+      coal: { buyT: Math.round(cur.cbT || 0), buyM: Math.round(cur.cbM || 0), useT: Math.round(cur.cuT || 0), useM: Math.round(cur.cuM || 0), ports: Object.fromEntries(Object.entries(cur.cp || {}).map(([k, v]) => [k, Math.round(v)])) } };
     for (const r of s.routes) {
       const a = r.cur; if (!a) { r.last = null; continue; }
       r.last = { pax: Math.round(a.pax), cap: Math.round(a.cap), share: a.D ? a.pax / a.D : 0, load: a.cap ? (a.legPax || a.pax) / a.cap : 0, rev: Math.round(a.rev), cost: Math.round(a.cost), ships: a.ships, D: Math.round(a.D), m: s.m, coal: Math.round(a.coal || 0),
-        cls: [0, 1, 2].map(o => ({ pax: Math.round(a.cp[o]), cap: Math.round(a.cc[o]), dem: Math.round(a.dem[o]) })), fixed: Math.round(a.fixed || 0), riv: Object.fromEntries(Object.entries(a.rp || {}).map(([k, v]) => [k, Math.round(v)])) };
+        cls: [0, 1, 2].map(o => ({ pax: Math.round(a.cp[o]), cap: Math.round(a.cc[o]), dem: Math.round(a.dem[o]) })), fixed: Math.round(a.fixed || 0), riv: Object.fromEntries(Object.entries(a.rp || {}).map(([k, v]) => [k, Math.round(v)])),
+        dep: Math.round((a.dep || 0) * 10) / 10, late: Math.round((a.late || 0) * 10) / 10, arr: Math.round((a.arr || 0) * 10) / 10, lateA: Math.round((a.lateA || 0) * 10) / 10, avgLate: a.arr ? Math.round(a.lateSum / a.arr * 100) / 100 : 0, pk: r.pk == null ? null : Math.round(r.pk * 1000) / 1000, comp: Math.round(a.comp || 0), cancel: Math.round((a.cancel || 0) * 10) / 10 };
       rep.lines[r.id] = r.last; r.cur = null;
     }
     rep.pax = s.routes.reduce((x, r) => x + (r.last ? r.last.pax : 0), 0);
-    for (const sh of s.ships) if (sh.cur) { sh.lastPax = Math.round(sh.cur.pax); sh.lastLoad = sh.cur.cap ? sh.cur.pax / sh.cur.cap : 0; sh.last = { rev: Math.round(sh.cur.rev || 0), cost: Math.round(sh.cur.cost || 0), pax: Math.round(sh.cur.pax), load: sh.lastLoad, m: s.m, coal: Math.round(sh.cur.coal || 0), cater: Math.round(sh.cur.cater || 0), catC: (sh.cur.catC || [0, 0, 0]).map(Math.round) }; sh.cur = null; }
+    for (const sh of s.ships) if (sh.cur) { sh.lastPax = Math.round(sh.cur.pax); sh.lastLoad = sh.cur.cap ? sh.cur.pax / sh.cur.cap : 0; sh.last = { rev: Math.round(sh.cur.rev || 0), cost: Math.round(sh.cur.cost || 0), pax: Math.round(sh.cur.pax), load: sh.lastLoad, m: s.m, coal: Math.round(sh.cur.coal || 0), cater: Math.round(sh.cur.cater || 0), catC: (sh.cur.catC || [0, 0, 0]).map(Math.round), dep: Math.round((sh.cur.dep || 0) * 10) / 10 }; sh.cur = null; }
     return rep;
   }
   function simulateMonth(s) {
@@ -1125,31 +1718,26 @@
   function coalIdx(s) { return Math.round(s.coal * 100); }
   function coalTrend(s) { const h = s.coalHist || [], p = h.length ? h[h.length - 1].c : s.coal; return s.coal > p + .004 ? 1 : s.coal < p - .004 ? -1 : 0; }
   function coalActive(s) { return (s.coalK || []).filter(k => k.start <= s.m && k.until >= s.m); }
-  function coalBase(s) { const u = (s.coalUse || []).slice(-3); return u.length ? u.reduce((a, b) => a + b, 0) / u.length : 0; }
-  function coalPrice(s, cur, mkt, t) {
-    const n = mkt / s.coal; cur.coalN = (cur.coalN || 0) + n;
-    const ks = coalActive(s).filter(k => !(k.stop >= s.m));
-    if (!ks.length) return s.bo && s.bo.hz ? hzPrice(s, cur, n, t) : mkt;
-    const qty = ks.reduce((a, k) => a + k.qty, 0), p = ks.reduce((a, k) => a + k.qty * k.price, 0) / qty;
-    const cov = Math.min(Math.max(0, qty - (cur.kUsed || 0)), n);
-    cur.kUsed = (cur.kUsed || 0) + cov;
-    return cov * p + (s.bo && s.bo.hz ? hzPrice(s, cur, n - cov, t) : (n - cov) * s.coal);
+  // Ø Tonnen, die Ihre Schiffe in den letzten drei Monaten in einem Hafen gebunkert haben (ohne Hafen: insgesamt verbraucht)
+  function coalBase(s, port) { const u = (port ? (s.coalPort || {})[port] || [] : s.coalUse || []).slice(-3); return u.length ? u.reduce((a, b) => a + b, 0) / u.length : 0; }
+  function coalOffer(s, years, share, port) {
+    years = COAL_SURCH[years] != null ? +years : 1; share = share >= 1 ? 1 : .5; port = port && PORTS[port] ? port : (s.home || "ham");
+    const st = staff(s), red = st.ke >= 0 ? (st.ke + 1) / 100 : 0, act = coalActive(s), used = act.filter(k => (k.port || s.home) === port).reduce((a, k) => a + k.share, 0);
+    const base = coalBase(s, port), qty = Math.round(base * share), surch = COAL_SURCH[years] - red, mkt = coalPortPrice(s, port);
+    const pt = Math.round(mkt * (1 + surch) * 100) / 100, price = Math.round(s.coal * (1 + surch) * 1000) / 1000;
+    const why = act.length >= 2 ? "Höchstens zwei Verträge gleichzeitig." : used + share > 1.001 ? "Zusammen höchstens 100 % der Kohle aus diesem Hafen." : qty < 10 ? "In diesem Hafen haben Ihre Schiffe in den letzten drei Monaten kaum Kohle gebunkert." : "";
+    return { years, share, port, qty, pt, price, surch, months: years * 12, monthly: Math.round(qty * pt), total: Math.round(qty * pt * years * 12), now: Math.round(qty * (pt - mkt)), ok: !why, why };
   }
-  function coalOffer(s, years, share) {
-    years = COAL_SURCH[years] != null ? +years : 1; share = share >= 1 ? 1 : .5;
-    const st = staff(s), red = st.ke >= 0 ? (st.ke + 1) / 100 : 0, act = coalActive(s), used = act.reduce((a, k) => a + k.share, 0);
-    const base = coalBase(s), qty = Math.round(base * share), surch = COAL_SURCH[years] - red, price = Math.round(s.coal * (1 + surch) * 1000) / 1000;
-    const why = act.length >= 2 ? "Höchstens zwei Verträge gleichzeitig." : used + share > 1.001 ? "Zusammen höchstens 100 % des Verbrauchs." : qty < 100 ? "Noch kein nennenswerter Kohleverbrauch in den letzten drei Monaten." : "";
-    return { years, share, qty, price, surch, months: years * 12, total: Math.round(qty * price * years * 12), now: Math.round(qty * (price - s.coal)), ok: !why, why };
-  }
-  function signCoal(s, years, share, renew) {
-    const o = coalOffer(s, years, share); if (!o.ok) return o.why;
+  // Häfen, in denen Ihre Schiffe zuletzt gebunkert haben (für die Wahl des Vertragshafens)
+  function coalPorts(s) { const P = s.coalPort || {}; const list = Object.keys(P).filter(p => PORTS[p] && P[p].slice(-3).some(x => x > 0)).sort((a, b) => coalBase(s, b) - coalBase(s, a)); if (!list.includes(s.home || "ham")) list.unshift(s.home || "ham"); return list; }
+  function signCoal(s, years, share, renew, port) {
+    const o = coalOffer(s, years, share, port); if (!o.ok) return o.why;
     s.coalK = s.coalK || [];
-    s.coalK.push({ id: uid(s), start: s.m, until: s.m + o.months - 1, years: o.years, share: o.share, qty: o.qty, price: o.price, stop: -1, warned: false });
-    s.log.unshift({ m: s.m, head: renew ? "Kohle-Liefervertrag verlängert" : "Kohle-Liefervertrag geschlossen", text: (o.years === 1 ? "Ein Jahr" : o.years + " Jahre") + ", " + Math.round(o.share * 100) + " % des Verbrauchs zu " + Math.round(o.price * 100) + " % des Normalpreises.", kind: "own", img: "ev_kohlevertrag" });
+    s.coalK.push({ id: uid(s), port: o.port, start: s.m, until: s.m + o.months - 1, years: o.years, share: o.share, qty: o.qty, pt: o.pt, price: o.price, stop: -1, warned: false });
+    s.log.unshift({ m: s.m, head: renew ? "Kohle-Liefervertrag verlängert" : "Kohle-Liefervertrag geschlossen", text: (o.years === 1 ? "Ein Jahr" : o.years + " Jahre") + ", " + fmt(o.qty) + " Tonnen im Monat in " + PORTS[o.port].name + " zu " + Math.round(o.price * 100) + " % des Normalpreises.", kind: "own", img: "ev_kohlevertrag" });
     return null;
   }
-  function coalCancelFee(s, k) { return Math.round(Math.max(0, k.until - s.m + 1) * k.qty * k.price * .25); }
+  function coalCancelFee(s, k) { return Math.round(Math.max(0, k.until - s.m + 1) * k.qty * (k.pt || COAL_T * k.price) * .25); }
   function cancelCoal(s, id) {
     const k = (s.coalK || []).find(x => x.id === id); if (!k) return "Vertrag nicht gefunden.";
     const fee = coalCancelFee(s, k); expense(s, "Sonderausgaben", fee); s.coalK = s.coalK.filter(x => x !== k);
@@ -1162,25 +1750,26 @@
   }
   function coalMonthEnd(s, add) {
     const cur = s.cur, st = staff(s);
-    s.coalUse = (s.coalUse || []).concat([Math.round(cur.coalN || 0)]).slice(-6);
+    s.coalUse = (s.coalUse || []).concat([Math.round(cur.cuT || 0)]).slice(-6);
     s.coalHist = (s.coalHist || []).concat([{ m: s.m, c: Math.round(s.coal * 1000) / 1000 }]).slice(-120);
-    const run = coalActive(s).filter(k => !(k.stop >= s.m));
-    if (run.length) {
-      const qty = run.reduce((a, k) => a + k.qty, 0), p = run.reduce((a, k) => a + k.qty * k.price, 0) / qty, used = cur.kUsed || 0;
-      if (used < qty * .8) {
-        const fee = Math.round((qty * .8 - used) * p); add("Kohle", fee); s.cash -= fee;
-        s.log.unshift({ m: s.m, head: "Mindestabnahme Kohle", text: "Ihre Schiffe haben weniger Kohle verbraucht als vereinbart. Für den Rest bis zur Mindestabnahme von 80 % zahlen Sie " + fmt(fee) + " Mark.", kind: "bad", img: "ev_kohlevertrag" });
+    const cp = s.coalPort || (s.coalPort = {});
+    for (const p of new Set(Object.keys(cp).concat(Object.keys(cur.cp || {})))) { cp[p] = (cp[p] || []).concat([Math.round((cur.cp && cur.cp[p]) || 0)]).slice(-6); if (cp[p].every(x => !x)) delete cp[p]; }
+    for (const k of coalActive(s).filter(k => !(k.stop >= s.m))) {
+      const used = (cur.kU && cur.kU[k.id]) || 0;
+      if (used < k.qty * .8) {
+        const fee = Math.round((k.qty * .8 - used) * k.pt); add("Kohle-Mindestabnahme", fee); s.cash -= fee;
+        s.log.unshift({ m: s.m, head: "Mindestabnahme Kohle", text: "Ihre Schiffe haben in " + PORTS[k.port || s.home].name + " weniger Kohle gebunkert als vereinbart. Für den Rest bis zur Mindestabnahme von 80 % zahlen Sie " + fmt(fee) + " Mark.", kind: "bad", img: "ev_kohlevertrag" });
       }
     }
     for (const k of (s.coalK || []).slice()) {
       if (k.until === s.m + 3 && st.ke >= 0 && !k.warned) {
         k.warned = true;
-        if (st.ke > 0 || rnd(s) > .35) s.log.unshift({ m: s.m, head: "Kohlevertrag läuft in drei Monaten aus", text: "Ihr Kohleneinkäufer erinnert Sie: Der Vertrag über " + Math.round(k.share * 100) + " % des Verbrauchs endet im " + dateStr(k.until) + ". " + (s.coal * 100 < st.keRenew ? "Bei heutigem Preis würde er verlängern." : "Bei heutigem Preis würde er nicht verlängern."), kind: "own", img: "pers_einkaeufer" });
+        if (st.ke > 0 || rnd(s) > .35) s.log.unshift({ m: s.m, head: "Kohlevertrag läuft in drei Monaten aus", text: "Ihr Kohleneinkäufer erinnert Sie: Der Vertrag über " + Math.round(k.share * 100) + " % der Kohle in " + PORTS[k.port || s.home].name + " endet im " + dateStr(k.until) + ". " + (s.coal * 100 < st.keRenew ? "Bei heutigem Preis würde er verlängern." : "Bei heutigem Preis würde er nicht verlängern."), kind: "own", img: "pers_einkaeufer" });
       }
       if (k.until <= s.m) {
         s.coalK = s.coalK.filter(x => x !== k);
-        if (st.ke >= 0 && s.coal * 100 < st.keRenew && !signCoal(s, k.years, k.share, true)) continue;
-        s.log.unshift({ m: s.m, head: "Kohle-Liefervertrag ausgelaufen", text: "Ab jetzt bunkern Ihre Schiffe wieder zum Marktpreis.", kind: "own", img: "ev_bunkern" });
+        if (st.ke >= 0 && s.coal * 100 < st.keRenew && !signCoal(s, k.years, k.share, true, k.port)) continue;
+        s.log.unshift({ m: s.m, head: "Kohle-Liefervertrag ausgelaufen", text: "Ab jetzt bunkern Ihre Schiffe in " + PORTS[k.port || s.home].name + " wieder zum Marktpreis.", kind: "own", img: "ev_bunkern" });
       }
     }
   }
@@ -1392,7 +1981,7 @@
   }
 
   /* ---------- Entschädigungen ---------- */
-  function aboard(s, sh) { const info = infoOf(s, sh), t = TYPES[sh.type]; if (!info || !sh.lastPax) return Math.round(t.seats * .5); return clamp(Math.round(sh.lastPax / Math.max(1, 2 * tripsOf(s, sh, info).trips)), 1, t.seats); }
+  function aboard(s, sh) { const v = sh.v, t = TYPES[sh.type]; if (v && v.st === "see" && v.pax && v.pax.length) { let n = 0; for (const g of v.pax) n += g.n[0] + g.n[1] + g.n[2]; return clamp(Math.round(n), 1, t.seats); } return clamp(Math.round(t.seats * clamp(sh.lastLoad || .5, .05, 1)), 1, t.seats); }
   function compensate(s, sh, dead, hurt) {
     if (!dead && !hurt) return "";
     const f = (s.pidx || 1) * Math.sqrt(s.sizeM || 1), sum = Math.round((dead * 3000 + hurt * 300) * f / 100) * 100;
@@ -1762,7 +2351,7 @@
     kaiser: { when: s => monthIn(s, [3, 4, 5]), w: 1, img: "line_helgo", f: s => { s.mods.push({ port: "hel", key: "demand", f: 1.5, until: s.m + 2 }); return ["Kaiserbesuch auf Helgoland angekündigt", "Die Insel erwartet einen Ansturm von Schaulustigen."]; } },
     konk: { when: s => ownRoutesWithComp(s).length > 0, w: 1, f: s => { const r = pick(s, ownRoutesWithComp(s)), i = rInfo(s, r), k = mainRival(s, r, i); r.compMult = (r.compMult || 1) * 1.3; r.compSpeedAdd = (r.compSpeedAdd || 0) + .5; boHit(s, k, .03); return [RIV[k].name + " verstärkt die Flotte", "Mehr Abfahrten und schnellere Schiffe auf " + i.name + ".", RIV[k].img]; } },
     kohle: { when: s => s.coal < 1.15, w: .7, img: "ev_kohle", f: s => { s.coal = 1.3; return ["Kohle wird teuer", "Streiks in den Zechen treiben den Kohlepreis um 30 % nach oben."]; } },
-    verzug: { when: s => s.ships.some(sh => sh.ready > s.m + 1), w: 1.5, f: s => { const sh = pick(s, s.ships.filter(x => x.ready > s.m + 1)); sh.ready += 2; return ["Bauverzug bei der Werft", "Die Ablieferung der „" + sh.name + "“ verschiebt sich auf " + dateStr(sh.ready) + "."]; } },
+    verzug: { when: s => s.ships.some(sh => sh.ready > s.m + 1), w: 1.5, f: s => { const sh = pick(s, s.ships.filter(x => x.ready > s.m + 1)), r0 = sh.ready; for (const x of s.ships) if (x !== sh && x.type === sh.type && !!x.brandt === !!sh.brandt && x.ready >= r0) x.ready += 2; sh.ready += 2; return ["Bauverzug bei der Werft", "Die Ablieferung der „" + sh.name + "“ verschiebt sich auf " + dateStr(sh.ready) + "."]; } },
     rabatt: { when: s => !(s.discount && s.discount.until >= s.m), w: .8, f: s => { s.discount = { f: .9, until: s.m + 3 }; return ["Werft bietet Sonderkonditionen", "Freie Hellingplätze: 10 % Rabatt auf alle Neubauten, die bis " + dateStr(s.m + 3) + " bestellt werden."]; } },
     sturmflut: { when: s => monthIn(s, [9, 10, 11, 0, 1, 2]), w: .8, img: "ev_sturmflut", f: s => { const cost = Math.round(8000 + fleetValue(s) * .003); expense(s, "Sonderausgaben", cost); const hh = onPort(s, s.home || "ham"); if (hh.length) { const sh = pick(s, hh); sh.cond = Math.max(5, sh.cond - 8); } return ["Sturmflut im Hamburger Hafen", "Das Wasser steht über den Kais. Schäden an Anlegern und Schiffen kosten Sie " + fmt(cost) + " Mark."]; } },
     sturmserie: { when: s => monthIn(s, [10, 11, 0, 1]) && seaShips(s).length > 0, w: .9, img: "ev_sturmwarnung", f: s => { s.mods.push({ line: "*", key: "risk", f: 1.8, until: s.m + 2 }); return ["Orkane über der Nordsee", "Die Seewarte erwartet eine ganze Serie schwerer Stürme. Die Gefahr für Schiffe auf See ist deutlich erhöht."]; } },
@@ -2048,7 +2637,7 @@
     guard(s, "Kapitäne", () => capOffer(s));
     guard(s, "Altschiffe", () => lateMonthly(s));
     if (!s.flags.traum && !s.flags.traumOffered && SPECIAL_ORDER.every(k => s.ships.some(x => x.type === k))) { s.flags.traumOffered = true; s.pending.push({ id: "traum", day: 2, img: "ev_traumkai", head: "Ein Wunder am Kai", text: "Heute Morgen lag es plötzlich im Hafen: ein strahlend weißes Schiff ohne Masten und Segel, mit Palmen an Deck und Liegestühlen in der Sonne. Der Kapitän überreicht Ihnen die Papiere – ausgestellt auf Ihre Reederei. Ganz Hamburg reibt sich die Augen." }); }
-    for (const sh of delivered) if (sh.isNew && s.ships.includes(sh)) { sh.isNew = false; s.pending.push({ id: "taufe", day: 1, ship: sh.id, head: "Schiffstaufe der „" + sh.name + "“", text: "Ihr neuer " + TYPES[sh.type].name + " liegt festlich beflaggt an der Werft. Wie soll getauft werden?", img: "ev_taufe" }); }
+    for (const sh of delivered) if (sh.isNew && s.ships.includes(sh)) { sh.isNew = false; if (sh.series && !sh.seriesFirst) continue; s.pending.push({ id: "taufe", day: 1, ship: sh.id, head: "Schiffstaufe der „" + sh.name + "“", text: "Ihr neuer " + TYPES[sh.type].name + " liegt festlich beflaggt an der Werft. Wie soll getauft werden?", img: "ev_taufe" }); }
     guard(s, "Ereignisse", () => rollEvents(s));
     for (const p of s.pending) if (p.day == null) p.day = 3 + Math.floor(rnd(s) * 22);
     s.pending.sort((x, y) => x.day - y.day);
@@ -2664,18 +3253,12 @@
     b.hz = k;
   }
   const coalShip = t => !t.motor && !t.oil && (!!t.design || t.from < 1920);
-  // Kohle aus der Hauszeche: Rabatt bis zur Förderung der Zeche
-  function hzPrice(s, cur, n, t) {
-    const b = s.bo; if (!b || !b.hz || b.hzStop >= s.m || !coalShip(t)) return n * s.coal;
-    const cap = BO_HZ_CAP * BO[b.hz].g / 12 * boGrow(s), left = Math.max(0, cap - (cur.hzUsed || 0)), use = Math.min(n, left);
-    cur.hzUsed = (cur.hzUsed || 0) + use; cur.hzSave = (cur.hzSave || 0) + use * s.coal * BO_HZ;
-    return use * s.coal * (1 - BO_HZ) + (n - use) * s.coal;
-  }
   // Vorschau: was eine Hauszeche im Vormonat gespart hätte (ohne Lieferverträge gerechnet)
   function hzPreview(s, k) {
-    let coal = 0;
-    for (const sh of s.ships) { const t = TYPES[sh.type]; if (t && coalShip(t) && sh.last) coal += sh.last.coal || 0; }
-    return Math.round(Math.min(coal, BO_HZ_CAP * BO[k].g / 12 * boGrow(s) * s.coal) * BO_HZ);
+    const ports = (s.last && s.last.coal && s.last.coal.ports) || {}; let tons = 0;
+    for (const p in ports) if (hzRegion(s, p)) tons += ports[p];
+    const coalShare = s.ships.some(sh => coalShip(TYPES[sh.type])) ? 1 : 0, capT = BO_HZ_CAP * BO[k].g / 12 * boGrow(s) / COAL_T;
+    return Math.round(Math.min(tons * coalShare, capT) * COAL_T * s.coal * BO_HZ);
   }
   // Prokurist: verwaltet ein eigenes Depot
   function pkTarget(s) {
