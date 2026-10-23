@@ -39,7 +39,7 @@ const LINIEN = {
   kueste: { name: "Küste und Bäder (Hamburg–Helgoland, Mai bis September)", home: "ham", start: 1880, routes: [["ham", "hel"]], per: 2, types: ["seebad", "kaiserbad", "f24"], mix: ["moewe"], saison: [4, 8], art: "kurz" },
   see: { name: "Nord- und Ostsee (Hamburg–London, Lübeck–Kopenhagen)", home: "ham", start: 1880, routes: [["ham", "lon"], ["lue", "kop"]], per: 1, types: ["nordsee", "nacht", "turbine", "n24"] },
   hochsee: { name: "Atlantik (Liverpool–New York)", home: "lpl", start: 1880, routes: [["lpl", "ny"]], per: 2, types: ["hansa", "o12", "o24"], mix: ["kurier"], art: "lang" },
-  sued: { name: "Südamerika (Hamburg–Rio de Janeiro)", home: "ham", start: 1880, routes: [["ham", "rio"]], per: 2, types: ["sued", "o12", "o24"], mix: ["hansa"], art: "lang" },
+  sued: { name: "Südamerika (Hamburg–Rio de Janeiro)", home: "ham", start: 1880, routes: [["ham", "rio"]], per: 2, types: ["sued", "o24"], mix: ["hansa"], art: "lang" }, // ohne den Schnelldampfer von 1912: der verbrennt auf dieser Strecke zu viel teure Kohle
   kreuz: { name: "Vergnügungsreise (Hamburg–Bergen, ab 1891)", home: "ham", start: 1891, routes: [["ham", "ber", true]], per: 1, types: ["kreuz", "o24"] },
 };
 
@@ -334,9 +334,10 @@ function fertig() {
       if (einzel.length) console.log(`  In einzelnen Läufen: ${einzel.filter(x => x > 0).length} von ${einzel.length} Läufen mit Vertrag besser als ohne.`);
     }
     if (g === "serie") {
-      const d = NUR_L.map(li => (out.gruppen[g][li] || []).find(r => r.k === "serie")).filter(Boolean);
-      console.log(`\n  Serie besser als einzeln in ${d.filter(r => r.delta > 0).length} von ${d.length} Linienarten (Rabatt gegen früheres Bezahlen, Bauverzug trifft die ganze Serie).`);
+      const d = NUR_L.filter(li => LINIEN[li].per > 1).map(li => (out.gruppen[g][li] || []).find(r => r.k === "serie")).filter(Boolean), klar = d.filter(r => Math.abs(r.delta) > 2 * r.se);
+      console.log(`\n  Linienarten mit mehreren Schiffen: Serie besser in ${d.filter(r => r.delta > 0).length} von ${d.length}, deutlich (über zwei Standardfehler) in ${klar.length}. Der Rabatt spart etwas, sonst liefert die Werft wie bei Einzelbestellungen nacheinander.`);
     }
+    if (g === "bunker") console.log("  „Wo es am billigsten ist“ fährt hier wie „im Heimathafen volltanken“: Auf allen Testlinien ist der Heimathafen zugleich der billigste. Anders wird es, wenn eine Linie im teuren Hafen beginnt.");
     console.log("");
   }
   // 1. Schwierigkeitsgrad: je Linienart der Mittelwert, zusammengezählt; Standardfehler aus den gepaarten Unterschieden

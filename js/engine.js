@@ -138,6 +138,13 @@
   function dateStr(m) { const c = cal(m); return MONTHS[c.mo] + " " + c.y; }
   function dim(m) { const c = cal(m); return new Date(c.y, c.mo + 1, 0).getDate(); }
   function dayStr(s) { return s.day + ". " + dateStr(s.m); }
+  // Kalendertag eines Zeitpunkts im Tageszähler (auch in der Vergangenheit), auf Wunsch mit Uhrzeit
+  function tDate(s, T, hour) {
+    let m = s.m, d = s.day + Math.floor(T) - Math.floor(s.t || 0);
+    while (d > dim(m)) { d -= dim(m); m++; }
+    while (d < 1) { m--; d += dim(m); }
+    return d + ". " + MONTHS[cal(m).mo] + (cal(m).y !== cal(s.m).y ? " " + cal(m).y : "") + (hour ? ", " + Math.floor((T - Math.floor(T)) * 24) + " Uhr" : "");
+  }
   function newCur(s) { return { m: s.m, rev: 0, cost: {}, extra: {}, days: 0 }; }
   function income(s, label, v) { s.cash += v; const c = s.cur; if (c) { c.extra = c.extra || {}; c.extra[label] = (c.extra[label] || 0) + v; } return v; }
   function expense(s, label, v) { s.cash -= v; const c = s.cur; if (c) c.cost[label] = (c.cost[label] || 0) + v; return v; }
@@ -559,8 +566,8 @@
     if (brandt) { const st = rivState(s, "brandt"); st.boost = Math.min(.5, st.boost + .04 * O.n); }
     if (s.bo) s.bo.ord[brandt ? "brandt" : "werft"] += O.total;
     const sh0 = made[0];
-    if (O.n === 1) s.log.unshift({ m: s.m, head: "Neubau bestellt: „" + sh0.name + "“", text: t.name + " (" + t.cls + ")" + (brandt ? " in Brandt-Bauart – 0,7 Knoten schneller. Brandt & Söhne verdient kräftig mit" : "") + ", Ablieferung " + dateStr(sh0.ready) + ".", kind: "own", img: brandt ? "ev_brandtwerft" : undefined });
-    else s.log.unshift({ m: s.m, head: "Serie bestellt: " + O.n + " × " + t.name, text: "Ablieferung ab " + dateStr(O.plan[0]) + ", dann " + (O.gap === 1 ? "jeden Monat" : "alle " + O.gap + " Monate") + ", das letzte Schiff im " + dateStr(O.plan[O.n - 1]) + ". Serienrabatt " + Math.round(O.disc * 100) + " %, zusammen " + fmt(O.total) + " Mark.", kind: "own", img: brandt ? "ev_brandtwerft" : "wf_buero" });
+    if (O.n === 1) s.log.unshift({ m: s.m, head: "Neubau bestellt: „" + sh0.name + "“", text: t.name + " (" + t.cls + ")" + (brandt ? " · in Brandt-Bauart, 0,7 Knoten schneller – Brandt & Söhne verdient kräftig mit" : "") + " · Ablieferung " + dateStr(sh0.ready) + ".", kind: "own", img: brandt ? "ev_brandtwerft" : undefined });
+    else s.log.unshift({ m: s.m, head: "Serie bestellt: " + O.n + " Schiffe", text: t.name + " (" + t.cls + ") · Ablieferung ab " + dateStr(O.plan[0]) + ", dann " + (O.gap === 1 ? "jeden Monat" : "alle " + O.gap + " Monate") + ", das letzte Schiff im " + dateStr(O.plan[O.n - 1]) + ". Serienrabatt " + Math.round(O.disc * 100) + " %, zusammen " + fmt(O.total) + " Mark.", kind: "own", img: brandt ? "ev_brandtwerft" : "wf_buero" });
     return null;
   }
   function buyUsed(s, id, kind, name) {
@@ -2725,6 +2732,7 @@
     s.hist.push({ m: s.m, cash: Math.round(s.cash), eq: Math.round(equity(s)), profit: Math.round(rep.profit), rev: Math.round(rep.rev), cost: Math.round(costSum), pax: Math.round(rep.pax || 0), ships: s.ships.length });
     s.years = s.years || {}; const yy = cal(s.m).y, Y = s.years[yy] || (s.years[yy] = { rev: 0, cost: 0, profit: 0, pax: 0, eq: 0, ships: 0 });
     Y.rev += Math.round(rep.rev); Y.cost += Math.round(costSum); Y.profit += Math.round(rep.profit); Y.pax += Math.round(rep.pax || 0); Y.eq = Math.round(equity(s)); Y.ships = s.ships.length; Y.costs = Y.costs || {}; for (const k in rep.cost) Y.costs[k] = Math.round((Y.costs[k] || 0) + rep.cost[k]);
+    if (rep.coal) { const C = Y.coal || (Y.coal = { bt: 0, bm: 0, ut: 0, um: 0 }); C.bt += rep.coal.buyT; C.bm += rep.coal.buyM; C.ut += rep.coal.useT; C.um += rep.coal.useM; }
     if (s.hist.length > 360) s.hist.shift();
     for (const x of rep.events) s.log.unshift({ m: s.m, head: "Vertragsstrafe", text: x, kind: "bad" });
     if (s.negMonths >= 4 || s.cash < -Math.max(80000, fleetValue(s) * .15)) {
@@ -3427,7 +3435,7 @@
   // Börse unter Kontor geöffnet
   function boSeen(s) { const b = boState(s); if (b.on) b.seen = true; }
 
-  const api = { setStrict, takeErrors, departures, shipStatus, shipPos, lineGeo, coalCap, portTier, coalPortPrice, coalPorts, bunkerValue, rivalPk, pkStart, RIV_PK, TIER, TIER_NAME, BUNK, BUNK_ORDER, BUF, BUF_NAME, DIFF, DIFF_ORDER, PAUSE_DEF, COAL_T, diffOf,
+  const api = { setStrict, takeErrors, tDate, departures, shipStatus, shipPos, lineGeo, coalCap, portTier, coalPortPrice, coalPorts, bunkerValue, rivalPk, pkStart, RIV_PK, TIER, TIER_NAME, BUNK, BUNK_ORDER, BUF, BUF_NAME, DIFF, DIFF_ORDER, PAUSE_DEF, COAL_T, diffOf,
     setBunkRule, setShipBunk, setBuffer, setReserve, setCatchUp, markShip, setPause, setDifficulty, orderInfo, cancelInfo, cancelOrder, yardGap, MONTHS, TYPES, TYPE_ORDER, SPECIAL_ORDER, TYPE_NOTE, MAINT, EQUIP, MK_BUDGET, MK_AGENCY, FIN, PORTS, REGIONS, HOME, SEG, World: W,
     cal, dateStr, fmt, newGame, migrate, nextMonth, resolve, eventOptions, buyNew, buyUsed, rename, randomName, openRoute, closeRoute, routeInfo, canServe, routePrice,
     survey, setLine, setPrice, setMaint, setInsured, equip, equipCost, dock, sellShip, repay, quote, newPrice, shipValue, fleetValue, debt, equity, rating, loanRate,
