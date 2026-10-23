@@ -998,7 +998,7 @@
     }
     return Math.min(.8, late);
   }
-  function rivalPk(s, k, G, mo) { return clamp(RIV_PK[k] - .6 * wxLate(s, G, mo), .3, .99); }
+  function rivalPk(s, k, G, mo) { const key = mo + "|" + (s.diff || "normal"); if (G.wxLk !== key) { G.wxLk = key; G.wxL = wxLate(s, G, mo); } return clamp(RIV_PK[k] - .6 * G.wxL, .3, .99); }
   // Pünktlichkeit im Nutzen der Fahrgäste
   function pkSeg(info) { let v = 0, n = 0; for (const k in PK_SEG) { const w = info.share[k] || 0; v += w * PK_SEG[k]; n += w; } return n ? v / n : .5; }
   function pkU(s, r, info, c, pkLine, expP) { const post = Object.values(s.contracts || {}).some(x => (x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a)) ? 1.5 : 1; return W_PK * PK_CLS[c] * pkSeg(info) * post * (.6 * (pkLine - PK_REF) / .2 + .4 * (expP - 50) / 50); }
@@ -1095,6 +1095,7 @@
     const myBonusBase = ((r.b === "ny" || r.a === "ny") && s.stats.band ? .3 : 0) + mkBonus(s, r, info);
     const spd0 = capT ? spdW / capT : 0, com = capT ? comW / capT + SVC_LV[st.service] : 0;
     const pkLine = r.pk == null ? .9 : r.pk, expP = s.exp && s.exp.p != null ? s.exp.p : 50, rf = diffOf(s).riv;
+    const postF = Object.values(s.contracts || {}).some(x => (x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a)) ? 1.5 : 1, myPkT = .6 * (pkLine - PK_REF) / .2 + .4 * (expP - 50) / 50;
     const q0 = r.q || (r.q = {}), first = !r.qi && !tt.short && tt.n > 0, qa = r.qa = {};
     let Dsum = 0;
     for (const od of G.ods) {
@@ -1107,16 +1108,16 @@
       const base = (speed, comfort, repu, c) => w.s * 4 * (speed / cs.speed - 1) + w.c * CLS_WC[c] * .5 * (comfort - 3) + w.r * (repu - 50) / 50;
       const price = [0, 1, 2].map(o => r.price[o] * (oi.refC[o] / (mainRef[o] || oi.refC[o] || 1)));
       const spd = spd0 * (oi.dist / Math.max(oi.dist, along)) * Math.pow(.94, hops - 1);
-      const want = [0, 0, 0];
+      const want = [0, 0, 0], pkW = W_PK * pkSeg(oi) * postF, rvPk = rv.map(x => .6 * (rivalPk(s, x.k, G, mo) - PK_REF) / .2 + .4 * (clamp(50 + (RIV_PK[x.k] - PK_REF) * 300, 5, 95) - 50) / 50);
       for (let c = 0; c < 3; c++) {
         const Dc = D * oi.mix[c]; if (Dc <= 0) continue;
         acc.dem[c] += Dc;
         const ccBase = compDeps * oi.compSeats * (G.cruise ? 1 : 2) * fd * oi.mix[c];
         let them = 0; const themK = [];
-        for (const x of rv) { const rp = rivalPk(s, x.k, G, mo), u = w.p * CLS_WP[c] * (1 - x.pf * compMod) + base(x.spd, x.com, x.rep, c) + x.eu + pkU(s, r, oi, c, rp, clamp(50 + (RIV_PK[x.k] - PK_REF) * 300, 5, 95)); const v = ccBase * x.w * x.capF * rf * Math.exp(u); them += v; themK.push([x.k, v]); }
+        for (let xi = 0; xi < rv.length; xi++) { const x = rv[xi], u = w.p * CLS_WP[c] * (1 - x.pf * compMod) + base(x.spd, x.com, x.rep, c) + x.eu + pkW * PK_CLS[c] * rvPk[xi]; const v = ccBase * x.w * x.capF * rf * Math.exp(u); them += v; themK.push([x.k, v]); }
         let my = 0, bo = -1;
         if (capT > 0) {
-          const bonus = myBonusBase + expU(oi, myEx) + pkU(s, r, oi, c, pkLine, expP);
+          const bonus = myBonusBase + expU(oi, myEx) + pkW * PK_CLS[c] * myPkT;
           let best = -Infinity;
           for (let o = 0; o < 3; o++) { if (capC[o] <= 0) continue; const u = w.p * CLS_WP[c] * (1 - price[o] / (oi.refC[c] * pid)) + base(spd, com, s.rep, c) - (o > c ? (.7 + 1.0 * CLS_T(oi.dist)) * (o - c) : 0) + bonus + (c === 0 ? firstB : 0) + (meal ? KU_W * KU_CLS[c] * (.5 * (kSc[o] - 50) / 50 + .5 * kuX) : 0); if (u > best) { best = u; bo = o; } }
           if (bo >= 0) my = capC[bo] * Math.exp(best);
@@ -1229,6 +1230,7 @@
     let burn = G.legDist[k] * coalSm(s, sh, fz) * (1 + LADUNG * Math.min(1, v.b / coalCap(sh))) + wx.coalX * daily;
     let short = 0;
     if (burn > v.b + .01) { short = burn - v.b; const slow = .5 + short / Math.max(.01, burn) * ad0 * 1.5; ad += slow; burn = v.b; v.kn = { short, slow }; }
+    v.sf = tt.P > 0 ? Math.min(1, 2 * seaDays(s, sh, G, fzP) / tt.P) : 1;
     v.burn = burn; v.pd = pd; v.st = "see"; v.toP = G.ports[to]; v.t0 = t; v.eta = t + ad; v.pa = v.pl + pd; v.to = to; v.k = k; v.fzA = fz; v.late = late;
     const base = late > Math.max(1, tt.H / 4) ? t : v.pl; // ab einer Verspätung von einem Viertel Takt (mindestens einem Tag) wird neu geplant
     v.pln = base + pd + (isEnd(G, to) ? endWait(s, sh, G, tt.P) : G.stopT);
@@ -1524,7 +1526,7 @@
         sh.cond -= (info.wear[winter ? 1 : 0] * .6 * MAINT[sh.maint].wear * (t.wear || 1) * (late.rumpf ? 1.3 : 1) * ageWear(sh)) * fd * (voll ? VOLL_WEAR : 1);
         if (late.rumpf) sh.cond = Math.min(sh.cond, 70);
         if (atSea) {
-          const G = lineGeo(s, r), tt = r.tt, sea = G && tt && tt.P > 0 ? Math.min(1, 2 * seaDays(s, sh, G, fahrtF(s, sh)) / tt.P) : 1, scale = v.st === "pendel" ? 1 : 1 / Math.max(.25, sea);
+          const scale = v.st === "pendel" ? 1 : 1 / Math.max(.25, v.sf || 1);
           const p = info.risk[winter ? 1 : 0] * (1 + 3 * Math.pow(1 - sh.cond / 100, 2)) * modFactor(s, r, info, "risk") * (t.safe || 1) * (late.kessel ? 1.4 : 1) * (late.rumpf ? 1.2 : 1) * (sh.defects && sh.defects.includes("maschine") ? 1.15 : 1) * emil * RISK_LV[st.deck] * cfx.risk * (winter ? cfx.winter : 1) * fd * (t.hydro && winter ? 1.6 : 1) * (sh.eq.radar ? .8 : 1) * (t.ice && winter ? .5 : 1) * diffOf(s).risk * scale;
           if (!s.sim && rnd(s) < p) incident(s, sh);
         }
@@ -2179,7 +2181,8 @@
     }
   }
   function advisorCheck(s, rep) {
-    const flow = rep.profit - (rep.principal || 0);
+    // Geld kommt seit v5.0 in Schüben (bei der Abfahrt): der Berater rechnet mit dem Schnitt der letzten drei Monate
+    const h3 = (s.hist || []).slice(-3), avgP = h3.length ? h3.reduce((a, x) => a + x.profit, 0) / h3.length : rep.profit, flow = avgP - (rep.principal || 0);
     const danger = s.cash < 0 || (flow < 0 && s.cash < -flow * 4);
     if (!danger || (s.flags.advM != null && s.flags.advM > s.m - (s.cash < 0 ? 3 : 6))) return;
     const mo = cal(s.m).mo, items = [];
