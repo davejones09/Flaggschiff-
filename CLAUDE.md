@@ -14,9 +14,9 @@
 - `index.html`, `css/`, `js/`, `assets/`: das Spiel (nach dem Umbau in der ersten Sitzung).
 - `assets/`: Bilder als WebP, Musik als M4A, so komprimiert, dass die App auf dem iPhone schnell lädt.
 - `originale/`: hochauflösende Bildbögen und Musik-Originale samt `LIESMICH.md` mit der Zuordnung Bildbogen → Spielbild. Nur als Quelle zum Neu-Zuschneiden, nicht in `sw.js` cachen.
-- `neue-bilder/`, `neue-musik/`: hier lädt David neue Bilder und Musik hoch. Nach der Übernahme nach `originale/` verschieben.
-- `docs/`: Updatelog (`updatelog.md`, `Updatelog.pdf`, `Updatelog_Emil.pdf`) und Konzepte (`konzept-v4.5.md` und `konzept-v4.6.md` mit den Zahlen und Simulationsergebnissen von „Kohle und Küche“ und „Zeitung, Börse und Einführung“).
-- `tools/`: Hilfsskripte (Python, dazu ein Node-Skript). `assets.py` erzeugt `js/assets.js` (nach jeder Änderung in `assets/` ausführen), `bilder.py` schneidet die Spielbilder aus `originale/` (Rahmen in `tools/zuschnitt.json`), `musik.py` komprimiert die Musik, `icons.py` erzeugt die App-Icons aus `originale/icon/app-icon.png`, `updatelog_pdf.py` baut aus `docs/updatelog.md` beide PDFs. `simulation.js` prüft die Balance: Bots spielen jede Linienart 40 Jahre mit verschiedenen Strategien (`node tools/simulation.js`, einige Minuten; nach Änderungen an Zahlen der Engine laufen lassen).
+- `neue-bilder/`, `neue-musik/`: hier lädt David neue Bilder und Musik hoch. Nach der Übernahme nach `originale/` verschieben. Was in `neue-bilder/spaeter/` liegt, ist für ein späteres Update und bleibt dort, bis ein Auftrag es nennt.
+- `docs/`: Updatelog (`updatelog.md`, `Updatelog.pdf`) und Konzepte (`konzept-v4.5.md` und `konzept-v4.6.md` mit den Zahlen und Simulationsergebnissen von „Kohle und Küche“ und „Zeitung, Börse und Einführung“).
+- `tools/`: Hilfsskripte (Python, dazu ein Node-Skript). `assets.py` erzeugt `js/assets.js` (nach jeder Änderung in `assets/` ausführen), `bilder.py` schneidet die Spielbilder aus `originale/` (Rahmen in `tools/zuschnitt.json`), `musik.py` komprimiert die Musik, `icons.py` erzeugt die App-Icons aus `originale/icon/app-icon.png`, `updatelog_pdf.py` baut aus `docs/updatelog.md` das PDF. `simulation.js` prüft die Balance: Bots spielen jede Linienart 40 Jahre mit verschiedenen Strategien (`node tools/simulation.js`, einige Minuten; nach Änderungen an Zahlen der Engine laufen lassen).
 
 ## Ablauf bei Updates
 1. Bevor gebaut wird: sagen, welche neuen Bilder gebraucht werden (Motiv, Format, Dateiname).
@@ -26,8 +26,7 @@
 4. Testen: Handy- und PC-Format, Deutsch, Englisch und Spanisch, keine JavaScript-Fehler, ein alter Spielstand lädt noch.
 5. Versionsnummer erhöhen und den CACHE-Namen in `sw.js` ändern, damit die App das Update holt.
 6. Updatelog fortschreiben (`docs/updatelog.md`) und als PDF ausgeben (`docs/Updatelog.pdf`): alle Versionen, neueste am Ende.
-   Dazu jedes Mal eine Tester-Ausgabe für Emil (`docs/Updatelog_Emil.pdf`), in der alles zum Easter Egg um Kapitän Emil geschwärzt ist.
-   Emil-Stellen in der md zwischen `<!--emil-->` und `<!--/emil-->` setzen, dann `python3 tools/updatelog_pdf.py`.
+   Dafür `python3 tools/updatelog_pdf.py`. Eine Tester-Ausgabe für Emil gibt es nicht mehr, er kennt das Easter Egg.
 7. Am Ende einen Pull Request auf `main` erstellen. David merged selbst.
 
 ## Kommunikation

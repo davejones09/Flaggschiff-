@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Baut aus docs/updatelog.md die beiden PDFs:
-
-  docs/Updatelog.pdf       vollständig
-  docs/Updatelog_Emil.pdf  Tester-Ausgabe für Emil: alles zum Easter Egg um Kapitän Emil geschwärzt
+"""Baut aus docs/updatelog.md das PDF docs/Updatelog.pdf.
 
 Aufruf im Hauptordner:  python3 tools/updatelog_pdf.py     (braucht reportlab: pip install reportlab)
 
@@ -14,8 +11,8 @@ Aufbau von docs/updatelog.md:
   - Punkt                             ein Punkt pro Zeile
   ## Als Nächstes geplant             Überschrift ohne Version
 
-Alles zum Easter Egg um Kapitän Emil steht zwischen <!--emil--> und <!--/emil-->. In der
-Tester-Ausgabe wird es durch schwarze Balken ersetzt; der Text selbst steht dann nicht im PDF.
+Die Tester-Ausgabe für Emil mit geschwärztem Easter Egg wird nicht mehr gebraucht. Alte Markierungen
+<!--emil--> und <!--/emil--> in der md stören nicht, ihr Text steht ganz normal im PDF.
 """
 import os
 import re
@@ -201,5 +198,4 @@ def build(out, emil):
 
 if __name__ == "__main__":
     build(os.path.join(ROOT, "docs", "Updatelog.pdf"), emil=False)
-    build(os.path.join(ROOT, "docs", "Updatelog_Emil.pdf"), emil=True)
-    print("docs/Updatelog.pdf und docs/Updatelog_Emil.pdf geschrieben")
+    print("docs/Updatelog.pdf geschrieben")
