@@ -794,7 +794,7 @@
   // Wetter je Seegebiet: Sturmtage je Seetag [Okt–März, Apr–Sept], Verzögerung in Tagen und Mehrverbrauch je Sturmtag
   const STORM_MO = [9, 10, 11, 0, 1, 2], ICE_MO = [0, 1, 2], HURR_MO = [7, 8, 9], FOGCH_MO = [10, 11, 0, 1];
   const WX = {
-    atlantic: { p: [.25, .07], eff: .5, coal: .2 }, north: { p: [.14, .04], eff: .33, coal: .15 },
+    atlantic: { p: [.3, .07], eff: .6, coal: .25 }, north: { p: [.14, .04], eff: .33, coal: .15 },
     baltic: { p: [.1, .03], eff: .33, coal: .15, ice: .08, iceEff: .5 }, balticn: { p: [.12, .03], eff: .33, coal: .15, ice: .3, iceEff: 1 },
     channel: { p: [.06, .02], eff: .2, coal: .1 }, med: { p: [.04, .01], eff: .33, coal: .1 }, tropic: { p: [.03, .03], eff: .5, coal: .15 },
     coast: { p: [.04, .01], eff: .15, coal: .05 } };
@@ -802,6 +802,7 @@
   const CARIB = ["sth", "hva", "kin", "bgi"];
   const BRK = .03, BRK_LV = [1.5, 1, .75, .55], BRK_MAINT = [1.4, 1, .7];
   const IMPAT = { biz: .1, transit: .08, local: .08, gen: .05, bath: .05, ausw: .03, tour: .02 }; // Abspringen je Tag bei überfälliger Abfahrt
+  const SKIM = 5; // Wartende wechseln je Abfahrt eines Rivalen mit SKIM × IMPAT (Kaufleute 50 %, Auswanderer 15 %), soweit die eigene Abfahrt später kommt als die übliche der Rivalen
   const PK_SEG = { biz: 1, transit: .8, local: .6, gen: .5, bath: .4, tour: .3, ausw: .2 }, PK_CLS = [1, .6, .25], W_PK = .35, PK_REF = .85;
   const CMP = [.1, .06, .03], LATE_OK = .5, LATE_REL = .15, PK_MEM = 90;
   const lateTol = seaD => Math.max(LATE_OK, LATE_REL * seaD); // pünktlich: höchstens ½ Tag oder 15 % der Seezeit zu spät
@@ -1072,7 +1073,7 @@
     return null;
   }
   // Monatswerte einer Linie
-  const newRcur = () => ({ pax: 0, cap: 0, rev: 0, cost: 0, fixed: 0, D: 0, cp: [0, 0, 0], cc: [0, 0, 0], dem: [0, 0, 0], ships: 0, rp: {}, legPax: 0, dep: 0, late: 0, arr: 0, lateA: 0, lateSum: 0, comp: 0, cancel: 0 });
+  const newRcur = () => ({ pax: 0, cap: 0, rev: 0, cost: 0, fixed: 0, D: 0, cp: [0, 0, 0], cc: [0, 0, 0], cx: [0, 0, 0], dem: [0, 0, 0], ships: 0, rp: {}, legPax: 0, dep: 0, late: 0, arr: 0, lateA: 0, lateSum: 0, comp: 0, cancel: 0 });
   const shipCur = sh => sh.cur || (sh.cur = { pax: 0, cap: 0, rev: 0, cost: 0 });
   const odKey = (i, j) => i + ">" + j;
   const mainRivalK = (s, r, info) => { const rv = rivalsOf(s, r, info); return rv.length ? rv.slice().sort((a, b) => b.w - a.w)[0].k : null; };
@@ -1096,7 +1097,7 @@
     const spd0 = capT ? spdW / capT : 0, com = capT ? comW / capT + SVC_LV[st.service] : 0;
     const pkLine = r.pk == null ? .9 : r.pk, expP = s.exp && s.exp.p != null ? s.exp.p : 50, rf = diffOf(s).riv;
     const postF = Object.values(s.contracts || {}).some(x => (x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a)) ? 1.5 : 1, myPkT = .6 * (pkLine - PK_REF) / .2 + .4 * (expP - 50) / 50;
-    const q0 = r.q || (r.q = {}), first = !r.qi && !tt.short && tt.n > 0, qa = r.qa = {};
+    const q0 = r.q || (r.q = {}), first = !r.qi && !tt.short && tt.n > 0, qa = r.qa = {}, tolD = G.cruise || !tt.ref ? LATE_OK : lateTol(seaDays(s, tt.ref, G, 1));
     let Dsum = 0;
     for (const od of G.ods) {
       const oi = od.info, w = oi.w, cs = oi.comp, a = G.ports[od.i], b = G.ports[od.j], hops = od.j - od.i;
@@ -1129,12 +1130,17 @@
       // in die Warteschlangen je Richtung; ist die nächste Abfahrt überfällig, buchen Neue lieber woanders und Wartende springen ab
       const dirs = G.cruise ? [["c", 0, 1, 1]] : [[odKey(od.i, od.j), od.i, 1, .5], [odKey(od.j, od.i), od.j, -1, .5]];
       let imp = 0, iw = 0; for (const k in IMPAT) { const x = oi.share[k] || 0; imp += x * IMPAT[k]; iw += x; } imp = iw ? imp / iw : .05;
+      // Während Ihre Fahrgäste warten, fahren die Rivalen ab und nehmen einen Teil mit – soweit Ihre nächste Abfahrt später kommt als die übliche der Rivalen
+      const hR = compDeps > 0 ? 30.4 / compDeps : 0, skR = SKIM * imp * rf / Math.max(1, hR);
+      // überfällig erst, wenn die Abfahrt mehr als die übliche Verspätung der Linie hinter dem Plan liegt (lange Linien: bis 15 % der Seezeit)
       for (const [key, from, d, part] of dirs) {
         const pool = q0[key] || (q0[key] = [0, 0, 0]);
-        const nx = r.nx ? r.nx[dkey(from, d)] : undefined, over = !tt.short && (nx == null || T0 > nx + LATE_OK);
+        const nx = r.nx ? r.nx[dkey(from, d)] : undefined, over = !tt.short && (nx == null || T0 > nx + tolD);
+        const w = nx == null ? tt.H : Math.max(0, nx - T0), skim = tt.short || !hR || w <= hR / 2 ? 0 : 1 - Math.exp(-skR * (1 - hR / 2 / w));
         let lost = 0;
         for (let c = 0; c < 3; c++) {
           let add = want[c] * part;
+          if (skim > 0 && pool[c] > 0) { const l = pool[c] * skim; pool[c] -= l; lost += l; }
           if (over) { const l = pool[c] * (1 - Math.exp(-imp * diffOf(s).delay)) + add * .5; pool[c] -= pool[c] * (1 - Math.exp(-imp * diffOf(s).delay)); add *= .5; lost += l; }
           if (first) pool[c] += add * Math.max(0, tt.H / 2 - 1);
           pool[c] += add; qa[key] = (qa[key] || 0) + add;
@@ -1172,7 +1178,7 @@
       const p = q0[k]; if (!p) continue;
       const g = { j: G.cruise ? 0 : j, n: [0, 0, 0], f: [0, 0, 0], cr: [0, 0, 0], t0: t, cruise: G.cruise ? 1 : 0 };
       for (let c = 0; c < 3; c++) {
-        const nb = p[c] * f[c]; lost += p[c] - nb; p[c] = 0; if (!(nb > 0)) continue;
+        const nb = p[c] * f[c]; lost += p[c] - nb; acc.cx[c] += p[c] - nb; p[c] = 0; if (!(nb > 0)) continue;
         const fare = fareOf(s, r, G, X, G.cruise ? 1 : j, c) * (1 - pen[c]);
         g.n[c] = nb; g.f[c] = fare; g.cr[c] = caterDay(s, sh, G, X, G.cruise ? 1 : j, c);
         rev += nb * fare; n += nb; acc.cp[c] += nb;
@@ -1342,7 +1348,7 @@
         const p = q0[k]; if (!p) continue; const oi = od.info, a = d > 0 ? od.i : od.j, b = d > 0 ? od.j : od.i;
         for (let c = 0; c < 3; c++) {
           const fac = Math.min(1, ...od.legs.map(L => load[L][c] > cap[c] ? cap[c] / load[L][c] : 1)), sv = p[c] * fac;
-          lostToRival(s, r, G, p[c] - sv); p[c] = 0; if (!(sv > 0)) continue;
+          lostToRival(s, r, G, p[c] - sv); acc.cx[c] += p[c] - sv; p[c] = 0; if (!(sv > 0)) continue;
           rev += sv * fareOf(s, r, G, a, b, c) * (1 - pen[c]); n += sv; acc.cp[c] += sv; legPax += sv * od.legs.length;
           if (G.meal) { const cc = sv * oi.caterC[c] * kCostF(s, kqEff(s, ships[0], c), c) * s.wage; cater += cc; }
         }
@@ -1497,8 +1503,14 @@
         if (v.st === "hafen" && !v.res && sh.line === r.id && usable(s, sh) && isEnd(G, v.i) && v.pl < T0 - Math.max(2, tt.H)) joinLine(s, sh, r, G, T0, v.i); // nach langem Ausfall neu einreihen
         shipEvents(s, sh, r, G, tt, T0, T1, ctx);
       }
+      // nächste geplante Abfahrt je Hafen und Richtung; liegt sie im Umlauf eines Schiffs erst später, zählt der Fahrplan (sonst gälte sie als überfällig)
       r.nx = {};
-      for (const sh of tt.ships) { const v = sh.v; if (!v || v.r !== r.id || v.res || !usable(s, sh)) continue; const np = nextPlan(G, v), k = dkey(np.i, np.d); if (!(r.nx[k] <= np.t)) r.nx[k] = np.t; }
+      const off = tt.P > 0 ? lineOffsets(s, G, tt.P, tt.ref) : null;
+      for (const sh of tt.ships) {
+        const v = sh.v; if (!v || v.r !== r.id || v.res || !usable(s, sh)) continue;
+        const np = nextPlan(G, v), k0 = dkey(np.i, np.d); if (!(r.nx[k0] <= np.t)) r.nx[k0] = np.t;
+        if (off) for (const k in off) { if (k === k0) continue; const t = np.t + mod(off[k] - (off[k0] || 0), tt.P); if (!(r.nx[k] <= t)) r.nx[k] = t; }
+      }
     }
     for (const sh of s.ships) if (sh.v && sh.v.st === "see" && !lines.some(([r]) => r.id === sh.v.r)) orphanArrive(s, sh, T1);
     // laufende Kosten, Verschleiß, Unglücke (nur auf See), Werft
@@ -1556,7 +1568,7 @@
     for (const r of s.routes) {
       const a = r.cur; if (!a) { r.last = null; continue; }
       r.last = { pax: Math.round(a.pax), cap: Math.round(a.cap), share: a.D ? a.pax / a.D : 0, load: a.cap ? (a.legPax || a.pax) / a.cap : 0, rev: Math.round(a.rev), cost: Math.round(a.cost), ships: a.ships, D: Math.round(a.D), m: s.m, coal: Math.round(a.coal || 0),
-        cls: [0, 1, 2].map(o => ({ pax: Math.round(a.cp[o]), cap: Math.round(a.cc[o]), dem: Math.round(a.dem[o]) })), fixed: Math.round(a.fixed || 0), riv: Object.fromEntries(Object.entries(a.rp || {}).map(([k, v]) => [k, Math.round(v)])),
+        cls: [0, 1, 2].map(o => ({ pax: Math.round(a.cp[o]), cap: Math.round(a.cc[o]), dem: Math.round(a.dem[o]), no: Math.round((a.cx || [0, 0, 0])[o]) })), fixed: Math.round(a.fixed || 0), riv: Object.fromEntries(Object.entries(a.rp || {}).map(([k, v]) => [k, Math.round(v)])),
         dep: Math.round((a.dep || 0) * 10) / 10, late: Math.round((a.late || 0) * 10) / 10, arr: Math.round((a.arr || 0) * 10) / 10, lateA: Math.round((a.lateA || 0) * 10) / 10, avgLate: a.arr ? Math.round(a.lateSum / a.arr * 100) / 100 : 0, pk: r.pk == null ? null : Math.round(r.pk * 1000) / 1000, comp: Math.round(a.comp || 0), cancel: Math.round((a.cancel || 0) * 10) / 10 };
       rep.lines[r.id] = r.last; r.cur = null;
     }
@@ -1885,7 +1897,6 @@
   }
   function chefShips(s) { return mealShips(s).filter(sh => TYPES[sh.type].sb[0] > 0 && kqEff(s, sh, 0) >= 2); }
   function fineServed(s) { return mealShips(s).filter(sh => [0, 1, 2].some(c => kqEff(s, sh, c) >= 2 && TYPES[sh.type].sb[c] > 0)); }
-  // Vorschau: Der letzte Monat wird zweimal nachgerechnet – wie gespielt und mit der neuen Einstellung, ohne Zufälle
   // Vorschau (v5.0): Die nächsten 60 Tage werden zweimal vorausgerechnet – unverändert und mit der neuen Einstellung, ohne Zufälle
   const PREV_DAYS = 60;
   function simRun(x) {
