@@ -125,6 +125,14 @@
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  // Fehlerfänger (v5.0): Ein Fehler in einem Teil des Tages hält die Zeit nicht an. In Tests und in der Simulation (strict) wird er geworfen.
+  let STRICT = false; const ERRS = [];
+  function guard(s, what, fn) {
+    if (STRICT) return fn();
+    try { return fn(); }
+    catch (e) { ERRS.push({ what, msg: String((e && e.message) || e), m: s.m, day: s.day }); if (ERRS.length > 20) ERRS.shift(); try { console.error("Flaggschiff-Engine (" + what + "):", e); } catch (x) { } return undefined; }
+  }
+  const setStrict = v => { STRICT = !!v; }, takeErrors = () => ERRS.splice(0);
   const pick = (s, arr) => arr[Math.floor(rnd(s) * arr.length)];
   function cal(m) { const k = START_MONTH + m; return { y: START_YEAR + Math.floor(k / 12), mo: k % 12 }; }
   function dateStr(m) { const c = cal(m); return MONTHS[c.mo] + " " + c.y; }
@@ -2011,8 +2019,9 @@
 
   function duePending(s) { return s.pending.length > 0 && (s.pending[0].day || 0) <= s.day; }
   function closeMonth(s) {
-    boRescue(s);
-    const rep = monthEnd(s);
+    guard(s, "Börse", () => boRescue(s));
+    let rep = guard(s, "Monatsabschluss", () => monthEnd(s));
+    if (!rep) { rep = { m: s.m, lines: {}, rev: 0, tickets: 0, freight: 0, extra: {}, cost: {}, profit: 0, events: [], principal: 0 }; s.cur = newCur(s); }
     const delivered = s.ships.filter(sh => sh.ready === s.m + 1);
     for (const sh of delivered) { const r = routeOf(s, sh); s.log.unshift({ m: s.m + 1, head: "„" + sh.name + "“ abgeliefert", text: "Das neue Schiff liegt bereit" + (r ? " und fährt ab jetzt auf " + rInfo(s, r).name + "." : ". Weisen Sie ihm in der Flotte eine Linie zu."), kind: "own", img: "ship_" + sh.type }); }
     for (const sh of s.ships) if (sh.charter === s.m) s.log.unshift({ m: s.m, head: "„" + sh.name + "“ zurück aus der Charter", text: "Das Schiff steht wieder für Ihre Linien bereit.", kind: "own" });
@@ -2026,21 +2035,21 @@
     if (s.negMonths >= 4 || s.cash < -Math.max(80000, fleetValue(s) * .15)) {
       s.over = "konkurs"; s.log.unshift({ m: s.m, head: s.name + " ist zahlungsunfähig", text: "Das Konkursgericht übernimmt die Geschäfte.", kind: "bad" }); return rep;
     }
-    advisorCheck(s, rep);
+    guard(s, "Berater", () => advisorCheck(s, rep));
     s.m += 1; s.day = 1; s.cur = newCur(s);
-    if (s.musDue) { s.musDue = false; museumMonthly(s); }
-    world(s);
-    boMonthly(s);
-    fahrtAuto(s);
-    for (const sh of s.ships) applyPlan(s, sh);
-    majorCheck(s);
-    seasonCheck(s);
-    emilMonthly(s);
-    capOffer(s);
-    lateMonthly(s);
+    if (s.musDue) { s.musDue = false; guard(s, "Museum", () => museumMonthly(s)); }
+    guard(s, "Welt", () => world(s));
+    guard(s, "Börse", () => boMonthly(s));
+    guard(s, "Fahrstufe", () => fahrtAuto(s));
+    guard(s, "Saisonfahrplan", () => { for (const sh of s.ships) applyPlan(s, sh); });
+    guard(s, "Werft", () => majorCheck(s));
+    guard(s, "Saison", () => seasonCheck(s));
+    guard(s, "Emil", () => emilMonthly(s));
+    guard(s, "Kapitäne", () => capOffer(s));
+    guard(s, "Altschiffe", () => lateMonthly(s));
     if (!s.flags.traum && !s.flags.traumOffered && SPECIAL_ORDER.every(k => s.ships.some(x => x.type === k))) { s.flags.traumOffered = true; s.pending.push({ id: "traum", day: 2, img: "ev_traumkai", head: "Ein Wunder am Kai", text: "Heute Morgen lag es plötzlich im Hafen: ein strahlend weißes Schiff ohne Masten und Segel, mit Palmen an Deck und Liegestühlen in der Sonne. Der Kapitän überreicht Ihnen die Papiere – ausgestellt auf Ihre Reederei. Ganz Hamburg reibt sich die Augen." }); }
     for (const sh of delivered) if (sh.isNew && s.ships.includes(sh)) { sh.isNew = false; s.pending.push({ id: "taufe", day: 1, ship: sh.id, head: "Schiffstaufe der „" + sh.name + "“", text: "Ihr neuer " + TYPES[sh.type].name + " liegt festlich beflaggt an der Werft. Wie soll getauft werden?", img: "ev_taufe" }); }
-    rollEvents(s);
+    guard(s, "Ereignisse", () => rollEvents(s));
     for (const p of s.pending) if (p.day == null) p.day = 3 + Math.floor(rnd(s) * 22);
     s.pending.sort((x, y) => x.day - y.day);
     s.log = s.log.slice(0, 60);
@@ -2049,11 +2058,16 @@
   // Ein Tag vergeht. null = angehalten (fälliges Ereignis oder Spielende)
   function advanceDay(s) {
     if (s.over || duePending(s)) return null;
-    dayTick(s);
+    guard(s, "Tag", () => dayTick(s));
     s.day += 1; s.t = (s.t || 0) + 1;
-    inspectorDay(s);
-    captainsDay(s);
-    achCheck(s);
+    guard(s, "Inspektor", () => inspectorDay(s));
+    guard(s, "Kapitäne", () => captainsDay(s));
+    guard(s, "Erfolge", () => achCheck(s));
+    guard(s, "Schiffe", () => shipsDay(s));
+    if (s.day > dim(s.m)) return { month: closeMonth(s) };
+    return { day: s.day };
+  }
+  function shipsDay(s) {
     for (const sh of s.ships) {
       if (sh.dockUntil === s.t) { const r = routeOf(s, sh); s.log.unshift({ m: s.m, head: "„" + sh.name + "“ ist zurück im Dienst", text: "Die Werft hat die Arbeiten abgeschlossen. " + (r && !sh.laid ? "Das Schiff fährt wieder auf " + rInfo(s, r).name + "." : "Weisen Sie ihm in der Flotte eine Linie zu."), kind: "own", img: "ship_" + sh.type }); }
       if (sh.survey != null && sh.ready <= s.m && !inDock(s, sh) && !sh.museum) {
@@ -2061,8 +2075,6 @@
         if (sh.survey === s.t) s.log.unshift({ m: s.m, head: "Frist der „" + sh.name + "“ abgelaufen", text: "Das Schiff liegt fest und ist nicht versichert, bis die Frist erneuert ist.", kind: "bad", img: "wf_besichtigung" });
       }
     }
-    if (s.day > dim(s.m)) return { month: closeMonth(s) };
-    return { day: s.day };
   }
   // Läuft bis Monatsende oder bis ein Ereignis fällig ist (für Tests und Bots)
   function nextMonth(s) { for (let i = 0; i < 40; i++) { const r = advanceDay(s); if (!r) return null; if (r.month) return r.month; } return null; }
@@ -2589,7 +2601,15 @@
     return null;
   }
   // Anzahl zu einem Betrag (abgerundet, inklusive Gebühr)
-  function boFor(s, k, amount) { const b = boState(s), c = b.co[k]; let n = Math.floor(amount / (c.px * (1 + BO_FEE))); while (n > 0 && boQuote(s, k, n).total > amount) n--; return n; }
+  function boFor(s, k, amount) {
+    const b = boState(s), c = b.co[k]; if (!(amount > 0)) return 0;
+    // Gesamtpreis = n · Kurs · (1 + Aufschlag · n / Aktien) · (1 + Gebühr): quadratische Gleichung, dann höchstens ein paar Schritte nachjustieren
+    const A = c.px * BO_IMPACT / c.n * (1 + BO_FEE), B = c.px * (1 + BO_FEE);
+    let n = Math.max(0, Math.floor((-B + Math.sqrt(B * B + 4 * A * amount)) / (2 * A)));
+    for (let i = 0; i < 50 && n > 0 && boQuote(s, k, n).total > amount; i++) n--;
+    for (let i = 0; i < 50 && boQuote(s, k, n + 1).total <= amount; i++) n++;
+    return n;
+  }
   function buyInto(s, D, k, n) { const q = boQuote(s, k, n); const d = D[k] || (D[k] = { n: 0, cost: 0 }); d.n += q.n; d.cost += q.total; return q; }
   function sellFrom(s, D, k, n) {
     const d = D[k]; n = Math.min(n, d ? d.n : 0); if (n <= 0) return null;
@@ -2713,7 +2733,7 @@
   // Börse unter Kontor geöffnet
   function boSeen(s) { const b = boState(s); if (b.on) b.seen = true; }
 
-  const api = { MONTHS, TYPES, TYPE_ORDER, SPECIAL_ORDER, TYPE_NOTE, MAINT, EQUIP, MK_BUDGET, MK_AGENCY, FIN, PORTS, REGIONS, HOME, SEG, World: W,
+  const api = { setStrict, takeErrors, MONTHS, TYPES, TYPE_ORDER, SPECIAL_ORDER, TYPE_NOTE, MAINT, EQUIP, MK_BUDGET, MK_AGENCY, FIN, PORTS, REGIONS, HOME, SEG, World: W,
     cal, dateStr, fmt, newGame, migrate, nextMonth, resolve, eventOptions, buyNew, buyUsed, rename, randomName, openRoute, closeRoute, routeInfo, canServe, routePrice,
     survey, setLine, setPrice, setMaint, setInsured, equip, equipCost, dock, sellShip, repay, quote, newPrice, shipValue, fleetValue, debt, equity, rating, loanRate,
     tripsOf, active, score, compDepsOf, GEN_TYPES, typeGroup, factoryEqOptions, factoryEqCost, DES, designBases, designType, saveDesign, seriesFactor, EXHIBITS, partsFor, partCost, scrapValue, scrapShip, donateShip, MUS_PRICE, museumUnlocked, museumCost, hallSlots, hallCost, buildMuseum, expandHall, toMuseum, restoreCost, restoreDays, museumMode, museumFest, museumDraw, bankruptReport, avgPct, CAP_NAMES: { first: CAP_FIRST.concat(CAP_FIRST_GB), last: CAP_LAST.concat(CAP_LAST_GB) }, stopInfo, HOMES, homeName, applyCountry, CAP_SPEC, CAP_XP, SPECIAL_CAPS, caps, capOf, capLevel, capPay, capFx, assignCaptain, hireCaptain, dismissCaptain, lineOf, STAFF_LV, STAFF_PAY, DEPT, INSP_PAY, MARKT_PAY, staff, setStaff, crewCost, RIV, RIV_ORDER, rivalsOf, rivState, rivalNames, marketResearch, myExp, setPlan, planTarget, brandtPrice, ACH, stepPrice, alignPrices, pricePct, refNow, maintCost, ageY, fristInfo, renewFrist, reportInfo, isEmil, tourOpen, rInfo, advanceDay,

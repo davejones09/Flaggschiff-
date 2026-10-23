@@ -143,7 +143,9 @@ function ladeEngine(dir) {
   global.window = global;
   for (const f of ["world.js", "engine.js"]) delete require.cache[path.join(dir, "js", f)];
   global.World = require(path.join(dir, "js", "world.js"));
-  return require(path.join(dir, "js", "engine.js"));
+  const E = require(path.join(dir, "js", "engine.js"));
+  if (E.setStrict) E.setStrict(true); // Fehler sollen in der Simulation auffallen, nicht verschluckt werden
+  return E;
 }
 function altOrdner(rev) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "flaggschiff-alt-"));

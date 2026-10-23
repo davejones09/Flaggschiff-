@@ -9,7 +9,14 @@
   const signed = n => (n < 0 ? '<span class="neg">' : "") + E.fmt(n) + (n < 0 ? "</span>" : "");
   const kn = v => String(v).replace(".", ",");
 
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { } }
+  let saveWarned = false;
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); saveWarned = false; } catch (e) { if (!saveWarned) { saveWarned = true; toast("Speichern fehlgeschlagen: Der Speicher des Geräts ist voll. Exportieren Sie den Spielstand im Kontor."); } } }
+  // Fehler einmal melden, das Spiel läuft weiter (v5.0: Uhr absichern)
+  let errAt = 0;
+  function reportErr(e, where) {
+    try { console.error("Flaggschiff-Fehler (" + where + "):", e); } catch (x) { }
+    if (Date.now() - errAt > 30000) { errAt = Date.now(); try { toast("Ein Fehler ist aufgetreten. Das Fenster wurde geschlossen, das Spiel läuft weiter."); } catch (x) { } }
+  }
   function load() { try { const t = localStorage.getItem(KEY); return t ? JSON.parse(t) : null; } catch (e) { return null; } }
   function wipe() { try { localStorage.removeItem(KEY); } catch (e) { } }
 
@@ -779,17 +786,19 @@
   }
   function previewSheet() {
     const P = sheet, p = P.p, K = E.kueche(S);
-    const T = {
-      fahrt: ["Reederei-Fahrstufe: " + (E.FAHRT[P.v] || {}).name, P.v === "spar" ? "fs_sparfahrt" : P.v === "voll" ? "fs_volldampf" : null],
-      shipFahrt: [(() => { const sh = S.ships.find(x => x.id === P.id); return "Fahrstufe der „" + (sh ? sh.name : "") + "“: " + (P.v ? E.FAHRT[P.v].name : "wie die Reederei"); })(), P.v === "spar" ? "fs_sparfahrt" : P.v === "voll" ? "fs_volldampf" : null],
-      kq: [["1. Klasse", "2. Klasse", "3. Klasse und Zwischendeck"][P.c] + ": Verpflegung „" + KQ_NAME[P.v] + "“", P.v === 0 ? "kue_einfach" : P.v === 2 ? "kue_fein" : null],
-      shipKq: [(() => { const sh = S.ships.find(x => x.id === P.id); return "„" + (sh ? sh.name : "") + "“, " + E.clsName(P.c, sh && E.TYPES[sh.type].ocean) + ": " + (P.v < 0 ? "Verpflegung wie die Reederei" : "Verpflegung „" + KQ_NAME[P.v] + "“"); })(), P.v === 0 ? "kue_einfach" : P.v === 2 ? "kue_fein" : null],
-      eigen: [P.v ? "Eigene Küche einrichten" : "Eigene Küche auflösen", "kue_bordkueche"],
-      cat: [(P.k ? E.catName(S, P.k) : "") + " – " + (P.y === 3 ? "3 Jahre" : "1 Jahr"), P.k === "luxus" ? "kue_alacarte" : "kue_caterer"],
-      catCancel: ["Vertrag mit " + (P.name || "") + " kündigen", "kue_caterer"],
-      coal: ["Kohle-Liefervertrag schließen", "ev_kohlevertrag"],
-      coalCancel: ["Kohle-Liefervertrag kündigen", "ev_kohlevertrag"],
-    }[P.what] || ["Vorschau", null];
+    // nur den Titel der gewählten Vorschau berechnen (v4.5–v4.6 rechnete alle und stürzte bei „ordentlich“ und „fein“ ab)
+    const fahrtName = v => (E.FAHRT[v] || {}).name || "";
+    const T = ({
+      fahrt: () => ["Reederei-Fahrstufe: " + fahrtName(P.v), P.v === "spar" ? "fs_sparfahrt" : P.v === "voll" ? "fs_volldampf" : null],
+      shipFahrt: () => { const sh = S.ships.find(x => x.id === P.id); return ["Fahrstufe der „" + (sh ? sh.name : "") + "“: " + (P.v ? fahrtName(P.v) : "wie die Reederei"), P.v === "spar" ? "fs_sparfahrt" : P.v === "voll" ? "fs_volldampf" : null]; },
+      kq: () => [["1. Klasse", "2. Klasse", "3. Klasse und Zwischendeck"][P.c] + ": Verpflegung „" + KQ_NAME[P.v] + "“", P.v === 0 ? "kue_einfach" : P.v === 2 ? "kue_fein" : null],
+      shipKq: () => { const sh = S.ships.find(x => x.id === P.id); return ["„" + (sh ? sh.name : "") + "“, " + E.clsName(P.c, sh && E.TYPES[sh.type].ocean) + ": " + (P.v < 0 ? "Verpflegung wie die Reederei" : "Verpflegung „" + KQ_NAME[P.v] + "“"), P.v === 0 ? "kue_einfach" : P.v === 2 ? "kue_fein" : null]; },
+      eigen: () => [P.v ? "Eigene Küche einrichten" : "Eigene Küche auflösen", "kue_bordkueche"],
+      cat: () => [(P.k ? E.catName(S, P.k) : "") + " – " + (P.y === 3 ? "3 Jahre" : "1 Jahr"), P.k === "luxus" ? "kue_alacarte" : "kue_caterer"],
+      catCancel: () => ["Vertrag mit " + (P.name || "") + " kündigen", "kue_caterer"],
+      coal: () => ["Kohle-Liefervertrag schließen", "ev_kohlevertrag"],
+      coalCancel: () => ["Kohle-Liefervertrag kündigen", "ev_kohlevertrag"],
+    }[P.what] || (() => ["Vorschau", null]))();
     let h = '<div class="veil" data-act="close"><div class="sheet" role="dialog" aria-modal="true">' + (T[1] ? img(T[1], "banner", "") : "") + '<div class="kicker">Vorschau</div><h3>' + esc(T[0]) + "</h3>";
     if (P.what === "coal") {
       const o = P.o;
@@ -1481,7 +1490,27 @@
 
   /* ---------- Dialoge ---------- */
   let evKey = null, evReadyAt = 0, startTut = false;
+  // Fenster zeichnen; wirft das Zeichnen einen Fehler, wird das Fenster geschlossen, damit die Uhr nicht hängen bleibt
   function renderModal() {
+    try { renderModal0(); }
+    catch (e) {
+      reportErr(e, "Fenster");
+      const m = $("modal");
+      if (S && S.pending.length && E.duePending(S)) { try { if (eventFallback(m)) return; renderModal0(); return; } catch (x) { reportErr(x, "Fenster"); } }
+      sheet = null; if (m) m.innerHTML = "";
+    }
+  }
+  // schlichtes Ereignisfenster als Ersatz; lassen sich nicht einmal die Antworten bestimmen, wird das Ereignis übersprungen
+  function eventFallback(m) {
+    const ev = S.pending[0]; let opts = null;
+    try { opts = E.eventOptions(S, ev); } catch (x) { opts = null; }
+    if (!opts || !opts.length) { S.pending.shift(); evKey = null; return false; }
+    evReadyAt = 0;
+    m.innerHTML = '<div class="veil"><div class="sheet" role="dialog" aria-modal="true"><h3>' + esc(ev.head || "") + "</h3><p>" + esc(ev.text || "") + '</p><div class="opts">' +
+      opts.map((o, i) => '<button class="opt" data-act="choose" data-i="' + i + '"' + (o.ok === false ? " disabled" : "") + "><b>" + esc(o.t) + "</b><span>" + esc(o.h || "") + "</span></button>").join("") + "</div></div></div>";
+    return true;
+  }
+  function renderModal0() {
     const m = $("modal");
     if (!S) { m.innerHTML = sheet && sheet.kind === "import" ? importSheet() : startSheet(); return; }
     if (S.over === "konkurs") { m.innerHTML = endSheet(); return; }
@@ -1631,6 +1660,10 @@
 
   /* ---------- Rendern ---------- */
   function render() {
+    try { render0(); }
+    catch (e) { reportErr(e, "Anzeige"); if (sheet) { sheet = null; try { render0(); } catch (x) { } } }
+  }
+  function render0() {
     if (!S) {
       $("hdr").innerHTML = FLAG + '<div class="firm">Flaggschiff</div><div></div>';
       $("main").innerHTML = A.title ? '<div class="hero-img">' + img("title", "", "Hamburger Hafen 1880") + '<div class="ttl"><h1>Flaggschiff</h1><p>Spielbarer Prototyp · Personenschifffahrt ab 1880</p></div></div>'
@@ -1656,6 +1689,10 @@
 
   /* ---------- Aktionen ---------- */
   function act(a, d) {
+    try { act0(a, d); }
+    catch (e) { reportErr(e, "Aktion"); sheet = null; try { if (S) save(); render(); } catch (x) { reportErr(x, "Anzeige"); } }
+  }
+  function act0(a, d) {
     let err = null;
     switch (a) {
       case "rollfirm": { startName = randomFirm(); const i = $("nm"); if (i) { i.value = startName; return; } break; }
@@ -1859,6 +1896,7 @@
   function step() {
     const logTop = S.log[0];
     const r = E.advanceDay(S);
+    { const er = E.takeErrors(); if (er.length) reportErr(er[0].msg, er[0].what); }
     if (!r) { save(); renderFull(); return false; }
     if (r.month) monthFx(r.month, logTop);
     if (E.duePending(S)) { const ev = S.pending[0]; if (ev.id === "seenot") Snd.storm(0); else Snd.telegraph(0); save(); renderFull(); return false; }
@@ -1869,11 +1907,28 @@
   }
   setInterval(() => {
     const now = performance.now(), dt = Math.min(1, (now - lastT) / 1000); lastT = now;
-    if (!running()) { accT = 0; return; }
-    accT += dt;
-    const sec = SEC[S.speed];
-    for (let i = 0; i < 4 && accT >= sec; i++) { accT -= sec; if (!step()) { accT = 0; break; } }
+    try {
+      if (!running()) { accT = 0; return; }
+      accT += dt;
+      const sec = SEC[S.speed];
+      for (let i = 0; i < 4 && accT >= sec; i++) { accT -= sec; if (!step()) { accT = 0; break; } }
+    } catch (e) { reportErr(e, "Tagesschritt"); accT = 0; }
   }, 100);
+  // Wächter: Steht die Zeit länger als 3 s, obwohl ein Tempo eingestellt ist und weder Fenster noch Ereignis zu sehen sind,
+  // wird der hängende Zustand zurückgesetzt (unsichtbares Fenster schließen, fälliges Ereignis neu zeichnen)
+  let wdT = null, wdSince = 0, wdNote = 0;
+  setInterval(() => {
+    const now = performance.now();
+    if (!S || S.over || !(S.speed > 0) || document.hidden) { wdSince = now; return; }
+    if (S.t !== wdT) { wdT = S.t; wdSince = now; return; }
+    const box = $("modal") && $("modal").firstElementChild, shown = !!(box && box.getClientRects().length);
+    if (shown) { wdSince = now; return; }
+    if (now - wdSince < (SEC[S.speed] || 1) * 1000 + 3000) return;
+    wdSince = now;
+    sheet = null; evKey = null; dirty = false; accT = 0;
+    try { render(); } catch (e) { reportErr(e, "Wächter"); }
+    if (Date.now() - wdNote > 60000) { wdNote = Date.now(); toast("Die Zeit hing. Das Spiel hat sich wieder in Gang gesetzt."); }
+  }, 1000);
   document.addEventListener("toggle", e => { const d = e.target; if (d && d.id === "ledger") ledgerOpen = d.open; if (d && d.dataset && d.dataset.ship) { if (d.open) openShip.add(d.dataset.ship); else openShip.delete(d.dataset.ship); } if (d && d.dataset && d.dataset.sec) openSec[d.dataset.sec] = d.open; if (d && d.dataset && d.dataset.plan) openPlan[d.dataset.plan] = d.open; }, true);
   document.addEventListener("focusout", () => setTimeout(() => { if (dirty && !busy()) { dirty = false; render(); } }, 60));
   document.addEventListener("visibilitychange", () => { if (document.hidden && S) save(); });
