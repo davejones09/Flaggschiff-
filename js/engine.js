@@ -2659,7 +2659,7 @@
         const type = pick(s, types), age = Math.floor((8 + rnd(s) * 8) * 12), cond = Math.round(60 + rnd(s) * 25);
         const price = Math.round(shipValue(s, { type, age, cond }) * .6 / 1000) * 1000;
         return { route: r.id, type, age, cond, price, name: randomName(s),
-          text: rivalNames(s, r, info) + " " + (rivalsOf(s, r, info).length > 1 ? "stecken" : "steckt") + " in Schwierigkeiten und bietet Ihnen einen " + TYPES[type].name + " (Baujahr " + (yearOf(s) - Math.floor(age / 12)) + ") für " + fmt(price) + " Mark an – weit unter Marktwert. Die Konkurrenz auf " + info.name + " würde schwächer." };
+          text: rivalNames(s, r, info) + " " + (rivalsOf(s, r, info).length > 1 ? "stecken in Schwierigkeiten und bieten" : "steckt in Schwierigkeiten und bietet") + " Ihnen " + typeAcc(TYPES[type].name) + " (Baujahr " + (yearOf(s) - Math.floor(age / 12)) + ") für " + fmt(price) + " Mark an – weit unter Marktwert. Die Konkurrenz auf " + info.name + " würde schwächer." };
       },
       head: "Ein Konkurrent muss verkaufen", ok: (s, ev) => [s.cash >= ev.price, true],
       opts: [
@@ -2826,6 +2826,9 @@
   }
   const wOf = (s, x) => typeof x.w === "function" ? x.w(s) : x.w;
   function weighted(s, ids, tbl) { const tot = ids.reduce((a, k) => a + wOf(s, tbl[k]), 0); let r = rnd(s) * tot; for (const k of ids) { r -= wOf(s, tbl[k]); if (r <= 0) return k; } return ids[ids.length - 1]; }
+  // Schiffstyp mit unbestimmtem Artikel im Akkusativ (v5.1: vorher immer „einen“, auch bei Fähren)
+  const typeAcc = n => /fähre$|Fähre$/.test(n.split(" ")[0]) || /fähre$/.test(n) ? "eine " + n : /(schiff|boot)\b/.test(n.split(" mit ")[0]) ? "ein " + n : "einen " + n.replace(/^(\S+)er (?=\S)/, "$1en ").replace(/riese$/, "riesen");
+  const typeNom = n => /fähre$|Fähre$/.test(n.split(" ")[0]) || /fähre$/.test(n) ? "Ihre neue " + n : /(schiff|boot)\b/.test(n.split(" mit ")[0]) ? "Ihr neues " + n : "Ihr neuer " + n;
   function rivalNames(s, r, info) { const rv = rivalsOf(s, r, info); return rv.length ? rv.map(x => RIV[x.k].name).join(" und ") : "die Konkurrenz"; }
   const mainRival = (s, r, info) => { const rv = rivalsOf(s, r, info); return rv.length ? rv.slice().sort((a, b) => b.w - a.w)[0].k : null; };
 
@@ -3009,7 +3012,7 @@
     guard(s, "Kapitäne", () => capOffer(s));
     guard(s, "Altschiffe", () => lateMonthly(s));
     if (!s.flags.traum && !s.flags.traumOffered && SPECIAL_ORDER.every(k => s.ships.some(x => x.type === k))) { s.flags.traumOffered = true; s.pending.push({ id: "traum", day: 2, img: "ev_traumkai", head: "Ein Wunder am Kai", text: "Heute Morgen lag es plötzlich im Hafen: ein strahlend weißes Schiff ohne Masten und Segel, mit Palmen an Deck und Liegestühlen in der Sonne. Der Kapitän überreicht Ihnen die Papiere – ausgestellt auf Ihre Reederei. Ganz Hamburg reibt sich die Augen." }); }
-    for (const sh of delivered) if (sh.isNew && s.ships.includes(sh)) { sh.isNew = false; if (sh.series && !sh.seriesFirst) continue; s.pending.push({ id: "taufe", day: 1, ship: sh.id, head: "Schiffstaufe der „" + sh.name + "“", text: "Ihr neuer " + TYPES[sh.type].name + " liegt festlich beflaggt an der Werft. Wie soll getauft werden?", img: "ev_taufe" }); }
+    for (const sh of delivered) if (sh.isNew && s.ships.includes(sh)) { sh.isNew = false; if (sh.series && !sh.seriesFirst) continue; s.pending.push({ id: "taufe", day: 1, ship: sh.id, head: "Schiffstaufe der „" + sh.name + "“", text: typeNom(TYPES[sh.type].name) + " liegt festlich beflaggt an der Werft. Wie soll getauft werden?", img: "ev_taufe" }); }
     guard(s, "Ereignisse", () => rollEvents(s));
     guard(s, "Takt", () => { for (const r of s.routes) respace(s, r); });
     for (const p in (s.blk || {})) if (s.blk[p] < s.t) delete s.blk[p];

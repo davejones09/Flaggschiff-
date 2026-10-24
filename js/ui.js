@@ -135,10 +135,10 @@
   const RL = {
     en: { pre: { Entscheidung: "Decision", Erfolg: "Achievement", Rat: "Advice", Linie: "Line", Tipp: "Tip" }, line: "Line ", comfort: "Comfort ", effect: "Effect: ", and: " and ", suitable: "Suitable ships: ", none: "none at present",
       cls: x => x + " class", saved: "Saved for the museum: ", removal: " (removal ", marks: " marks).", of: (a, b, c) => (a ? a + " " : "") + "of the “" + b + "” (" + c + ")", basis: "Own design based on ", own: x => "Own design “" + x + "”",
-      ships: "Your ships: ", cruise: "pleasure cruise ", SEG: { Auswanderer: "Emigrants", Kaufleute: "Merchants", Reisende: "Travellers", Badegäste: "Bathers", Bahnreisende: "Rail travellers", Pendler: "Commuters", Vergnügungsreisende: "Cruise passengers" }, q: ["“", "”"], mark: "marks" },
+      ships: "Your ships: ", rivships: "The rivals sail here with: ", cruise: "pleasure cruise ", SEG: { Auswanderer: "Emigrants", Kaufleute: "Merchants", Reisende: "Travellers", Badegäste: "Bathers", Bahnreisende: "Rail travellers", Pendler: "Commuters", Vergnügungsreisende: "Cruise passengers" }, q: ["“", "”"], mark: "marks" },
     es: { pre: { Entscheidung: "Decisión", Erfolg: "Logro", Rat: "Consejo", Linie: "Línea", Tipp: "Consejo" }, line: "Línea ", comfort: "Confort ", effect: "Efecto: ", and: " y ", suitable: "Barcos adecuados: ", none: "ninguno por ahora",
       cls: x => "clase " + x, saved: "Reservado para el museo: ", removal: " (desmontaje ", marks: " marcos).", of: (a, b, c) => (a ? a + " " : "") + "del «" + b + "» (" + c + ")", basis: "Diseño propio basado en ", own: x => "Diseño propio «" + x + "»",
-      ships: "Sus barcos: ", cruise: "crucero ", SEG: { Auswanderer: "Emigrantes", Kaufleute: "Comerciantes", Reisende: "Viajeros", Badegäste: "Bañistas", Bahnreisende: "Viajeros de tren", Pendler: "Pendulares", Vergnügungsreisende: "Pasajeros de crucero" }, q: ["«", "»"], mark: "marcos" },
+      ships: "Sus barcos: ", rivships: "Los rivales navegan aquí con: ", cruise: "crucero ", SEG: { Auswanderer: "Emigrantes", Kaufleute: "Comerciantes", Reisende: "Viajeros", Badegäste: "Bañistas", Bahnreisende: "Viajeros de tren", Pendler: "Pendulares", Vergnügungsreisende: "Pasajeros de crucero" }, q: ["«", "»"], mark: "marcos" },
   };
   const R = () => RL[LANG];
   const trCache = new Map();
@@ -174,6 +174,7 @@
     if ((m = core.match(/^Typ (\S+)$/))) return r.cls(m[1]);
     if (/^[A-Za-zÄÖÜäöü]+ [\d.,]+ %(, [A-Za-zÄÖÜäöü]+ [\d.,]+ %)*$/.test(core)) { let ok = true; const outS = core.split(", ").map(x => { const [w, n] = x.split(/ (?=[\d])/); if (!r.SEG[w]) ok = false; return (r.SEG[w] || w) + " " + lnum(n); }); if (ok) return outS.join(", "); }
     if ((m = core.match(/^Ihre Schiffe: (.+)$/))) return r.ships + m[1];
+    if ((m = core.match(/^Die Rivalen fahren hier: (.+)$/))) return r.rivships + m[1].split(", ").map(x => TY[x] || x).join(", ");
     if ((m = core.match(/^der „(.+)“ \((.+)\)$/))) return r.of("", m[1], m[2]);
     if (core.includes(", ")) { const parts = core.replace(/\.$/, "").split(", "); if (parts.length > 1 && parts.every(x => DD[x] != null)) return parts.map(x => DD[x]).join(", ") + (core.endsWith(".") ? "." : ""); }
     if ((m = core.match(/^Für das Museum gesichert: (.+) \(Ausbau ([\d.,]+) Mark\)\.$/))) return r.saved + m[1].split(", ").map(x => DD[x] || x).join(", ") + r.removal + lnum(m[2]) + r.marks;
@@ -224,7 +225,7 @@
     if (!root || (LANG === "de" && !isGB())) return;
     syncNames();
     const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; const list = [];
-    while ((n = w.nextNode())) { const p = n.parentElement; if (p && !p.closest("script,style,textarea")) list.push(n); }
+    while ((n = w.nextNode())) { const p = n.parentElement; if (p && !p.closest("script,style,textarea,[data-notr]")) list.push(n); }
     for (const t of list) { const v = t.nodeValue; if (/[A-Za-zÄÖÜäöüß0-9]/.test(v)) { const r = TR(v); if (r !== v) t.nodeValue = r; } }
     root.querySelectorAll && root.querySelectorAll("[aria-label],[placeholder],[title]").forEach(e => { for (const a of ["aria-label", "placeholder", "title"]) { const v = e.getAttribute(a); if (v) { const r = TR(v); if (r !== v) e.setAttribute(a, r); } } });
   }
@@ -1758,15 +1759,21 @@
     let eq = null; try { const x = n === slot && S ? S : E.migrate(JSON.parse(JSON.stringify(st))); eq = E.equity(x); } catch (e) { eq = null; }
     return { st, name: st.name, home: st.home || "ham", diff: st.diff || "normal", date: E.dateStr(st.m || 0), eq, ships: st.ships.length, played: st.played || null, over: st.over };
   }
-  const playedStr = ms => { if (!ms) return ""; const d = new Date(ms), z = x => String(x).padStart(2, "0"); return z(d.getDate()) + "." + z(d.getMonth() + 1) + "." + d.getFullYear() + ", " + z(d.getHours()) + ":" + z(d.getMinutes()) + " Uhr"; };
+  // Datum und Uhrzeit des letzten Spiels, je Sprache formatiert und von der Übersetzung ausgenommen
+  const playedStr = ms => { if (!ms) return ""; const d = new Date(ms), z = x => String(x).padStart(2, "0"), hm = z(d.getHours()) + ":" + z(d.getMinutes());
+    return '<span data-notr>' + (LANG === "de" ? z(d.getDate()) + "." + z(d.getMonth() + 1) + "." + d.getFullYear() + ", " + hm + " Uhr" : z(d.getDate()) + "/" + z(d.getMonth() + 1) + "/" + d.getFullYear() + ", " + hm) + "</span>"; };
   function menuBrand() {
     return '<div class="mbrand"><svg viewBox="0 0 40 40" aria-hidden="true">' + star(20, 20, 18, 7.4, "#fff") + "</svg><h1>Flaggschiff</h1><p>Personenschifffahrt ab 1880</p></div>";
   }
-  function menuShell(inner, wide) {
-    const pic = DESK && A.title_wide ? img("title_wide", "", "Hamburger Hafen 1880") : A.title ? img("title", "", "Hamburger Hafen 1880") : "";
-    return '<div class="menu-screen' + (wide ? " wide" : "") + '"><div class="menu-bg">' + pic + "</div>" + menuBrand() + '<div class="menu-panel">' + inner +
-      '<div class="menu-ver">Version ' + VERSION + "</div></div></div>";
+  // Das Titelbild liegt als feste Ebene hinter dem Menü und bleibt beim Umschalten der Seiten stehen (kein Flackern)
+  function menuBg() {
+    const bg = $("menubg"), k = DESK && A.title_wide ? "title_wide" : A.title ? "title" : null; if (!bg || !k || bg.dataset.k === k) return;
+    bg.dataset.k = k; bg.style.backgroundImage = "url(" + A[k] + ")";
   }
+  function menuShell(inner, wide) {
+    return '<div class="menu-screen' + (wide ? " wide" : "") + '">' + menuBrand() + '<div class="menu-panel">' + inner + '<div class="menu-ver">Version ' + VERSION + "</div></div></div>";
+  }
+  const imgNow = (k, cls) => A[k] ? '<img class="' + cls + '" src="' + A[k] + '" alt="" decoding="async">' : "";
   const mbtn = (act, title, sub, attrs) => '<button class="mbtn" data-act="' + act + '"' + (attrs || "") + "><b>" + title + "</b>" + (sub ? "<span>" + sub + "</span>" : "") + "</button>";
   const langSeg = () => '<div class="seg mlang" role="group" aria-label="Sprache">' + [["de", "Deutsch"], ["en", "English"], ["es", "Español"]].map(([k, n]) => '<button data-act="setLang" data-v="' + k + '" aria-pressed="' + (LANG === k) + '">' + n + "</button>").join("") + "</div>";
   // die Spielstände mit Inhalt, zuletzt gespielter zuerst
@@ -1791,10 +1798,9 @@
         h += "<h3>" + esc(I.name) + '</h3><div class="meta">' + HOME_NAME[I.home] + " · " + E.DIFF[I.diff].name + " · " + I.date + (I.over ? " · Konkurs" : "") + "</div>" +
           '<div class="meta">' + (I.eq != null ? "Eigenkapital " + slotMoney(I.st, I.eq) + " · " : "") + I.ships + (I.ships === 1 ? " Schiff" : " Schiffe") + (I.played ? " · zuletzt gespielt am " + playedStr(I.played) : "") + "</div>" +
           '<div class="actions"><button class="btn solid" data-act="slotPlay" data-n="' + n + '"' + (DESK ? ' title="Taste ' + n + '"' : "") + ">" + (act ? "Weiterspielen" : "Spielen") + '</button><button class="btn" data-act="slotExp" data-n="' + n + '">Exportieren</button>' +
-          '<button class="btn warn" data-act="slotDel" data-n="' + n + '">' + (U.del === n ? "Wirklich löschen?" : "Löschen") + "</button></div>";
+          '<button class="btn" data-act="slotImp" data-n="' + n + '">Importieren</button><button class="btn warn" data-act="slotDel" data-n="' + n + '">' + (U.del === n ? "Wirklich löschen?" : "Löschen") + "</button></div>";
         if (U.exp === n) h += '<p class="meta">Kopieren Sie diesen Code und fügen Sie ihn unter „Importieren“ ein. Er dient auch als Sicherung.</p><textarea id="savecode" class="code" readonly>' + saveCode(I.st) + '</textarea><div class="actions"><button class="btn" data-act="copySave">Kopieren</button></div>';
       } else h += '<p class="meta">Leer</p><div class="actions"><button class="btn solid" data-act="slotNew" data-n="' + n + '">Neue Reederei</button><button class="btn" data-act="slotImp" data-n="' + n + '">Importieren</button></div>';
-      if (I) h += '<div class="actions"><button class="btn" data-act="slotImp" data-n="' + n + '">Importieren</button></div>';
       if (U.imp === n) h += '<p class="meta">Fügen Sie hier den exportierten Code ein.' + (I ? " Der Spielstand auf diesem Platz wird dabei ersetzt." : "") + '</p><textarea id="importcode" class="code" placeholder="FLAGGSCHIFF1:…"></textarea><div class="actions"><button class="btn solid" data-act="doImport" data-n="' + n + '">' + (I ? "Ersetzen und laden" : "Laden") + "</button></div>";
       h += "</div>";
     }
@@ -1842,7 +1848,7 @@
     h += '<div class="mlines" role="radiogroup" aria-label="Erste Fährlinie">';
     for (const o of L) {
       const on = o === a, key = o.a + "-" + o.b, perks = [o.zk ? "Zeitkarten" : "", o.wagons ? "Fuhrwerke" : "", o.contract === "insel" ? "Inselvertrag" : o.contract === "post" ? "Postvertrag" : ""].filter(Boolean);
-      h += '<button class="mline' + (on ? " on" : "") + '" role="radio" aria-checked="' + on + '" data-act="startLine" data-v="' + key + '">' + img("ship_" + (on ? ty : o.rec), "mlimg", "") +
+      h += '<button class="mline' + (on ? " on" : "") + '" role="radio" aria-checked="' + on + '" data-act="startLine" data-v="' + key + '">' + imgNow("ship_" + (on ? ty : o.rec), "mlimg") +
         '<span class="mltx"><b>' + esc(o.name) + "</b><span>" + o.note + "</span><span class=\"meta\">" + E.fmt(o.dist) + " sm · " + esc(o.who) + (perks.length ? " · " + perks.join(", ") : "") + "</span></span></button>";
     }
     h += "</div>";
@@ -1860,6 +1866,7 @@
     if (!menu) menu = "main";
     $("hdr").innerHTML = FLAG + '<div class="firm">Flaggschiff</div><div></div>';
     const pages = { main: menuMain, slots: menuSlots, settings: menuSettings, news: menuNews, new: menuNewPage };
+    menuBg();
     $("main").innerHTML = menuShell((menuMsg ? '<div class="hint">' + menuMsg + "</div>" : "") + (pages[menu] || menuMain)(), menu === "new" || menu === "slots");
     $("tutbox").innerHTML = ""; document.body.classList.remove("tut-on");
     deskRender(); renderModal(); translateDom(document.body);
