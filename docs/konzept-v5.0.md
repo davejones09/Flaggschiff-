@@ -138,7 +138,7 @@ Jeder Rivale hat eine Pünktlichkeit bei ruhiger See (Weser-Atlantik-Linie 92 %,
 ## 8. Tempo und Pausen
 
 - Ein Spieltag dauert auf Langsam, Halbe und Volle 4, 2 und 1 Sekunde (vorher 2, 1 und ⅓).
-- Automatische Pausen (Kontor → Abfahrten), einzeln abschaltbar: Ankunft mit Verspätung ab 1, 2 (Standard), 3 oder 5 Tagen; Kohle wird knapp (an); Monatsende (aus); Ankunft eines markierten Schiffs (an). Die Zeit hält an, ein Hinweis sagt warum.
+- Automatische Pausen (Kontor → Abfahrten), einzeln abschaltbar: Ankunft mit Verspätung ab 1, 2, 3 (Standard) oder 5 Tagen; Kohle wird knapp (an); Monatsende (aus); Ankunft eines markierten Schiffs (an). Die Zeit hält an, ein Hinweis sagt warum.
 
 ## 9. Werft: Serien
 

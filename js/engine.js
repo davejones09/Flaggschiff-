@@ -820,7 +820,7 @@
     schwer: { name: "Schwer", loan: 350000, riv: 1.2, delay: 1.4, risk: 1.3, zins: 1 } };
   const DIFF_ORDER = ["leicht", "normal", "schwer"];
   const diffOf = s => DIFF[s.diff] || DIFF.normal;
-  const PAUSE_DEF = { late: 2, coal: true, month: false, mark: true };
+  const PAUSE_DEF = { late: 3, coal: true, month: false, mark: true }; // Verspätung ab 3 Tagen: mit 2 hielt eine große Flotte im Winter etwa jeden vierten Tag an
   const mod = (x, m) => ((x % m) + m) % m;
   function poisson(s, lam) { if (lam <= 0) return 0; if (lam > 30) return Math.max(0, Math.round(lam + Math.sqrt(lam) * (rnd(s) + rnd(s) + rnd(s) - 1.5) * 2)); const L = Math.exp(-lam); let k = 0, p = 1; do { k++; p *= rnd(s); } while (p > L && k < 100); return k - 1; }
 
