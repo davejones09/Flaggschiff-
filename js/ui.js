@@ -510,7 +510,7 @@
   // Fährgeschäft (v5.1): Fuhrwerke und Vieh, Zeitkarten, Fährkonzession, Insel- und Postverträge
   function ferryBox(r, info, last, mine) {
     const wd = E.wagDemand(S, r), zkOk = E.zkPossible(info), konz = E.konzOn(S, r), lost = r.konzLost, kind = E.ipKind(r);
-    const pk = (a, b) => (a < b ? a + "|" + b : b + "|" + a), c = Object.values(S.contracts).find(x => pk(x.a, x.b) === pk(r.a, r.b));
+    const pk = (a, b) => (a < b ? a + "|" + b : b + "|" + a), c = kind ? Object.values(S.contracts).find(x => pk(x.a, x.b) === pk(r.a, r.b)) : null;
     if (!wd && !zkOk && !konz && !lost && !kind && !c) return "";
     let h = '<div class="ferry"><h3>Fährgeschäft</h3>';
     if (wd) {

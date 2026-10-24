@@ -3,7 +3,7 @@
    Bilder und Musik kommen zuerst aus dem Speicher. Ihre Adressen tragen eine Prüfsumme (js/assets.js),
    deshalb bleiben sie über Updates hinweg gespeichert, und nur geänderte Dateien werden neu geladen.
    originale/, neue-bilder/, docs/ und tools/ werden nie gespeichert. */
-const CACHE = "flaggschiff-1792829313";
+const CACHE = "flaggschiff-1792869297";
 const MEDIA = "flaggschiff-medien";
 importScripts("js/assets.js");
 const CORE = ["./", "./index.html", "./css/style.css", "./js/assets.js", "./js/pwa.js", "./js/world.js", "./js/mapdata.js",
@@ -17,8 +17,8 @@ self.addEventListener("install", e => {
   e.waitUntil((async () => {
     const c = await caches.open(CACHE);
     await c.addAll(CORE.map(u => new Request(u, { cache: "reload" })));
-    const t = self.ASSETS.title, m = await caches.open(MEDIA);
-    if (t && !(await m.match(t))) await m.add(new Request(t, { cache: "reload" }));
+    const m = await caches.open(MEDIA);
+    for (const t of [self.ASSETS.title, self.ASSETS.title_wide]) if (t && !(await m.match(t))) await m.add(new Request(t, { cache: "reload" }));
     await self.skipWaiting();
   })());
 });
