@@ -427,7 +427,7 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Das Depot zählt zum Eigenkapital. Steht die Kasse am Monatsende im Minus, verkauft die Bank zuerst Aktien, bevor sie an die Schiffe geht.
 - Die Simulation prüft jetzt auch die Börse (Aktien gegen Reederei, Hauszeche, Prokurist). Alles Nähere im Konzept (docs/konzept-v4.6.md).
 
-## v5.0 · Fahrplan und Pünktlichkeit · aktuell
+## v5.0 · Fahrplan und Pünktlichkeit
 
 *Die Schiffe fahren nach Fahrplan: Die Fahrgäste zahlen bei der Abfahrt, die Kohle kostet beim Bekohlen, und wer zu spät kommt, verliert Fahrgäste an die Konkurrenz. Auf „Normal“ ist das Spiel spürbar schwerer, „Leicht“ spielt sich etwa wie v4.6.*
 
@@ -466,6 +466,19 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Der Börsenkauf „nach Betrag“ wurde bei sehr großen Beträgen langsam.
 - Speichern scheiterte still, wenn der Speicher des Geräts voll war. Jetzt kommt einmal eine Warnung.
 - Einige ältere Texte waren auf Englisch und Spanisch nicht übersetzt (Schiffe im Bau, Linie nach Ablieferung, Kredit eines Schiffs, Bestellmeldung der Werft).
+
+## v5.0.1 · Kohlemangel behoben · aktuell
+
+*Ein Küstendampfer konnte auf einer Strecke nahe seiner Reichweite bei jeder Abfahrt „Kohle wird knapp“ melden, obwohl er voll gebunkert hatte, und die Frage kam jeden Tag neu. Das ist behoben.*
+
+**BEHOBEN**
+
+- Kohle knapp bei jeder Abfahrt: Der Bunker fasste nur Kohle für die Reichweite bei normaler Fahrt. Auf Strecken nahe der Reichweite fehlte deshalb trotz vollem Bunker bei jeder Abfahrt Kohle, denn schon das Gewicht des vollen Bunkers kostet bis zu 6 % mehr. Jetzt fasst jeder Bunker Kohle für 125 % der Reichweite.
+- Eine Entscheidung bei Kohlemangel gilt jetzt für die ganze Fahrt, bis das Schiff wieder im Heimathafen seiner Linie ist. Bis dahin fragt das Spiel nicht neu und hält auch nicht noch einmal an. Ein Maschineninspektor meldet sich ebenfalls nur einmal je Fahrt.
+- Volldampf zum Aufholen fuhr auch dann, wenn die Kohle dafür nicht reichte, und löste so selbst den nächsten Kohlemangel aus. Jetzt nehmen die Schiffe dafür genug Kohle mit und fahren nur Volldampf, wenn sie reicht.
+- Reicht der Bunker schon bei ruhiger See nicht für die eingestellte Fahrstufe, etwa bei Volldampf auf einer Strecke an der Reichweite, fährt das Schiff etwas sparsamer, statt jedes Mal Kohlemangel zu melden. Das steht einmal im Logbuch.
+- Ereignisse, die am letzten Tag eines Monats entstanden, kamen erst einen Monat später, zum Beispiel Seenot oder Kohlemangel. Die Zeit hielt dann an, ohne dass ein Fenster erschien. Jetzt kommen sie am Ersten des neuen Monats.
+- Das Ereignis „Kohle wird knapp“ war auf Englisch und Spanisch nicht übersetzt, dazu zwei ältere Sätze (Versicherung nach einem Untergang, Hilfe der „Carpathia“).
 
 ## Als Nächstes geplant
 

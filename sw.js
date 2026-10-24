@@ -3,7 +3,7 @@
    Bilder und Musik kommen zuerst aus dem Speicher. Ihre Adressen tragen eine Prüfsumme (js/assets.js),
    deshalb bleiben sie über Updates hinweg gespeichert, und nur geänderte Dateien werden neu geladen.
    originale/, neue-bilder/, docs/ und tools/ werden nie gespeichert. */
-const CACHE = "flaggschiff-1792799606";
+const CACHE = "flaggschiff-1792829313";
 const MEDIA = "flaggschiff-medien";
 importScripts("js/assets.js");
 const CORE = ["./", "./index.html", "./css/style.css", "./js/assets.js", "./js/pwa.js", "./js/world.js", "./js/mapdata.js",
