@@ -845,12 +845,15 @@
   const legDays = (s, sh, G, k, fz) => G.legDist[k] / (shipSpd(s, sh, fz) * 24);
   function seaDays(s, sh, G, fz) { let d = 0; for (let k = 0; k < G.legDist.length; k++) d += legDays(s, sh, G, k, fz); return d; }
   function shipCycle(s, sh, G) { return 2 * seaDays(s, sh, G, fahrtF(s, sh)) + 2 * G.endLiege + 2 * (G.n - 2) * G.stopT; }
-  const coalCap = sh => { const t = TYPES[sh.type]; return Math.max(1, (t.range || 100) * (t.coal || .1) * .85 / COAL_T); };
+  // Der Bunker fasst Kohle für 125 % der Reichweite bei normaler Fahrt (v5.0.1): So passen auf Strecken bis zur Reichweite
+  // auch die Reserve, das Gewicht des vollen Bunkers und knapp bezahltes Maschinenpersonal (vorher fehlte dort bei jeder Abfahrt Kohle).
+  const BUNK_X = 1.25;
+  const coalCap = sh => { const t = TYPES[sh.type]; return Math.max(1, (t.range || 100) * (t.coal || .1) * .85 / COAL_T * BUNK_X); };
   function coalSm(s, sh, fz) {
     const t = TYPES[sh.type], st = staff(s); if (!(t.coal > 0)) return 0;
     return t.coal * .85 / COAL_T * fz * fz * (sh.majLate && sh.majLate.kessel ? 1.1 : 1) * COAL_LV[st.maschine] * capFx(s, sh).coal * (st.mi === 3 ? .97 : 1);
   }
-  const legCoal = (s, sh, G, k) => G.legDist[k] * coalSm(s, sh, fahrtF(s, sh)) * (1 + LADUNG / 2);
+  const legCoal = (s, sh, G, k, fz) => G.legDist[k] * coalSm(s, sh, fz || fahrtF(s, sh)) * (1 + LADUNG / 2);
   // Schiffe im Fahrplan einer Linie (auch solche in der Werft: Ihre Abfahrten fallen aus oder übernimmt das Reserveschiff)
   function lineShips(s, r) { return s.ships.filter(sh => sh.line === r.id && !sh.laid && sh.ready <= s.m && !sh.museum && sh.id !== r.res && !(sh.charter >= s.m)); }
   const usable = (s, sh) => !inDock(s, sh) && !offDuty(s, sh) && !detained(s, sh) && !(sh.charter >= s.m) && !sh.laid && !sh.museum;
@@ -884,7 +887,7 @@
   // Ein Schiff reiht sich in den Takt seiner Linie ein (neu, nach Werft, Linienwechsel, Überführung)
   function joinLine(s, sh, r, G, tReady, end) {
     const v = sh.v, tt = lineTT(s, r, G);
-    v.r = r.id; v.i = end; v.d = end === 0 ? 1 : -1; v.p = G.ports[end]; v.st = "hafen"; v.rdy = Math.max(v.rdy || 0, tReady); v.res = false;
+    v.r = r.id; v.i = end; v.d = end === 0 ? 1 : -1; v.p = G.ports[end]; v.st = "hafen"; v.rdy = Math.max(v.rdy || 0, tReady); v.res = false; v.knDec = null; v.knAsk = false;
     const others = tt.ships.filter(x => x !== sh && x.v && x.v.r === r.id && (x.v.st === "hafen" || x.v.st === "see"));
     if (tt.short || !others.length || !(tt.P > 0)) { v.pl = tReady; return; }
     const P = tt.P, off = lineOffsets(s, G, P, tt.ref), phs = others.map(x => phaseOf(G, x.v, off, P)).sort((a, b) => a - b);
@@ -954,8 +957,9 @@
   }
   // Bekohlen im Hafen: Menge nach Regel, Kosten, Dauer in Tagen
   function bunkerAt(s, sh, G, X, d) {
-    const v = sh.v, rule = bunkRule(s, sh), cap = coalCap(sh), res = BUNK_RES[rule];
-    const next = legCoal(s, sh, G, legOf(X, d)) * (1 + res);
+    const v = sh.v, rule = bunkRule(s, sh), cap = coalCap(sh), res = BUNK_RES[rule], r = routeOf(s, sh);
+    // mit „Volldampf zum Aufholen“ reicht die Kohle für die nächste Strecke auch bei Volldampf
+    const next = legCoal(s, sh, G, legOf(X, d), r && r.auf ? Math.max(fahrtF(s, sh), FAHRT.voll.f) : 0) * (1 + res);
     let target = next;
     if (rule !== "noetig") { const h = rule === "heim" ? G.homeIdx : cheapestIdx(s, sh, G); target = X === h ? cap : coalUntil(s, sh, G, X, d, h) * (1 + res); }
     target = Math.min(cap, Math.max(target, next));
@@ -1231,16 +1235,22 @@
   // Abfahrt aus dem Hafen v.i in Richtung v.d
   function depart(s, sh, r, G, tt, t, ctx) {
     const v = sh.v, X = v.i, d = v.d, to = X + d, k = legOf(X, d), acc = r.cur, sc = shipCur(sh);
-    const fzP = fahrtF(s, sh), late = Math.max(0, t - v.pl), catchUp = r.auf && late > .25 && fzP < FAHRT.voll.f, fz = catchUp ? FAHRT.voll.f : fzP;
+    const fzP = fahrtF(s, sh), late = Math.max(0, t - v.pl);
+    // Kohle für die Strecke bei ruhiger See (ein voller Bunker wiegt mit). Volldampf zum Aufholen nur, wenn die Kohle dafür reicht;
+    // reicht der Bunker schon für die eingestellte Fahrstufe nicht, fährt der Chief so sparsam, dass die Kohle reicht (v5.0.1)
+    const ladF = 1 + LADUNG * Math.min(1, v.b / coalCap(sh)), calm = f => G.legDist[k] * coalSm(s, sh, f) * ladF;
+    const catchUp = r.auf && late > .25 && fzP < FAHRT.voll.f && calm(FAHRT.voll.f) * 1.08 <= v.b;
+    let fz = catchUp ? FAHRT.voll.f : fzP;
+    if (calm(fz) > v.b && v.b >= .8 * calm(fz)) { fz *= Math.sqrt(v.b / calm(fz)) * .99; ecoNote(s, sh, r); }
     const B = boardAt(s, sh, r, G, X, d, t, fzP);
     const fee = legFee(s, sh, G, k); expense(s, "Hafengebühren", fee); acc.cost += fee; sc.cost = (sc.cost || 0) + fee;
     const fr = legFreight(s, sh, G, k); if (fr) { s.cash += fr; s.cur.rev += fr; s.cur.freight = (s.cur.freight || 0) + fr; acc.rev += fr; sc.rev = (sc.rev || 0) + fr; }
     // Fahrzeit: geplant mit der eigenen Fahrstufe, tatsächlich mit Wetter, Nebel und Pannen
     const pd = legDays(s, sh, G, k, fzP), ad0 = legDays(s, sh, G, k, fz), wx = wxLeg(s, sh, G, k, ad0, ctx.mo, !!s.sim);
     let ad = ad0 + wx.extra + wx.fog + wx.brk;
-    // Kohle für die Strecke: Wetter frisst mit, ein voller Bunker wiegt
+    // Kohle für die Strecke: Wetter frisst mit
     const daily = G.legDist[k] * coalSm(s, sh, fz) / Math.max(.05, ad0);
-    let burn = G.legDist[k] * coalSm(s, sh, fz) * (1 + LADUNG * Math.min(1, v.b / coalCap(sh))) + wx.coalX * daily;
+    let burn = calm(fz) + wx.coalX * daily;
     let short = 0;
     if (burn > v.b + .01) { short = burn - v.b; const slow = .5 + short / Math.max(.01, burn) * ad0 * 1.5; ad += slow; burn = v.b; v.kn = { short, slow }; }
     v.sf = tt.P > 0 ? Math.min(1, 2 * seaDays(s, sh, G, fzP) / tt.P) : 1;
@@ -1257,6 +1267,7 @@
     const v = sh.v, Y = v.to, lateA = t - v.pa, acc = r.cur;
     const coalV = burnCoal(s, sh, v.burn || 0);
     v.st = "hafen"; v.i = Y; v.p = G.ports[Y]; v.burn = 0;
+    if (Y === G.homeIdx) { v.knDec = null; v.knAsk = false; } // zurück im Heimathafen der Linie: die Entscheidung bei Kohlemangel ist erledigt
     const A = alightAt(s, sh, r, G, Y, t, lateA);
     if (isEnd(G, Y)) v.d = Y === 0 ? 1 : -1;
     const tol = lateTol(v.pd || 0);
@@ -1279,18 +1290,31 @@
   }
   const fmtD = d => { const x = Math.round(d * 10) / 10; return (x === 1 ? "1 Tag" : String(x).replace(".", ",") + " Tage"); };
 
-  // Kohle reicht nicht für die Strecke (Sturm hat die Reserve gefressen)
+  // Kohle reicht nicht für die Strecke (Sturm hat die Reserve gefressen). Eine Entscheidung gilt für die ganze Fahrt,
+  // bis das Schiff wieder im Heimathafen der Linie ist; bis dahin wird nicht neu gefragt und nicht neu gemeldet (v5.0.1)
   function coalShort(s, sh, r, G) {
     const v = sh.v, kn = v.kn; if (!kn || s.sim) return;
-    pauseReq(s, "coal", "Auf der „" + sh.name + "“ wird die Kohle knapp.", sh.id);
-    const st = staff(s);
-    if (st.mi >= 0) { // der Maschineninspektor entscheidet nach Regel: nachbunkern, wenn es mehr als einen Tag spart
+    const st = staff(s), home = PORTS[G.ports[G.homeIdx]].name;
+    if (st.mi >= 0) { // der Maschineninspektor entscheidet jedes Mal nach Regel: nachbunkern, wenn es mehr als 1,2 Tage spart
       const pick = kn.slow > 1.2 ? 1 : 0; coalShortResolve(s, sh, pick);
-      s.log.unshift({ m: s.m, head: "Kohle knapp auf der „" + sh.name + "“", text: "Ihr Maschineninspektor " + (pick ? "lässt den nächsten Hafen anlaufen und teuer nachbunkern." : "lässt langsam weiterfahren."), kind: "own", img: "ev_kohle_knapp" });
+      if (v.knDec != null) return; v.knDec = pick;
+      pauseReq(s, "coal", "Auf der „" + sh.name + "“ wird die Kohle knapp.", sh.id);
+      s.log.unshift({ m: s.m, head: "Kohle knapp auf der „" + sh.name + "“", text: "Ihr Maschineninspektor " + (pick ? "lässt den nächsten Hafen anlaufen und teuer nachbunkern." : "lässt langsam weiterfahren.") + " Bis zur Rückkehr nach " + home + " entscheidet er weiter selbst.", kind: "own", img: "ev_kohle_knapp" });
       return;
     }
-    if (!s.pending.some(p => p.id === "kohleknapp" && p.ship === sh.id)) s.pending.unshift({ id: "kohleknapp", day: s.day, ship: sh.id, img: "ev_kohle_knapp", head: "Kohle wird knapp auf der „" + sh.name + "“",
-      text: "Schwere See hat mehr Kohle gekostet als geplant. Der Chief meldet: Bis " + PORTS[G.ports[v.to]].name + " reicht der Vorrat nur bei langsamer Fahrt." });
+    if (v.knDec != null) { coalShortResolve(s, sh, v.knDec); return; }
+    if (s.pending.some(p => p.id === "kohleknapp" && p.ship === sh.id)) return;
+    pauseReq(s, "coal", "Auf der „" + sh.name + "“ wird die Kohle knapp.", sh.id);
+    v.knAsk = true;
+    s.pending.unshift({ id: "kohleknapp", day: s.day, ship: sh.id, img: "ev_kohle_knapp", head: "Kohle wird knapp auf der „" + sh.name + "“",
+      text: "Schwere See hat mehr Kohle gekostet als geplant. Der Chief meldet: Bis " + PORTS[G.ports[v.to]].name + " reicht der Vorrat nur bei langsamer Fahrt. Ihre Entscheidung gilt für die ganze Fahrt bis zur Rückkehr nach " + home + "." });
+  }
+  // Entscheidung des Spielers: gilt, bis das Schiff wieder im Heimathafen der Linie ist
+  function coalDecide(s, ev, idx) { const sh = shipById(s, ev.ship), v = sh && sh.v; if (v && v.knAsk) v.knDec = idx; return coalShortResolve(s, sh, idx); }
+  // Reicht der Bunker schon bei ruhiger See nicht für die eingestellte Fahrstufe, fährt der Chief sparsamer – gemeldet einmal je Schiff und Linie
+  function ecoNote(s, sh, r) {
+    if (s.sim || sh.ecoLog === r.id) return; sh.ecoLog = r.id;
+    s.log.unshift({ m: s.m, head: "Sparsame Fahrt auf der „" + sh.name + "“", text: "Der Bunker reicht auf dieser Linie nicht für die eingestellte Fahrstufe. Der Chief fährt so sparsam, dass die Kohle reicht.", kind: "own", img: "ev_kohle_knapp" });
   }
   function coalShortResolve(s, sh, idx) {
     const v = sh && sh.v, kn = v && v.kn; if (!kn || v.st !== "see") return "";
@@ -2262,9 +2286,9 @@
       ] },
     kohleknapp: { when: () => false, w: 0, img: "ev_kohle_knapp",
       opts: [
-        { t: "Langsam weiterfahren", h: "spart Kohle, kommt später an", f: (s, ev) => coalShortResolve(s, shipById(s, ev.ship), 0) },
-        { t: "Nächsten Hafen anlaufen und nachbunkern", h: "Notkohle 30 % teurer, weniger Verspätung", f: (s, ev) => coalShortResolve(s, shipById(s, ev.ship), 1) },
-        { t: "Holz und Mobiliar verheizen", h: "kaum Verspätung, aber Komfort und Zustand leiden", f: (s, ev) => coalShortResolve(s, shipById(s, ev.ship), 2) },
+        { t: "Langsam weiterfahren", h: "spart Kohle, kommt später an", f: (s, ev) => coalDecide(s, ev, 0) },
+        { t: "Nächsten Hafen anlaufen und nachbunkern", h: "Notkohle 30 % teurer, weniger Verspätung", f: (s, ev) => coalDecide(s, ev, 1) },
+        { t: "Holz und Mobiliar verheizen", h: "kaum Verspätung, aber Komfort und Zustand leiden", f: (s, ev) => coalDecide(s, ev, 2) },
       ] },
     catverl: { when: () => false, w: 0, img: "kue_caterer",
       opts: [
@@ -2721,6 +2745,8 @@
 
   function duePending(s) { return s.pending.length > 0 && (s.pending[0].day || 0) <= s.day; }
   function closeMonth(s) {
+    // Ereignisse vom Monatsletzten sind am Ersten des neuen Monats fällig (v5.0.1: vorher erst am selben Tag des Folgemonats)
+    for (const p of s.pending) if (p.day != null && p.day < s.day) p.day = 1;
     guard(s, "Börse", () => boRescue(s));
     let rep = guard(s, "Monatsabschluss", () => monthEnd(s));
     if (!rep) { rep = { m: s.m, lines: {}, rev: 0, tickets: 0, freight: 0, extra: {}, cost: {}, profit: 0, events: [], principal: 0 }; s.cur = newCur(s); }

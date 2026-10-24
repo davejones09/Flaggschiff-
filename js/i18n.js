@@ -1147,3 +1147,42 @@ window.I18N_TYPES_ES={"Hafenfähre": "transbordador portuario", "Küstendampfer"
   var DIC = { en: window.I18N_EN, es: window.I18N_ES };
   for (var L in V) { var T = DIC[L]; if (!T) continue; for (k in V[L]) if (!(k in T)) T[k] = V[L][k]; }
 })();
+
+/* v5.0.1: Kohlemangel (Texte des Ereignisses, Entscheidung für die ganze Fahrt, sparsame Fahrt) und zwei ältere fehlende Sätze */
+(function () {
+  var k, V = { en: {
+    "Kohle wird knapp auf der „{qA}“": "Coal running short on the “{qA}”", "Schwere See hat mehr Kohle gekostet als geplant.": "Heavy seas have burned more coal than planned.",
+    "Der Chief meldet: Bis {xA} reicht der Vorrat nur bei langsamer Fahrt.": "The chief engineer reports: the coal will only last as far as {xA} at reduced speed.",
+    "Ihre Entscheidung gilt für die ganze Fahrt bis zur Rückkehr nach {xA}.": "Your decision applies to the whole voyage until the ship is back in {xA}.",
+    "Langsam weiterfahren": "Carry on slowly", "spart Kohle, kommt später an": "saves coal, arrives later",
+    "Nächsten Hafen anlaufen und nachbunkern": "Put into the next port and take on coal", "Notkohle {nA} % teurer, weniger Verspätung": "emergency coal {nA} % dearer, less delay",
+    "Holz und Mobiliar verheizen": "Burn wood and furniture", "Das Schiff fährt mit halber Kraft weiter.": "The ship carries on at half speed.",
+    "Nachbunkern kostet {nA} Mark, die Verspätung wird kürzer.": "The extra coal costs {nA} marks, the delay gets shorter.",
+    "Holz und Mobiliar halten die Kessel unter Dampf.": "Wood and furniture keep the boilers in steam.", "Der Komfort leidet.": "Comfort suffers.",
+    "Bis zur Rückkehr nach {xA} entscheidet er weiter selbst.": "He will go on deciding himself until the ship is back in {xA}.",
+    "Sparsame Fahrt auf der „{qA}“": "Economical steaming on the “{qA}”",
+    "Der Bunker reicht auf dieser Linie nicht für die eingestellte Fahrstufe.": "On this line the bunkers do not hold enough coal for the set speed.",
+    "Der Chief fährt so sparsam, dass die Kohle reicht.": "The chief engineer steams so economically that the coal lasts.",
+    "kaum Verspätung, aber Komfort und Zustand leiden": "hardly any delay, but comfort and condition suffer",
+    "Es stellt Wartungsmängel fest – die Versicherung kürzt die Zahlung um {nA} %.": "It finds maintenance defects – the insurance cuts its payment by {nA} %.",
+    "Die „{qA}“ eilte zu Hilfe und blieb an ihrer Seite, bis der Schlepper kam.": "The “{qA}” rushed to help and stayed alongside until the tug arrived."
+  }, es: {
+    "Kohle wird knapp auf der „{qA}“": "Se acaba el carbón en el «{qA}»", "Schwere See hat mehr Kohle gekostet als geplant.": "La mar gruesa ha consumido más carbón de lo previsto.",
+    "Der Chief meldet: Bis {xA} reicht der Vorrat nur bei langsamer Fahrt.": "El jefe de máquinas informa: hasta {xA} el carbón solo alcanza navegando despacio.",
+    "Ihre Entscheidung gilt für die ganze Fahrt bis zur Rückkehr nach {xA}.": "Su decisión vale para todo el viaje, hasta el regreso a {xA}.",
+    "Langsam weiterfahren": "Seguir despacio", "spart Kohle, kommt später an": "ahorra carbón, llega más tarde",
+    "Nächsten Hafen anlaufen und nachbunkern": "Hacer escala en el próximo puerto y cargar carbón", "Notkohle {nA} % teurer, weniger Verspätung": "carbón de emergencia un {nA} % más caro, menos retraso",
+    "Holz und Mobiliar verheizen": "Quemar madera y mobiliario", "Das Schiff fährt mit halber Kraft weiter.": "El barco sigue a media máquina.",
+    "Nachbunkern kostet {nA} Mark, die Verspätung wird kürzer.": "El carbón de emergencia cuesta {nA} marcos, el retraso se acorta.",
+    "Holz und Mobiliar halten die Kessel unter Dampf.": "La madera y el mobiliario mantienen la presión en las calderas.", "Der Komfort leidet.": "El confort se resiente.",
+    "Bis zur Rückkehr nach {xA} entscheidet er weiter selbst.": "Hasta el regreso a {xA} seguirá decidiendo él mismo.",
+    "Sparsame Fahrt auf der „{qA}“": "Marcha económica en el «{qA}»",
+    "Der Bunker reicht auf dieser Linie nicht für die eingestellte Fahrstufe.": "En esta línea la carbonera no basta para la velocidad fijada.",
+    "Der Chief fährt so sparsam, dass die Kohle reicht.": "El jefe de máquinas navega con tanto ahorro que el carbón alcanza.",
+    "kaum Verspätung, aber Komfort und Zustand leiden": "apenas retraso, pero el confort y el estado se resienten",
+    "Es stellt Wartungsmängel fest – die Versicherung kürzt die Zahlung um {nA} %.": "Detecta deficiencias de mantenimiento: el seguro reduce el pago un {nA} %.",
+    "Die „{qA}“ eilte zu Hilfe und blieb an ihrer Seite, bis der Schlepper kam.": "El «{qA}» acudió en su ayuda y se quedó a su lado hasta que llegó el remolcador."
+  } };
+  var DIC = { en: window.I18N_EN, es: window.I18N_ES };
+  for (var L in V) { var T = DIC[L]; if (!T) continue; for (k in V[L]) if (!(k in T)) T[k] = V[L][k]; }
+})();
