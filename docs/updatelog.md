@@ -1,6 +1,6 @@
 # Updatelog
 
-*Alle Versionen des spielbaren Prototyps · Stand 19. Oktober 2026*
+*Alle Versionen des spielbaren Prototyps · Stand 24. Oktober 2026*
 
 Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spielstände werden beim Update automatisch übernommen.
 
@@ -467,7 +467,7 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Speichern scheiterte still, wenn der Speicher des Geräts voll war. Jetzt kommt einmal eine Warnung.
 - Einige ältere Texte waren auf Englisch und Spanisch nicht übersetzt (Schiffe im Bau, Linie nach Ablieferung, Kredit eines Schiffs, Bestellmeldung der Werft).
 
-## v5.0.1 · Kohlemangel behoben · aktuell
+## v5.0.1 · Kohlemangel behoben
 
 *Ein Küstendampfer konnte auf einer Strecke nahe seiner Reichweite bei jeder Abfahrt „Kohle wird knapp“ melden, obwohl er voll gebunkert hatte, und die Frage kam jeden Tag neu. Das ist behoben.*
 
@@ -480,9 +480,42 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Ereignisse, die am letzten Tag eines Monats entstanden, kamen erst einen Monat später, zum Beispiel Seenot oder Kohlemangel. Die Zeit hielt dann an, ohne dass ein Fenster erschien. Jetzt kommen sie am Ersten des neuen Monats.
 - Das Ereignis „Kohle wird knapp“ war auf Englisch und Spanisch nicht übersetzt, dazu zwei ältere Sätze (Versicherung nach einem Untergang, Hilfe der „Carpathia“).
 
+## v5.1 · Fährreederei und Spieltempo · aktuell
+
+*Jede neue Reederei beginnt mit einer Fähre auf einer Querung nahe dem Heimathafen und wächst in Ruhe: erst weitere Fähren, dann die Küste, später Nord- und Ostsee und nach 15 bis 20 Spieljahren der Atlantik. Dazu ein neues Hauptmenü und drei Spielstände.*
+
+**NEU**
+
+- Start mit einer Fähre: Bei der Gründung wählen Sie Startlinie und Fährtyp aus Vorschlägen nahe dem Heimathafen, etwa Hamburg – Blankenese, Glückstadt – Wischhafen, Dagebüll – Wyk auf Föhr, Liverpool – Birkenhead, Holyhead – Dublin, London – Gravesend oder Dover – Calais. Die Linie ist gleich eröffnet, die Fähre fährt ab dem ersten Tag.
+- Startflotte nach Schwierigkeit: Leicht 2 neue Fähren auf zwei Linien und 150.000 Mark Gründungskredit, Normal 1 neue Fähre und 100.000 Mark, Schwer 1 gebrauchte, 20 Jahre alte Fähre und 60.000 Mark. Die Startschiffe lassen sich erst nach drei Jahren verkaufen.
+- Vier Fährtypen ab 1880, jeder mit eigenem Bild: Dampffähre für Fuhrwerke (85.000 Mark, Wagendeck für 10 Fuhrwerke), Fluss-Raddampfer (110.000 Mark, 400 Plätze, nur auf Flüssen, im Sommer viele Ausflügler), Inselpostdampfer (145.000 Mark, Postraum, seefest) und Kanal-Raddampfer (180.000 Mark, 14 Knoten, Postraum, empfindlich bei Seegang). Die Rivalen fahren passende Fähren, die Linienkarte zeigt welche.
+- Fährgeschäft je Linie unter „Linien“: Fuhrwerke und Vieh auf den Querungen, bezahlt je Fahrt, nur mit Wagendeck. Zeitkarten auf kurzen Linien an großen Städten: Pendler zahlen einen festen Monatsbetrag und kündigen nach und nach, wenn weniger als 90 % der Fahrten pünktlich sind.
+- Insel- und Postverträge als Angebot für drei Jahre: fester Zuschuss im Monat gegen eine Mindestzahl an Fahrten, auch im Winter. Mit Postraum zahlt die Post 25 % mehr.
+- Fährkonzession: Die Stadt versteigert kurze Querungen mit Rivalen für zehn Jahre. Wer gewinnt, fährt dort ohne Konkurrenz, zahlt Pacht und muss im festen Takt fahren. Wer verliert, räumt die Querung nach sechs Monaten.
+- Kreditrahmen: Bank und Werft leihen zusammen höchstens ein Viertel des Eigenkapitals plus 60 % des Ergebnisses der letzten 12 Monate, mal Bonität. Die Bank zeigt den Rahmen und die Rechnung dahinter, die Werft sagt, warum ein Kredit zu groß ist. Der Gründungskredit zählt nicht mit, laufende Kredite bleiben.
+- Neues Hauptmenü mit Titelbild, am PC im Breitformat: Weiterspielen, Neue Reederei, Spielstände, Einstellungen und was neu ist. Es öffnet sich über die Flagge oben links, am PC auch mit Esc. Solange es offen ist, steht die Zeit.
+- Drei Spielstände: Jeder Platz zeigt Reederei, Datum, Eigenkapital und wann zuletzt gespielt, mit Spielen, Exportieren, Importieren und Löschen. Ein alter Spielstand liegt nach dem Update auf Platz 1.
+- Eigener Grundkurs für den Fährstart: Er beginnt mit der vorhandenen Fähre, erklärt das Fährgeschäft, die Zeitkarten und den Kreditrahmen.
+- Der Fähren-Konfigurator hat zwei neue Extras: Wagendeck und Postraum.
+- 9 neue Bilder: vier Fährtypen, Pendler, Fuhrwerke, Inselpost, Fährkonzession und das breite Titelbild für den PC.
+
+**GEÄNDERT**
+
+- Große Schiffe sind deutlich teurer, je nach Reichweite und Größe: Der Levantedampfer kostet jetzt 1,39 statt 0,95 Millionen Mark, der Schnelldampfer 11,6 statt 6,8 Millionen. Fähren, Küsten- und Bäderschiffe kosten wie bisher.
+- Hochseeschiffe zahlen doppelte Heuer und viel höhere Versicherung, Hochseelinien fünffache Hafengebühren. Ein halbleerer Ozeandampfer kostet jetzt richtig Geld. Dafür steigen die Fahrpreise auf langen Strecken: ab 350 Seemeilen nach und nach bis 70 % mehr.
+- Kurze Fährlinien zahlen Anlegergebühren statt voller Hafengebühren, und die Rivalen zählen auf kurzen Pendlerquerungen weniger. Eine Fähre verdient so verlässlich.
+- Wyk auf Föhr zieht mehr Badegäste an.
+- Im Kontor ersetzen „Spielstände“ und „Hauptmenü“ den Knopf für ein neues Spiel.
+- Alte Spielstände spielen ohne Fährstart weiter. Ihre Schiffe behalten den bisherigen Wert, die Fahrpreise langer Linien steigen gleich mit, die höheren Kosten auf hoher See gelten ab dem Laden.
+- Die Simulation lässt alle Bots mit einer Fähre starten, dazu die neuen Bots „Fährreederei“ und „Aufsteiger“. Alles Nähere im Konzept (docs/konzept-v5.1.md).
+
+**BEHOBEN**
+
+- Die Vertragszeile im Fährgeschäft und „ohne Linie“ bei einer Schiffstaufe waren auf Englisch und Spanisch nicht übersetzt.
+
 ## Als Nächstes geplant
 
-- v5.1 „Entwicklung der Reederei“.
+- v5.2 „Entwicklung und Gebäude“.
 - Danach: Börsengang der eigenen Reederei.
 - Restliche Musik (Ostsee-Winter, Seenot, Salon, Nordlandfahrt, Mittelmeer, Schiffstaufe-Fanfare), sobald Suno Premium da ist.
 - Später: echte App-Version für App Store bzw. Desktop mit Claude Code am PC, wie im Konzept vorgesehen.

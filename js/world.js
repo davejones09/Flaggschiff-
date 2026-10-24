@@ -20,7 +20,7 @@
     wis: P("Wischhafen", "Deutsche Nordsee", 53.78, 9.33, { pop: 12, fee: 5 }),
     jui: P("Juist", "Deutsche Nordsee", 53.68, 7.00, { pop: 2, bad: .6, fee: 12, shallow: true }),
     dag: P("Dagebüll", "Deutsche Nordsee", 54.73, 8.69, { pop: 30, fee: 8, shallow: true }),
-    wyk: P("Wyk auf Föhr", "Deutsche Nordsee", 54.69, 8.57, { pop: 3, bad: .9, fee: 12, shallow: true }),
+    wyk: P("Wyk auf Föhr", "Deutsche Nordsee", 54.69, 8.57, { pop: 3, bad: 1.4, fee: 12, shallow: true }), // v5.1: Nordseebad Wyk (vorher .9)
     kie: P("Kiel", "Deutsche Ostsee", 54.32, 10.14, { pop: 60, trade: .2, tr: .5, fee: 30 }),
     lue: P("Lübeck", "Deutsche Ostsee", 53.87, 10.69, { pop: 70, trade: .45, bad: .3, fee: 30 }),
     lab: P("Laboe", "Deutsche Ostsee", 54.40, 10.22, { pop: 3, bad: .5, fee: 6 }),
