@@ -196,6 +196,7 @@
   "spec_spar": {"bogen": "EAC9A2F7", "rahmen": [8, 518, 496, 496]},
   "spec_watt": {"bogen": "EAC9A2F7", "rahmen": [1030, 518, 498, 498]},
   "title": {"bogen": "2C2B7F74", "rahmen": [0, 0, 1024, 1536]},
+  "title_wide": {"bogen": "titel_breit", "rahmen": [0, 0, 1672, 941], "max": 1672},
   "wf_besichtigung": {"bogen": "FCAC4CC4", "rahmen": [17, 522, 739, 484]},
   "wf_buero": {"bogen": "FCAC4CC4", "rahmen": [777, 522, 745, 484]},
   "wf_dock": {"bogen": "FCAC4CC4", "rahmen": [13, 12, 743, 487]},

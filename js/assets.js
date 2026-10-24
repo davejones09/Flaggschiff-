@@ -199,6 +199,7 @@ self.ASSETS = {
   "spec_spar": "assets/img/spec_spar.webp?v=af603354d5",
   "spec_watt": "assets/img/spec_watt.webp?v=72ad3900d4",
   "title": "assets/img/title.webp?v=cae815e600",
+  "title_wide": "assets/img/title_wide.webp?v=f1298c84ab",
   "wf_besichtigung": "assets/img/wf_besichtigung.webp?v=38ba0edda4",
   "wf_buero": "assets/img/wf_buero.webp?v=b17497bee6",
   "wf_dock": "assets/img/wf_dock.webp?v=c7ee4843e0",

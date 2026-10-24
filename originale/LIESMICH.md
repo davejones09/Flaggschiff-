@@ -395,3 +395,7 @@ Seit v4.6 (Zeitung, Börse und Einführung).
 Seit v4.4.2 liegt die Musik im Spiel mit 96 kbit/s AAC (M4A) vor, so laut wie vorher (etwa −20 LUFS). `python3 tools/musik.py` erzeugt sie aus den Originalen neu.
 
 Seit v4.6 sind `mus0` und `mus1` Remaster (Suno-Instrumentals) und ersetzen die alten Originale. `mus0` bleibt die Titelmusik auf dem Startbildschirm. Alle übrigen Stücke laufen in der Playlist in zufälliger Reihenfolge ohne direkte Wiederholung. Sommer im Seebad kommt von Mai bis September doppelt so oft, Abschied der Auswanderer läuft nach der Meldung „Auswandererwelle“ als nächstes Stück. Hafenkneipe ist mit 80 und 95 Sekunden absichtlich kürzer.
+
+### bogen_titel_breit.webp
+Seit v5.1 (Hauptmenü). Titelbild für das Hauptmenü am PC, 16 : 9; das Handy behält `title` im Hochformat. Breiter als die übliche Grenze, daher in `tools/zuschnitt.json` mit `"max": 1672`.
+- `title_wide` – ganzes Bild

@@ -8,6 +8,7 @@ Braucht Pillow (pip install pillow). Danach wird js/assets.js automatisch neu er
 
 tools/zuschnitt.json:  Schlüssel -> {"bogen": "D31C83D3", "rahmen": [x, y, breite, höhe]}   (Pixel im Bogen)
   optional "leeren": [[x, y, breite, höhe], ...]  Bereiche im Ausschnitt durchsichtig machen (Nachbarteile im Baukasten)
+  optional "max": größte Breite für dieses Bild statt MAX_BREITE (Titelbild für den PC)
 Neues Bild: Bogen nach originale/bilder/, Rahmen eintragen, Skript laufen lassen, Zuordnung in originale/LIESMICH.md ergänzen.
 
 Bilder werden in der vollen Auflösung des Bogens geschnitten (nie hochgerechnet), höchstens MAX_BREITE breit,
@@ -36,8 +37,9 @@ def schneide(key, e):
     bild = bogen.convert("RGBA" if alpha else "RGB").crop((x, y, x + w, y + h))
     for lx, ly, lw, lh in e.get("leeren", []):
         bild.paste((0, 0, 0, 0), (lx, ly, lx + lw, ly + lh))
-    if w > MAX_BREITE:
-        bild = bild.resize((MAX_BREITE, round(h * MAX_BREITE / w)), Image.LANCZOS)
+    mx = e.get("max", MAX_BREITE)
+    if w > mx:
+        bild = bild.resize((mx, round(h * mx / w)), Image.LANCZOS)
     ziel = os.path.join(ROOT, "assets", "img", f"{key}.webp")
     bild.save(ziel, "WEBP", quality=QUALITAET, method=6, **({"alpha_quality": 100} if alpha else {}))
     return bild.size, os.path.getsize(ziel)
