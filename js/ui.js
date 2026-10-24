@@ -9,16 +9,20 @@
   const signed = n => (n < 0 ? '<span class="neg">' : "") + E.fmt(n) + (n < 0 ? "</span>" : "");
   const kn = v => String(v).replace(".", ",");
 
+  // Drei Spielstände (v5.1): Platz 1 nutzt den bisherigen Schlüssel, Platz 2 und 3 liegen daneben; der zuletzt gespielte Platz wird gemerkt
+  const SLOTS = [1, 2, 3], slotKey = n => n === 1 ? KEY : KEY + "-" + n, SLOT_KEY = KEY + "-platz";
+  let slot = (() => { try { const v = +localStorage.getItem(SLOT_KEY); return SLOTS.includes(v) ? v : 1; } catch (e) { return 1; } })();
+  function setSlot(n) { slot = SLOTS.includes(n) ? n : 1; try { localStorage.setItem(SLOT_KEY, String(slot)); } catch (e) { } }
   let saveWarned = false;
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); saveWarned = false; } catch (e) { if (!saveWarned) { saveWarned = true; toast("Speichern fehlgeschlagen: Der Speicher des Geräts ist voll. Exportieren Sie den Spielstand im Kontor."); } } }
+  function save() { if (!S) return; try { S.played = Date.now(); localStorage.setItem(slotKey(slot), JSON.stringify(S)); saveWarned = false; } catch (e) { if (!saveWarned) { saveWarned = true; toast("Speichern fehlgeschlagen: Der Speicher des Geräts ist voll. Exportieren Sie den Spielstand im Kontor."); } } }
   // Fehler einmal melden, das Spiel läuft weiter (v5.0: Uhr absichern)
   let errAt = 0;
   function reportErr(e, where) {
     try { console.error("Flaggschiff-Fehler (" + where + "):", e); } catch (x) { }
     if (Date.now() - errAt > 30000) { errAt = Date.now(); try { toast("Ein Fehler ist aufgetreten. Das Fenster wurde geschlossen, das Spiel läuft weiter."); } catch (x) { } }
   }
-  function load() { try { const t = localStorage.getItem(KEY); return t ? JSON.parse(t) : null; } catch (e) { return null; } }
-  function wipe() { try { localStorage.removeItem(KEY); } catch (e) { } }
+  function load(n) { try { const t = localStorage.getItem(slotKey(n || slot)); return t ? JSON.parse(t) : null; } catch (e) { return null; } }
+  function wipe(n) { try { localStorage.removeItem(slotKey(n || slot)); } catch (e) { } }
 
   function star(cx, cy, R, r, fill) {
     let p = []; for (let k = 0; k < 16; k++) { const a = Math.PI / 2 + k * Math.PI / 8, rr = k % 2 ? r : R; p.push((cx + rr * Math.cos(a)).toFixed(2) + "," + (cy - rr * Math.sin(a)).toFixed(2)); }
@@ -114,7 +118,7 @@
   /* ---------- Kopf ---------- */
   function renderHeader() {
     const c = S.cash;
-    $("hdr").innerHTML = FLAG + '<div><div class="firm">' + esc(S.name) + '</div><div class="date">' + E.dayStr(S) + "</div></div>" +
+    $("hdr").innerHTML = '<button class="flagbtn" data-act="menu" aria-label="Hauptmenü"' + (DESK ? ' title="Hauptmenü (Esc)"' : "") + ">" + FLAG + '</button><div><div class="firm">' + esc(S.name) + '</div><div class="date">' + E.dayStr(S) + "</div></div>" +
       '<div class="cash"><span>Kasse</span><b class="' + (c < 0 ? "neg" : "") + '">' + M(c) + "</b></div>" +
       '<button class="snd" data-act="snd" aria-label="' + (Snd.on ? "Ton ausschalten" : "Ton einschalten") + '">' + (Snd.on ? ICON_ON : ICON_OFF) + "</button>";
     const names = ["Stopp", "Langsam", "Halbe", "Volle"], over = S.over === "konkurs";
@@ -400,8 +404,8 @@
     h += diffBox();
     h += '<label class="field">Sprache</label><div class="seg" role="group" aria-label="Sprache">' + [["de", "Deutsch"], ["en", "English"], ["es", "Español"]].map(([k, n]) => '<button data-act="setLang" data-v="' + k + '" aria-pressed="' + (LANG === k) + '">' + n + "</button>").join("") + "</div>";
     h += tutList();
-    h += '<div class="actions"><button class="btn" data-act="exportOpen">Spielstand exportieren</button><button class="btn" data-act="importOpen">Spielstand importieren</button></div>';
-    h += '<div class="actions"><button class="btn warn" data-act="reset">' + (confirmReset ? "Wirklich alles löschen und neu beginnen?" : "Neues Spiel beginnen") + "</button></div>";
+    h += '<div class="actions"><button class="btn" data-act="exportOpen">Spielstand exportieren</button><button class="btn" data-act="menuSlotsGo">Spielstände</button><button class="btn" data-act="menu">Hauptmenü</button></div>';
+    h += '<p class="meta">Dieses Spiel liegt auf Platz ' + slot + ". Neue Reederei, Import und Löschen finden Sie im Hauptmenü unter „Spielstände“.</p>";
     return h;
   }
 
@@ -481,7 +485,8 @@
     let h = '<div class="item">' + img(routeImg(r), "banner", info.name) + '<div class="row"><h3>' + esc(info.name) + "</h3>" + seasonBar(info.season) + "</div>";
     h += '<div class="meta"><span class="kind">' + kindLabel(info) + "</span> " + esc(info.who) + " · " + E.fmt(info.dist) + " sm</div>";
     const rvs = E.rivalsOf(S, r, info);
-    h += '<div class="meta">Konkurrenz: ' + (cd > 0 && rvs.length ? rvs.map(x => E.RIV[x.k].name + (last && last.riv && last.D ? " (" + Math.round((last.riv[x.k] || 0) / last.D * 100) + " %)" : "")).join(", ") : "keine") + (r.adOn ? ' <span class="tag">Werbung läuft</span>' : "") + "</div>";
+    h += '<div class="meta">Konkurrenz: ' + (cd > 0 && rvs.length ? rvs.map(x => E.RIV[x.k].name + (last && last.riv && last.D ? " (" + Math.round((last.riv[x.k] || 0) / last.D * 100) + " %)" : "")).join(", ") : E.konzOn(S, r) ? "keine, Sie haben die Konzession" : "keine") + (r.adOn ? ' <span class="tag">Werbung läuft</span>' : "") + "</div>";
+    if (cd > 0 && rvs.length) { const rt = E.rivalTypes(S, r, info); if (rt.length) h += '<div class="meta">Die Rivalen fahren hier: ' + rt.map(k => E.TYPES[k].name).join(", ") + "</div>"; }
     h += '<div class="meta">Ihre Schiffe: ' + (mine.length ? mine.map(sh => "„" + esc(sh.name) + "“" + (sh.ready > S.m ? " (im Bau)" : sh.laid || !sh.line ? " (aufgelegt)" : "")).join(", ") : "keine") + "</div>";
     const offered = [0, 1, 2].map(i => mine.some(sh => E.TYPES[sh.type].sb[i] > 0));
     for (const i of [0, 1, 2]) {
@@ -496,8 +501,33 @@
     if (low) h += '<div class="meta">Die üblichen Preise sind mit der Inflation gestiegen. Anheben bis 100 % kostet keine Fahrgäste.</div>';
     if (last && last.ships) h += '<div class="stats"><div><b>' + E.fmt(last.pax) + '</b><span>Fahrgäste</span></div><div><b>' + Math.round(last.load * 100) + ' %</b><span>Auslastung</span></div><div><b>' + Math.round(last.share * 100) + ' %</b><span>Marktanteil</span></div></div><div class="meta">Beitrag nach Kohle, Hafen und Verpflegung: ' + signed(last.rev - last.cost) + " Mark</div>";
     else h += '<div class="meta" style="margin-top:8px">Letzten Monat ohne eigene Schiffe im Einsatz. Passende Schiffe: ' + (fitTypes(r.a, r.b, r.cruise).map(k => E.TYPES[k].name).join(", ") || "keine") + "</div>";
+    h += ferryBox(r, info, last, mine);
     if (mine.length) h += fahrplanBox(r, info);
     if (!mine.length) h += '<div class="actions"><button class="btn warn" data-act="closeRoute" data-id="' + r.id + '">Linie schließen</button></div>';
+    return h + "</div>";
+  }
+  // Fährgeschäft (v5.1): Fuhrwerke und Vieh, Zeitkarten, Fährkonzession, Insel- und Postverträge
+  function ferryBox(r, info, last, mine) {
+    const wd = E.wagDemand(S, r), zkOk = E.zkPossible(info), konz = E.konzOn(S, r), lost = r.konzLost, kind = E.ipKind(r);
+    const pk = (a, b) => (a < b ? a + "|" + b : b + "|" + a), c = Object.values(S.contracts).find(x => pk(x.a, x.b) === pk(r.a, r.b));
+    if (!wd && !zkOk && !konz && !lost && !kind && !c) return "";
+    let h = '<div class="ferry"><h3>Fährgeschäft</h3>';
+    if (wd) {
+      const cap = mine.some(sh => E.wagCap(E.TYPES[sh.type]) > 0);
+      h += '<div class="frow">' + img("fa_fuhrwerke", "thumb", "Fuhrwerke an der Fähre") + '<div><b>Fuhrwerke und Vieh</b><div class="meta">Etwa ' + E.fmt(wd) + " im Monat auf dieser Querung, je Fuhrwerk " + E.fmt(E.wagFare(S, info.dist)) + " Mark." +
+        (last && last.wag ? " Letzten Monat haben Ihre Schiffe " + E.fmt(last.wag) + " übergesetzt (" + E.fmt(last.wagRev) + " Mark)." : "") + (cap ? "" : " Dafür braucht es ein Schiff mit Wagendeck, etwa die Dampffähre für Fuhrwerke.") + "</div></div></div>";
+    }
+    if (zkOk) {
+      const on = E.zkOn(r), n = on ? Math.round(r.zk.n) : 0;
+      h += '<div class="frow">' + img("fa_pendler", "thumb", "Pendler mit Zeitkarten") + '<div><label class="switch" style="margin-top:0"><span><b>Zeitkarten für Pendler</b></span><input type="checkbox" data-act="zk" data-id="' + r.id + '"' + (on ? " checked" : "") + "></label>" +
+        '<div class="meta">' + (on ? n + " Pendler mit Monatskarte zu " + E.fmt(E.zkPrice(S, r)) + " Mark. " : "") + "Pendler zahlen einen festen Monatsbetrag, auch bei Sturm und im Winter, und es kommen mehr. Dafür bringt jede Fahrt weniger. Fällt die Pünktlichkeit unter 90 %, kündigen sie nach und nach.</div></div></div>";
+    }
+    if (konz) h += '<div class="frow">' + img("ev_konzession", "thumb", "Fährkonzession") + '<div><b>Fährkonzession bis ' + E.dateStr(r.konz.until) + '</b><div class="meta">Keine Rivalen auf dieser Querung. Pacht ' + E.fmt(r.konz.pacht * 12) + " Mark im Jahr, Pflicht: mindestens " + r.konz.takt + " Abfahrten in jedem Monat, auch im Winter" + (r.konz.miss ? " (bisher " + r.konz.miss + " Verstoß" + (r.konz.miss === 1 ? "" : "e") + ", nach drei ist sie weg)" : "") + ".</div></div></div>";
+    else if (lost) h += '<div class="hint bad">Die Fährkonzession hat ' + (E.RIV[lost.k] || E.RIV.elbe).name + " bekommen. Sie müssen die Querung bis " + E.dateStr(lost.until) + " räumen.</div>";
+    else if (info.kind.cat === "Fähre" && info.dist <= 15) h += '<div class="meta">Nach einigen Jahren versteigert die Stadt die Fährkonzession für diese Querung: zehn Jahre ohne Rivalen gegen Pacht und festen Takt.</div>';
+    if (c) h += '<div class="frow">' + img("fa_inselpost", "thumb", "Post für die Insel") + "<div><b>" + esc(c.name) + '</b><div class="meta">' + E.fmt(c.sub) + " Mark im Monat bis " + E.dateStr(c.until) + (c.minDeps ? ", mindestens " + c.minDeps + " Fahrten im Monat" + (c.minSpeed ? " mit " + c.minSpeed + " Knoten" : "") : "") + ". Sonst " + E.fmt(c.pen) + " Mark Strafe.</div></div></div>";
+    else if (kind === "insel") h += '<div class="meta">Zu den Inseln bietet die Post Verträge an: fester Zuschuss gegen festen Fahrplan, auch im Winter. Das Angebot kommt meist im Sommer.</div>';
+    else if (kind === "post") h += '<div class="meta">Für die Kanalpost bietet die Post Verträge an, wenn Ihre Schiffe 12 Knoten oder mehr schaffen.</div>';
     return h + "</div>";
   }
   function linien() {
@@ -531,7 +561,8 @@
     const t = E.TYPES[k];
     return '<details class="story"><summary>' + (k === "american" ? "Die Legende der American Star" : "Die wahre Geschichte") + "</summary>" + (k === "american" ? img("ev_wrack", "plateimg", "Das Wrack der American Star vor Fuerteventura") : "") + "<p>" + esc(t.story) + "</p></details>";
   }
-  function typeSpecs(t) { return "Reichweite " + E.fmt(t.range) + " sm" + (t.shallow ? " · flach gebaut" : "") + (t.ocean ? " · hochseetauglich" : "") + (t.trajekt ? " · nur Fährbahnhöfe, mit Güterwagen" : "") + (t.cargo ? " · Frachtraum" : ""); }
+  function typeSpecs(t) { return "Reichweite " + E.fmt(t.range) + " sm" + (t.shallow ? " · flach gebaut" : "") + (t.ocean ? " · hochseetauglich" : "") + (t.trajekt ? " · nur Fährbahnhöfe, mit Güterwagen" : "") + (t.cargo ? " · Frachtraum" : "") +
+    (t.wagons ? " · Wagendeck für " + t.wagons + " Fuhrwerke" : "") + (t.river ? " · nur auf Flüssen" : "") + (t.post ? " · Postraum (Postverträge zahlen 25 % mehr)" : "") + (t.sturdy ? " · seefest" : "") + (t.rough ? " · empfindlich bei Seegang" : ""); }
   const TYPE_GROUP = t => t.ocean ? 2 : t.range > 350 ? 1 : 0;
   const GROUP_NAME = ["Hafen, Küste und Fähren", "Nord- und Ostsee", "Hochsee: Mittelmeer und Übersee"];
   const openShip = new Set();
@@ -630,7 +661,7 @@
       for (const k of ks) {
         const t = E.TYPES[k];
         b += '<div class="item"><figure class="plate" style="margin-left:0;margin-right:0">' + img("ship_" + k, "", t.name + ", " + t.cls) + '</figure><div class="row"><h3>' + t.name + '</h3><span class="num">' + M(E.newPrice(S, k)) + '</span></div><div class="meta">' + t.cls + " · " + seatsText(t) + " · " +
-          kn(t.speed) + " Knoten · Komfort " + "★".repeat(t.comfort) + " · Bauzeit " + t.build + " Monate</div><p style=\"margin-top:6px\">" + E.TYPE_NOTE[k] + '</p><div class="meta">' + typeSpecs(t) + " · Heuer " + M(t.crew * (S.wage || 1)) + ' im Monat</div><div class="actions"><button class="btn solid" data-act="buyNew" data-type="' + k + '">Bestellen</button></div></div>';
+          kn(t.speed) + " Knoten · Komfort " + "★".repeat(t.comfort) + " · Bauzeit " + t.build + " Monate</div><p style=\"margin-top:6px\">" + E.TYPE_NOTE[k] + '</p><div class="meta">' + typeSpecs(t) + " · Heuer " + M(t.crew * (t.ocean ? E.OCEAN_CREW : 1) * (S.wage || 1)) + ' im Monat</div><div class="actions"><button class="btn solid" data-act="buyNew" data-type="' + k + '">Bestellen</button></div></div>';
       }
       if (olds.length) b += '<details class="olds"><summary>Ältere Bauarten (' + olds.length + ")</summary>" + olds.map(k => { const t = E.TYPES[k]; return '<div class="eqrow">' + img("ship_" + k, "mini", t.name) + '<span style="flex:1">' + t.name + '<br><span class="meta">' + t.cls + " · seit " + t.from + " · " + kn(t.speed) + " Knoten · " + E.fmt(t.seats) + " Plätze</span></span><button class=\"btn\" data-act=\"buyNew\" data-type=\"" + k + "\">" + M(E.newPrice(S, k)) + "</button></div>"; }).join("") + "</details>";
       if (g === 0) b = designList() + b;
@@ -874,7 +905,7 @@
   const capF = t => t.charAt(0).toUpperCase() + t.slice(1);
   const BUNK_SHORT = { heim: "Heimathafen", billig: "am billigsten", noetig: "das Nötige" };
   const BUNK_NOTE = { heim: "Volltanken im Heimathafen der Linie, unterwegs nur das Nötige. Sicher und meist günstig.", billig: "Volltanken im billigsten Hafen der Linie. Spart Geld, wenn ein Ende in der Ferne liegt.", noetig: "Überall nur das Nötige mit knapper Reserve. Wenig Geld im Bunker, aber öfter Kohlemangel bei Sturm." };
-  const DIFF_NOTE = { leicht: "Größerer Gründungskredit, schwächere Rivalen, halb so viele Verspätungen, seltener Unglücke, niedrigere Zinsen.", normal: "Das Spiel, wie es gedacht ist.", schwer: "Kleinerer Gründungskredit, stärkere Rivalen, mehr Verspätungen und Unglücke, höhere Zinsen." };
+  const DIFF_NOTE = { leicht: "Schwächere Rivalen, halb so viele Verspätungen, seltener Unglücke, niedrigere Zinsen.", normal: "Das Spiel, wie es gedacht ist.", schwer: "Stärkere Rivalen, mehr Verspätungen und Unglücke, höhere Zinsen, weniger Kredit." };
   let confirmDiff = null, confirmCancel = null, mapShip = null, abfAll = false, coalPort = null;
   // Wo ist das Schiff, wann fährt es ab, wie voll ist der Bunker?
   // Abschnitte mit „ · “ getrennt, damit Datum und Verspätung einzeln übersetzt werden
@@ -1041,7 +1072,7 @@
   /* ---------- Personal ---------- */
   function personal() {
     const st = E.staff(S), w = S.wage || 1;
-    const crewAll = S.ships.filter(x => x.ready <= S.m).reduce((a, x) => a + E.TYPES[x.type].crew, 0) * w * (S.crewMult || 1);
+    const crewAll = S.ships.filter(x => x.ready <= S.m).reduce((a, x) => a + E.TYPES[x.type].crew * (E.TYPES[x.type].ocean ? E.OCEAN_CREW : 1), 0) * w * (S.crewMult || 1);
     let h = '<h2>Personal</h2><p class="sub">Bessere Bezahlung kostet mehr, bringt aber spürbare Vorteile. Bei knapper Bezahlung drohen öfter Streiks.</p>';
     for (const k of ["deck", "maschine", "service"]) {
       const D = E.DEPT[k];
@@ -1340,6 +1371,21 @@
     { t: "Ihre Schiffe fahren nach Fahrplan. Unter Kontor → Abfahrten sehen Sie, wann sie ablegen, wie voll sie wohl werden und wie pünktlich sie ankommen.", get sel() { return tab === "kontor" ? '[data-act="ksub"][data-v="abfahrten"]' : '#tabs [data-tab="kontor"]'; }, next: true },
     { t: "Das war der Grundkurs. Wenn Sie einen Bereich zum ersten Mal öffnen – Werft, Flotte, Abfahrten, Einkauf, Personal, Markt, Zeitung oder Börse –, erklärt Ihnen der Berater dort das Wichtigste in wenigen Schritten. Viel Erfolg!", next: true, last: true },
   ];
+  // Grundkurs für den Start mit Fähre (v5.1): beginnt mit der vorhandenen Fähre und erklärt das Fährgeschäft
+  const firstLine = () => S.routes[0], firstShip = () => S.ships[0];
+  const TUT_F = [
+    { get t() { const sh = firstShip(), r = firstLine(), i = r && E.rInfo(S, r); return "Willkommen in Ihrem Kontor! Ihre erste Fähre fährt schon: die „" + (sh ? esc(sh.name) : "") + "“" + (i ? " auf " + i.name : "") + ". Die Zeit steht still, bis Sie sie starten. Schauen wir uns zuerst die Linie an: " + tapW("Klicken Sie links auf „Linien“ (Taste L).", "Tippen Sie unten auf „Linien“."); }, sel: '#tabs [data-tab="linien"]', ok: () => tab === "linien" },
+    { t: "Hier ist Ihre Fährlinie: Nachfrage, Konkurrenz und der Preis je Klasse. Kurze Querungen leben von vielen Fahrten am Tag – je pünktlicher, desto mehr Fahrgäste bleiben Ihnen treu.", get sel() { return tab === "linien" ? "main .item" : '#tabs [data-tab="linien"]'; }, next: true },
+    { get t() { const r = firstLine(), i = r && E.rInfo(S, r); if (i && E.zkPossible(i)) return "Unter „Fährgeschäft“ verdienen Fähren dazu. Schalten Sie die Zeitkarten ein: Pendler zahlen dann jeden Monat einen festen Betrag, solange Ihre Fähre pünktlich fährt."; return "Unter „Fährgeschäft“ verdienen Fähren dazu: Fuhrwerke und Vieh auf den Querungen, Zeitkarten für Pendler, Post- und Inselverträge. Was hier möglich ist, steht bei Ihrer Linie."; },
+      get sel() { return tab === "linien" ? (document.querySelector('[data-act="zk"]') ? '[data-act="zk"]' : "main .ferry") : '#tabs [data-tab="linien"]'; },
+      ok: () => { const r = firstLine(), i = r && E.rInfo(S, r); return !!(i && E.zkPossible(i) && E.zkOn(r)); }, get next() { const r = firstLine(), i = r && E.rInfo(S, r); return !(i && E.zkPossible(i)); } },
+    { get t() { return "Starten Sie die Zeit: " + tapW("oben am Maschinentelegrafen auf „Langsam“ klicken oder die Leertaste drücken.", "unten am Maschinentelegrafen auf „Langsam“ tippen.") + " Ein Tag dauert dann vier Sekunden. Ereignisse halten die Zeit automatisch an."; }, sel: '#tele [data-act="speed"][data-v="1"]', ok: () => S.speed > 0 },
+    { t: "Im Kontor zeigt das Hauptbuch Tag für Tag Einnahmen und Kosten: Fahrkarten, dazu Fuhrwerke, Zeitkarten und Postzuschüsse. Die Zinsen Ihres Gründungskredits laufen schon.", get sel() { return tab === "kontor" ? "#ledger" : '#tabs [data-tab="kontor"]'; }, next: true },
+    { t: "Unter „Bank“ steht Ihr Kreditrahmen. Er wächst mit Eigenkapital und Gewinn. Für den nächsten Schritt – eine zweite Fähre oder ein Küstendampfer für eine Bäderlinie – sparen Sie oder nehmen einen Kredit im Rahmen.", get sel() { return tab === "bank" ? '[data-tut="rahmen"]' : '#tabs [data-tab="bank"]'; }, next: true },
+    { t: "Ihre Fähren fahren nach Fahrplan. Unter Kontor → Abfahrten sehen Sie, wann sie ablegen und wie pünktlich sie ankommen.", get sel() { return tab === "kontor" ? '[data-act="ksub"][data-v="abfahrten"]' : '#tabs [data-tab="kontor"]'; }, next: true },
+    { t: "Das war der Grundkurs. Wachsen Sie in Ruhe: weitere Fähren, dann die Küste, später Nord- und Ostsee und irgendwann der Atlantik. Wenn Sie einen Bereich zum ersten Mal öffnen, erklärt der Berater dort das Wichtigste. Viel Erfolg!", next: true, last: true },
+  ];
+  const tutList0 = () => S && S.flags && S.flags.ferryStart ? TUT_F : TUT;
   const CHAP = {
     werft: { name: "Werft", when: () => tab === "werft", go: () => { tab = "werft"; }, steps: [
       { t: "Hier bestellen Sie Neubauten. Die Schiffe sind nach Einsatz sortiert: Hafen, Küste und Fähren, Nord- und Ostsee, Übersee. Ältere Bauarten stehen jeweils am Ende.", sel: "main details.sec" },
@@ -1386,7 +1432,7 @@
   function tutState() { if (!S) return null; const T = S.tut || (S.tut = { done: true }); T.ch = T.ch || {}; return T; }
   function tutCur() {
     const T = tutState(); if (!T || T.off) return null;
-    if (!T.done) { const st = TUT[T.step]; return st ? { st, i: T.step, n: TUT.length, base: true } : null; }
+    if (!T.done) { const L = tutList0(), st = L[T.step]; return st ? { st, i: T.step, n: L.length, base: true } : null; }
     // ein Kapitel ruht, solange man den Bereich verlassen hat, und geht weiter, wenn man zurückkommt
     if (T.cur && CHAP[T.cur.k]) { const C = CHAP[T.cur.k], st = C.steps[T.cur.i]; return st && C.when() ? { st, i: T.cur.i, n: C.steps.length, name: C.name } : null; }
     return null;
@@ -1402,8 +1448,8 @@
   function tutCheck() {
     const T = tutState(); if (!T || T.off) return false;
     if (!T.done) {
-      const st = TUT[T.step];
-      if (st && st.ok && !T.held && st.ok()) { T.step++; if (T.step >= TUT.length) T.done = true; return true; }
+      const L = tutList0(), st = L[T.step];
+      if (st && st.ok && !T.held && st.ok()) { T.step++; if (T.step >= L.length) T.done = true; return true; }
       return false;
     }
     if (T.cur || sheet || (S.pending.length && E.duePending(S))) return false;
@@ -1414,7 +1460,7 @@
     const T = tutState(); if (!T) return;
     if (a === "tutOff") { T.off = true; T.done = true; T.cur = null; return; }
     if (!T.done) {
-      if (a === "tutNext") { T.held = false; T.step++; if (T.step >= TUT.length) T.done = true; }
+      if (a === "tutNext") { T.held = false; T.step++; if (T.step >= tutList0().length) T.done = true; }
       else if (a === "tutBack") { T.step = Math.max(0, T.step - 1); T.held = true; }
       else if (a === "tutSkip") { T.done = true; T.held = false; }
       return;
@@ -1494,11 +1540,12 @@
     h += '<label class="field">Rumpf</label>' + seg("hull", [["schlank", "Schlank"], ["normal", "Normal"], ["bauchig", "Bauchig"]]);
     h += '<label class="field">Antrieb</label>' + seg("drive", [["dampf", "Dampf"], ["rad", "Raddampfer"], ["oel", "Ölfeuerung", y < 1912], ["motor", "Motor", y < 1912]]);
     h += '<label class="field">Einrichtung</label>' + seg("interior", [["einfach", "Einfach"], ["komfort", "Komfortabel"]]);
-    h += '<label class="field">Extras</label>' + ["sonne", "laderaum", "eis"].map(k => '<label class="check"><input type="checkbox" data-act="dext" data-k="' + k + '"' + (d.extras[k] ? " checked" : "") + "> " + E.DES.extras[k].name + "</label>").join("");
+    h += '<label class="field">Extras</label>' + ["sonne", "laderaum", "eis", "wagendeck", "postraum"].map(k => '<label class="check"><input type="checkbox" data-act="dext" data-k="' + k + '"' + (d.extras[k] ? " checked" : "") + "> " + E.DES.extras[k].name + "</label>").join("");
     h += '<label class="field">Schornsteine</label>' + seg("funnels", [[1, "Einer"], [2, "Zwei"]]);
     h += '<label class="field" for="dname">Name des Entwurfs</label><input class="name" id="dname" value="' + esc(d.name) + '" maxlength="24" autocomplete="off">';
     const b = E.TYPES[d.base];
     h += '<table class="fin" style="width:100%;margin-top:10px"><tr><td>Tempo</td><td>' + kn(t.speed) + " Knoten" + (Math.abs(t.speed - b.speed) > .05 ? ' <span class="meta">(Grundtyp ' + kn(b.speed) + ")</span>" : "") + "</td></tr><tr><td>Plätze</td><td>" + E.fmt(t.seats) + ' <span class="meta">(Grundtyp ' + E.fmt(b.seats) + ")</span></td></tr><tr><td>Komfort</td><td>" + "★".repeat(Math.round(t.comfort)) + "</td></tr><tr><td>Reichweite</td><td>" + E.fmt(t.range) + " sm" + (t.shallow ? " · flach gebaut" : "") + "</td></tr><tr><td>Kohle je Seemeile</td><td>" + kn(t.coal) + ' <span class="meta">(Grundtyp ' + kn(b.coal) + ")</span></td></tr><tr><td>Heuer im Monat</td><td>" + M(t.crew * S.wage) + "</td></tr><tr><td>Baupreis</td><td>" + M(price) + "</td></tr><tr><td>Bauzeit</td><td>" + t.build + " Monate</td></tr></table>";
+    if (t.wagons || t.post) h += '<div class="meta" style="margin-top:6px">' + (t.wagons ? "Wagendeck für " + t.wagons + " Fuhrwerke" + (t.post ? ", " : ".") : "") + (t.post ? "Postraum: Postverträge zahlen 25 % mehr." : "") + "</div>";
     h += '<div class="meta" style="margin-top:6px">Gespeicherte Entwürfe finden Sie in der Werft. Jedes weitere Schiff desselben Entwurfs wird 8 % günstiger, höchstens 20 %.</div>';
     return h + '<div class="actions"><button class="btn solid" data-act="dsave" style="flex:1">Speichern und bestellen</button><button class="btn" data-act="close" style="flex:1">Abbrechen</button></div></div></div>';
   }
@@ -1640,6 +1687,14 @@
     let h = '<h2>Bank</h2><p class="sub">Bonität ' + rt.grade + " – Eigenkapitalquote " + Math.round(Math.max(0, rt.q) * 100) + " %. Leitzins derzeit " + S.base.toFixed(1).replace(".", ",") + " %.</p>";
     h += '<div class="kv"><div><b>' + M(fv) + '</b><span>Wert der Flotte</span></div><div><b>' + M(d) + '</b><span>Schulden</span></div></div>';
     h += chart();
+    // Kreditrahmen (v5.1)
+    const ci = E.creditInfo(S), C = E.CREDIT;
+    h += '<h2>Kreditrahmen</h2><div class="kv"><div><b>' + M(ci.limit) + '</b><span>Rahmen für Bank und Werft</span></div><div><b>' + M(ci.room) + '</b><span>davon noch frei</span></div></div>' +
+      '<table class="fin" style="width:100%" data-tut="rahmen"><tr><td>' + Math.round(C.eq * 100) + " % des Eigenkapitals (" + M(ci.eq) + ")</td><td>" + M(C.eq * Math.max(0, ci.eq)) + "</td></tr>" +
+      "<tr><td>" + Math.round(C.res * 100) + " % des Ergebnisses der letzten 12 Monate" + (ci.months < 12 ? " (Gewinne zählen erst nach einem vollen Geschäftsjahr)" : "") + "</td><td>" + M(C.res * ci.res) + "</td></tr>" +
+      "<tr><td>mal Bonität " + ci.grade + "</td><td>× " + kn(ci.gf) + "</td></tr>" + (ci.df !== 1 ? "<tr><td>mal Schwierigkeitsgrad</td><td>× " + kn(ci.df) + "</td></tr>" : "") +
+      "<tr><td>abzüglich laufender Kredite (ohne Gründungskredit)</td><td>" + M(ci.used) + "</td></tr></table>" +
+      '<div class="meta">Bank und Werft geben neue Kredite nur im Rahmen. Bestehende Kredite bleiben, wie sie sind. Bar kaufen geht immer.</div>';
     h += "<h2>Kredite</h2>";
     if (!S.loans.length) h += '<p class="sub">Keine Kredite. Neue Kredite gibt es beim Schiffskauf in der Werft.</p>';
     for (const l of S.loans) {
@@ -1648,13 +1703,13 @@
         '<div class="actions"><button class="btn" data-act="repay" data-id="' + l.id + '" data-a="50000">50.000 tilgen</button><button class="btn" data-act="repay" data-id="' + l.id + '" data-a="all">Ganz tilgen</button></div></div>';
     }
     const cs = Object.values(S.contracts);
-    h += "<h2>Verträge</h2>" + (cs.length ? cs.map(c => '<div class="item"><h3 style="font-size:18px">' + c.name + '</h3><div class="meta">' + M(c.sub) + " im Monat bis " + E.dateStr(c.until) + ". Ohne Fahrt: " + M(c.pen) + " Strafe.</div></div>").join("") :
-      '<p class="sub">Keine Verträge. Angebote kommen als Ereignis – etwa ein Postvertrag, wenn Sie schnelle Schiffe nach New York oder Ostasien schicken.</p>');
+    h += "<h2>Verträge</h2>" + (cs.length ? cs.map(c => '<div class="item"><h3 style="font-size:18px">' + esc(c.name) + '</h3><div class="meta">' + M(c.sub) + " im Monat bis " + E.dateStr(c.until) + ". " + (c.minDeps ? "Mindestens " + c.minDeps + " Fahrten im Monat, sonst " + M(c.pen) + " Strafe." : "Ohne Fahrt: " + M(c.pen) + " Strafe.") + "</div></div>").join("") :
+      '<p class="sub">Keine Verträge. Angebote kommen als Ereignis – etwa ein Inselvertrag, wenn Ihre Fähren zu einer Insel fahren, oder ein Postvertrag, wenn Sie schnelle Schiffe nach New York oder Ostasien schicken.</p>');
     return h;
   }
 
   /* ---------- Dialoge ---------- */
-  let evKey = null, evReadyAt = 0, startTut = false;
+  let evKey = null, evReadyAt = 0, startTut = true;
   // Fenster zeichnen; wirft das Zeichnen einen Fehler, wird das Fenster geschlossen, damit die Uhr nicht hängen bleibt
   function renderModal() {
     try { renderModal0(); }
@@ -1677,7 +1732,7 @@
   }
   function renderModal0() {
     const m = $("modal");
-    if (!S) { m.innerHTML = sheet && sheet.kind === "import" ? importSheet() : startSheet(); return; }
+    if (!S || menu) { m.innerHTML = ""; return; }
     if (S.over === "konkurs") { m.innerHTML = endSheet(); return; }
     if (S.pending.length && E.duePending(S)) {
       const ev = S.pending[0], opts = E.eventOptions(S, ev), key = ev.id + "|" + ev.head + "|" + (ev.day || 0) + "|" + S.t;
@@ -1691,16 +1746,132 @@
     m.innerHTML = "";
   }
   let startHome = "ham", startDiff = "normal";
-  function startSheet() {
-    const hn = { ham: "Hamburg", lpl: "Liverpool", lon: "London" }[startHome], loan = E.DIFF[startDiff].loan;
-    return '<div class="veil light"><div class="sheet" role="dialog" aria-modal="true">' + (startHome !== "ham" ? img(startHome === "lpl" ? "gb_liverpool" : "gb_dover", "banner", hn) : "") + '<div class="kicker">' + hn + ', im März 1880</div><h3>Gründen Sie Ihre Reederei</h3>' +
-      '<div class="seg" role="group" aria-label="Sprache" style="margin-bottom:10px">' + [["de", "Deutsch"], ["en", "English"], ["es", "Español"]].map(([k, n]) => '<button data-act="setLang" data-v="' + k + '" aria-pressed="' + (LANG === k) + '">' + n + "</button>").join("") + "</div>" +
-      '<label class="field">Heimathafen</label><div class="seg" role="group" style="margin-bottom:10px">' + [["ham", "Hamburg"], ["lpl", "Liverpool"], ["lon", "London"]].map(([k, n]) => '<button data-act="setHome" data-v="' + k + '" aria-pressed="' + (startHome === k) + '">' + n + "</button>").join("") + "</div>" +
-      '<label class="field">Schwierigkeitsgrad</label><div class="seg" role="group" aria-label="Schwierigkeitsgrad">' + E.DIFF_ORDER.map(k => '<button data-act="setDiff0" data-v="' + k + '" aria-pressed="' + (startDiff === k) + '">' + E.DIFF[k].name + "</button>").join("") + '</div><div class="meta" style="margin-bottom:10px">' + DIFF_NOTE[startDiff] + "</div>" +
-      "<p>" + (startHome === "ham" ? E.fmt(loan) + " Mark Gründungskredit der Hamburger Bank" : E.fmt(Math.round(loan / 20.43 / 100) * 100) + " Pfund Gründungskredit einer Londoner Bank") + ", ein Kontor am Hafen und über 70 Häfen zwischen Dublin und Shanghai. Welche Verbindungen Sie eröffnen, entscheiden Sie.</p>" +
-      '<label class="field" for="nm">Name der Reederei</label><div class="namebox"><input class="name" id="nm" value="' + esc(startName) + '" maxlength="28" autocomplete="off"><button class="dice" data-act="rollfirm" aria-label="Anderer Name">🎲</button></div>' +
-      '<div class="actions"><button class="btn solid" data-act="start" style="width:100%">Reederei gründen</button></div><label class="switch" style="margin-top:12px"><span>Mit Einführung spielen</span><input type="checkbox" id="tutchk"' + (startTut ? " checked" : "") + '></label><button class="linkbtn" data-act="importOpen">Vorhandenen Spielstand importieren</button></div></div>';
+  /* ---------- Hauptmenü, Spielstände und Gründung (v5.1) ---------- */
+  let menu = null, newStep = 1, newSlot = 1, startLine = null, startType = null, startLine2 = null, slotUi = {}, menuMsg = "";
+  const VERSION = "5.1";
+  const HOME_NAME = { ham: "Hamburg", lpl: "Liverpool", lon: "London" };
+  // Geld bei der Gründung: bei britischem Heimathafen in Pfund
+  const startMoney = v => startHome === "ham" ? E.fmt(v) + " Mark" : pounds(v);
+  const slotMoney = (st, v) => st && st.country === "gb" ? pounds(v) : E.fmt(v) + " Mark";
+  function slotInfo(n) {
+    const st = n === slot && S ? S : load(n); if (!st || !Array.isArray(st.ships)) return null;
+    let eq = null; try { const x = n === slot && S ? S : E.migrate(JSON.parse(JSON.stringify(st))); eq = E.equity(x); } catch (e) { eq = null; }
+    return { st, name: st.name, home: st.home || "ham", diff: st.diff || "normal", date: E.dateStr(st.m || 0), eq, ships: st.ships.length, played: st.played || null, over: st.over };
   }
+  const playedStr = ms => { if (!ms) return ""; const d = new Date(ms), z = x => String(x).padStart(2, "0"); return z(d.getDate()) + "." + z(d.getMonth() + 1) + "." + d.getFullYear() + ", " + z(d.getHours()) + ":" + z(d.getMinutes()) + " Uhr"; };
+  function menuBrand() {
+    return '<div class="mbrand"><svg viewBox="0 0 40 40" aria-hidden="true">' + star(20, 20, 18, 7.4, "#fff") + "</svg><h1>Flaggschiff</h1><p>Personenschifffahrt ab 1880</p></div>";
+  }
+  function menuShell(inner, wide) {
+    const pic = DESK && A.title_wide ? img("title_wide", "", "Hamburger Hafen 1880") : A.title ? img("title", "", "Hamburger Hafen 1880") : "";
+    return '<div class="menu-screen' + (wide ? " wide" : "") + '"><div class="menu-bg">' + pic + "</div>" + menuBrand() + '<div class="menu-panel">' + inner +
+      '<div class="menu-ver">Version ' + VERSION + "</div></div></div>";
+  }
+  const mbtn = (act, title, sub, attrs) => '<button class="mbtn" data-act="' + act + '"' + (attrs || "") + "><b>" + title + "</b>" + (sub ? "<span>" + sub + "</span>" : "") + "</button>";
+  const langSeg = () => '<div class="seg mlang" role="group" aria-label="Sprache">' + [["de", "Deutsch"], ["en", "English"], ["es", "Español"]].map(([k, n]) => '<button data-act="setLang" data-v="' + k + '" aria-pressed="' + (LANG === k) + '">' + n + "</button>").join("") + "</div>";
+  // die Spielstände mit Inhalt, zuletzt gespielter zuerst
+  const filledSlots = () => SLOTS.map(n => [n, slotInfo(n)]).filter(x => x[1]);
+  function menuMain() {
+    const cur = S ? slotInfo(slot) : (filledSlots().sort((a, b) => (b[1].played || 0) - (a[1].played || 0))[0] || [null, null])[1];
+    const used = filledSlots().length;
+    let h = '<nav class="mlist" aria-label="Hauptmenü">';
+    if (cur) h += mbtn("menuGo", "Weiterspielen", esc(cur.name) + " · " + cur.date + (cur.eq != null ? " · " + slotMoney(cur.st, cur.eq) : ""));
+    h += mbtn("menuNew", "Neue Reederei gründen", "mit einer Fähre ab März 1880");
+    h += mbtn("menuSlots", "Spielstände", used + " von 3 Plätzen belegt");
+    h += mbtn("menuSettings", "Einstellungen", "Sprache, Ton und Musik");
+    h += mbtn("menuNews", "Neu in Version " + VERSION, "Fährreederei und Spieltempo");
+    return h + "</nav>" + langSeg() + (DESK ? '<p class="mkeys">Pfeiltasten und Enter wählen, Esc ' + (S ? "führt zurück ins Spiel" : "schließt Unterseiten") + ".</p>" : "");
+  }
+  function menuSlots() {
+    let h = '<h2 class="mh">Spielstände</h2>';
+    for (const n of SLOTS) {
+      const I = slotInfo(n), act = n === slot && !!S, U = slotUi;
+      h += '<div class="mslot' + (act ? " on" : "") + '"><div class="mslothd"><b>Platz ' + n + "</b>" + (act ? '<span class="tag">aktiv</span>' : "") + "</div>";
+      if (I) {
+        h += "<h3>" + esc(I.name) + '</h3><div class="meta">' + HOME_NAME[I.home] + " · " + E.DIFF[I.diff].name + " · " + I.date + (I.over ? " · Konkurs" : "") + "</div>" +
+          '<div class="meta">' + (I.eq != null ? "Eigenkapital " + slotMoney(I.st, I.eq) + " · " : "") + I.ships + (I.ships === 1 ? " Schiff" : " Schiffe") + (I.played ? " · zuletzt gespielt am " + playedStr(I.played) : "") + "</div>" +
+          '<div class="actions"><button class="btn solid" data-act="slotPlay" data-n="' + n + '"' + (DESK ? ' title="Taste ' + n + '"' : "") + ">" + (act ? "Weiterspielen" : "Spielen") + '</button><button class="btn" data-act="slotExp" data-n="' + n + '">Exportieren</button>' +
+          '<button class="btn warn" data-act="slotDel" data-n="' + n + '">' + (U.del === n ? "Wirklich löschen?" : "Löschen") + "</button></div>";
+        if (U.exp === n) h += '<p class="meta">Kopieren Sie diesen Code und fügen Sie ihn unter „Importieren“ ein. Er dient auch als Sicherung.</p><textarea id="savecode" class="code" readonly>' + saveCode(I.st) + '</textarea><div class="actions"><button class="btn" data-act="copySave">Kopieren</button></div>';
+      } else h += '<p class="meta">Leer</p><div class="actions"><button class="btn solid" data-act="slotNew" data-n="' + n + '">Neue Reederei</button><button class="btn" data-act="slotImp" data-n="' + n + '">Importieren</button></div>';
+      if (I) h += '<div class="actions"><button class="btn" data-act="slotImp" data-n="' + n + '">Importieren</button></div>';
+      if (U.imp === n) h += '<p class="meta">Fügen Sie hier den exportierten Code ein.' + (I ? " Der Spielstand auf diesem Platz wird dabei ersetzt." : "") + '</p><textarea id="importcode" class="code" placeholder="FLAGGSCHIFF1:…"></textarea><div class="actions"><button class="btn solid" data-act="doImport" data-n="' + n + '">' + (I ? "Ersetzen und laden" : "Laden") + "</button></div>";
+      h += "</div>";
+    }
+    return h + '<div class="actions"><button class="btn" data-act="menuBack">Zurück</button></div>';
+  }
+  function menuSettings() {
+    return '<h2 class="mh">Einstellungen</h2><label class="field">Sprache</label>' + langSeg() +
+      '<label class="field">Ton und Musik</label><div class="toggles"><button class="btn" data-act="snd">' + (Snd.on ? "Ton ausschalten" : "Ton einschalten") + '</button><button class="btn" data-act="music" ' + (Snd.on && Snd.hasMusic ? "" : "disabled") + ">" + (Snd.musicOn ? "Musik ausschalten" : "Musik einschalten") + "</button></div>" +
+      '<p class="meta">Den Schwierigkeitsgrad, die Pausen und die Einführung stellen Sie im laufenden Spiel im Kontor ein.</p><div class="actions"><button class="btn" data-act="menuBack">Zurück</button></div>';
+  }
+  function menuNews() {
+    return '<h2 class="mh">Neu in Version ' + VERSION + '</h2><ul class="mnews">' +
+      "<li><b>Start mit einer Fähre.</b> Bei der Gründung wählen Sie eine Fährlinie nahe Ihrem Heimathafen und den Fährtyp. Die Linie ist gleich eröffnet, das Schiff fährt ab dem ersten Tag.</li>" +
+      "<li><b>Vier neue Fährtypen:</b> Fluss-Raddampfer, Dampffähre für Fuhrwerke, Inselpostdampfer und Kanal-Raddampfer.</li>" +
+      "<li><b>Fährgeschäft:</b> Fuhrwerke und Vieh auf den Querungen, Zeitkarten für Pendler, Insel- und Postverträge und die Fährkonzession.</li>" +
+      "<li><b>Langsamerer Aufstieg:</b> Hochseeschiffe kosten deutlich mehr und haben hohe Fixkosten. Bank und Werft geben Kredit nur im Kreditrahmen.</li>" +
+      "<li><b>Drei Spielstände</b> und dieses Hauptmenü.</li></ul>" +
+      '<p class="meta">Alte Spielstände laden wie gewohnt und behalten ihren Start.</p><div class="actions"><button class="btn" data-act="menuBack">Zurück</button></div>';
+  }
+  const START_NOTE = { leicht: "Zwei neue Fähren auf zwei Linien", normal: "Eine neue Fähre", schwer: "Eine gebrauchte Fähre, rund 20 Jahre alt" };
+  function startOpts() { return E.startOptions(startHome); }
+  function startSel() {
+    const L = startOpts(), a = L.find(x => x.a + "-" + x.b === startLine) || L[0];
+    const ty = a && a.types.includes(startType) ? startType : a ? a.rec : null;
+    const b = startDiff === "leicht" ? (L.find(x => x.a + "-" + x.b === startLine2 && x !== a) || L.find(x => x !== a)) : null;
+    return { L, a, ty, b };
+  }
+  function menuNewPage() {
+    const loan = E.DIFF[startDiff].loan;
+    let h = '<h2 class="mh">Neue Reederei gründen</h2><div class="mstep">Schritt ' + newStep + " von 2</div>";
+    if (newStep === 1) {
+      const I = slotInfo(newSlot);
+      h += '<label class="field">Speicherplatz</label><div class="seg" role="group" aria-label="Speicherplatz">' + SLOTS.map(n => { const x = slotInfo(n); return '<button data-act="newSlot" data-v="' + n + '" aria-pressed="' + (newSlot === n) + '">Platz ' + n + (x ? " · belegt" : " · frei") + "</button>"; }).join("") + "</div>";
+      if (I) h += '<div class="hint bad">Auf Platz ' + newSlot + " liegt „" + esc(I.name) + "“. Die neue Reederei ersetzt diesen Spielstand.</div>";
+      h += '<label class="field" for="nm">Name der Reederei</label><div class="namebox"><input class="name" id="nm" value="' + esc(startName) + '" maxlength="28" autocomplete="off"><button class="dice" data-act="rollfirm" aria-label="Anderer Name">🎲</button></div>' +
+        '<label class="field">Heimathafen</label><div class="seg" role="group" aria-label="Heimathafen">' + [["ham", "Hamburg"], ["lpl", "Liverpool"], ["lon", "London"]].map(([k, n]) => '<button data-act="setHome" data-v="' + k + '" aria-pressed="' + (startHome === k) + '">' + n + "</button>").join("") + "</div>" +
+        '<div class="meta">' + (startHome === "ham" ? "Mark und deutsche Häfen rund um die Elbe." : "Pfund und britische Häfen rund um " + (startHome === "lpl" ? "den Mersey" : "die Themse") + ".") + "</div>" +
+        '<label class="field">Schwierigkeitsgrad</label><div class="seg" role="group" aria-label="Schwierigkeitsgrad">' + E.DIFF_ORDER.map(k => '<button data-act="setDiff0" data-v="' + k + '" aria-pressed="' + (startDiff === k) + '">' + E.DIFF[k].name + "</button>").join("") + "</div>" +
+        '<div class="meta">' + START_NOTE[startDiff] + " und " + startMoney(loan) + " Gründungskredit. " + DIFF_NOTE[startDiff] + "</div>" +
+        '<div class="actions"><button class="btn" data-act="menuBack">Zurück</button><button class="btn solid" data-act="newNext">Weiter: erste Fährlinie</button></div>';
+      return h;
+    }
+    const { L, a, ty, b } = startSel();
+    h += "<p>" + (startDiff === "leicht" ? "Wählen Sie die Linie für Ihre erste Fähre und den Fährtyp. Die zweite Fähre fährt auf einer zweiten Linie." : "Wählen Sie die Linie für Ihre erste Fähre und den Fährtyp.") + " Die Linie ist gleich eröffnet, das Schiff fährt ab dem ersten Tag.</p>";
+    h += '<div class="mlines" role="radiogroup" aria-label="Erste Fährlinie">';
+    for (const o of L) {
+      const on = o === a, key = o.a + "-" + o.b, perks = [o.zk ? "Zeitkarten" : "", o.wagons ? "Fuhrwerke" : "", o.contract === "insel" ? "Inselvertrag" : o.contract === "post" ? "Postvertrag" : ""].filter(Boolean);
+      h += '<button class="mline' + (on ? " on" : "") + '" role="radio" aria-checked="' + on + '" data-act="startLine" data-v="' + key + '">' + img("ship_" + (on ? ty : o.rec), "mlimg", "") +
+        '<span class="mltx"><b>' + esc(o.name) + "</b><span>" + o.note + "</span><span class=\"meta\">" + E.fmt(o.dist) + " sm · " + esc(o.who) + (perks.length ? " · " + perks.join(", ") : "") + "</span></span></button>";
+    }
+    h += "</div>";
+    if (a) {
+      h += '<label class="field">Fährtyp für ' + esc(a.name) + '</label><div class="mtypes">';
+      for (const k of a.types) { const T = E.TYPES[k]; h += '<button class="mtype' + (k === ty ? " on" : "") + '" data-act="startType" data-v="' + k + '" aria-pressed="' + (k === ty) + '"><b>' + T.name + (k === a.rec ? ' <span class="tag">empfohlen</span>' : "") + "</b><span>" + T.seats + " Plätze" + (T.wagons ? " und " + T.wagons + " Fuhrwerke" : "") + " · " + kn(T.speed) + " Knoten · Komfort " + "★".repeat(Math.floor(T.comfort)) + "</span><span>" + E.TYPE_NOTE[k] + "</span></button>"; }
+      h += "</div>";
+    }
+    if (b) h += '<label class="field" for="line2">Zweite Fähre (Leicht)</label><select id="line2" data-act="startLine2">' + L.filter(x => x !== a).map(x => '<option value="' + x.a + "-" + x.b + '"' + (x === b ? " selected" : "") + ">" + esc(x.name) + " · " + E.TYPES[x.rec].name + "</option>").join("") + "</select>";
+    h += '<label class="switch" style="margin-top:12px"><span>Mit Einführung spielen</span><input type="checkbox" id="tutchk"' + (startTut ? " checked" : "") + "></label>";
+    h += '<div class="actions"><button class="btn" data-act="newBack">Zurück</button><button class="btn solid" data-act="start">Reederei gründen</button></div>';
+    return h;
+  }
+  function renderMenu() {
+    if (!menu) menu = "main";
+    $("hdr").innerHTML = FLAG + '<div class="firm">Flaggschiff</div><div></div>';
+    const pages = { main: menuMain, slots: menuSlots, settings: menuSettings, news: menuNews, new: menuNewPage };
+    $("main").innerHTML = menuShell((menuMsg ? '<div class="hint">' + menuMsg + "</div>" : "") + (pages[menu] || menuMain)(), menu === "new" || menu === "slots");
+    $("tutbox").innerHTML = ""; document.body.classList.remove("tut-on");
+    deskRender(); renderModal(); translateDom(document.body);
+  }
+  function openMenu(page) { menu = page || "main"; sheet = null; slotUi = {}; menuMsg = ""; if (S) save(); render(); window.scrollTo(0, 0); }
+  function playSlot(n) {
+    const st = load(n); if (!st) return;
+    if (S && n !== slot) save();
+    setSlot(n); S = E.migrate(st); resetView(); menu = null; tab = "kontor";
+  }
+  // Ansicht beim Wechsel des Spielstands zurücksetzen
+  function resetView() { sheet = null; confirmSell = null; confirmReset = false; mapPick = null; openShip.clear(); evKey = null; selA = S ? S.home : "ham"; selB = ""; selStops = []; selCruise = false; kontorSub = "uebersicht"; }
   const FIRM_FAM = ["Petersen", "Lorenzen", "Brodersen", "Thiessen", "Hinrichs", "Carstens", "Jessen", "Kröger", "Harms", "Paulsen", "Rohwer", "Sievers", "Ohlsen", "Martens", "Clausen", "Detlefsen", "Hansen", "Wulff", "Behrens", "Iversen"];
   const FIRM_ADJ = ["Hanseatische", "Norddeutsche", "Hamburger", "Nordische", "Vereinigte", "Neue", "Altonaer", "Elbische"];
   const FIRM_SYM = ["Nordstern", "Seestern", "Möwen", "Kompass", "Elbstern", "Leuchtfeuer", "Anker", "Albatros", "Morgenstern", "Windrosen"];
@@ -1753,7 +1924,7 @@
     return '<div class="veil" data-act="close"><div class="sheet" role="dialog" aria-modal="true"><div class="kicker">' + E.TYPES[sh.type].name + '</div><h3>„' + esc(sh.name) + '“ umbenennen</h3>' + nameBox(sheet.name) +
       '<div class="actions"><button class="btn solid" data-act="renameSave" style="flex:1">Speichern</button><button class="btn" data-act="close" style="flex:1">Abbrechen</button></div></div></div>';
   }
-  function saveCode() { const j = JSON.stringify(S); return "FLAGGSCHIFF1:" + btoa(unescape(encodeURIComponent(j))); }
+  function saveCode(st) { const j = JSON.stringify(st || S); return "FLAGGSCHIFF1:" + btoa(unescape(encodeURIComponent(j))); }
   function exportSheet() {
     return '<div class="veil" data-act="close"><div class="sheet" role="dialog" aria-modal="true"><div class="kicker">Spielstand sichern</div><h3>Spielstand exportieren</h3>' +
       '<p>Kopieren Sie diesen Code und fügen Sie ihn in der App unter „Spielstand importieren“ ein. Er dient auch als Sicherung.</p>' +
@@ -1810,23 +1981,23 @@
     const kt = $("kbdTabs"); if (kt) kt.textContent = Object.values(TABKEYS).map(k => k[li]).join(" ");
   }
   function deskRender() {
-    document.body.classList.toggle("nogame", !S);
+    document.body.classList.toggle("nogame", !S || !!menu);
     if (!DESK) return;
     keyLetters();
-    $("side").innerHTML = S ? sidePanel() : "";
+    $("side").innerHTML = S && !menu ? sidePanel() : "";
     $("railStats").innerHTML = railStats();
   }
   function onKey(e) {
     if (!DESK || e.ctrlKey || e.metaKey || e.altKey) return;
     const a = document.activeElement, k = e.key;
     if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) { if (k === "Escape") a.blur(); return; }
-    if (!S) return;
+    if (!S || menu) { menuKey(e); return; }
     if (S.pending.length && E.duePending(S)) {
       if (/^[1-9]$/.test(k)) { const b = document.querySelector('#modal [data-act="choose"][data-i="' + (+k - 1) + '"]'); if (b && !b.disabled) { e.preventDefault(); act("choose", { i: String(+k - 1) }); } }
       return;
     }
     if (!sheet && $("tutbox").firstChild && (k === "Enter" || k === "Escape")) { const b = $("tutbox").querySelector(k === "Enter" ? '[data-act="tutNext"]' : '[data-act="tutSkip"]'); if (b) { e.preventDefault(); act(b.dataset.act, {}); return; } }
-    if (k === "Escape") { if (sheet) { e.preventDefault(); act("close", {}); } else if (mapPick) { mapPick = null; render(); } return; }
+    if (k === "Escape") { e.preventDefault(); if (sheet) act("close", {}); else if (mapPick) { mapPick = null; render(); } else openMenu("main"); return; }
     if (sheet || S.over) return;
     if (k === " " || k === "Spacebar") { e.preventDefault(); if (S.speed > 0) { lastSpeed = S.speed; act("speed", { v: "0" }); } else act("speed", { v: String(lastSpeed || 1) }); return; }
     if (/^[0-3]$/.test(k)) { e.preventDefault(); if (+k) lastSpeed = +k; act("speed", { v: k }); return; }
@@ -1834,18 +2005,20 @@
     if (T) { e.preventDefault(); tab = T; confirmSell = null; mapPick = null; render(); window.scrollTo(0, 0); }
   }
 
+  // Hauptmenü: Pfeiltasten wandern durch die Knöpfe, 1–3 wählt in den Spielständen einen Platz, Esc führt zurück
+  function menuKey(e) {
+    const k = e.key, list = Array.from(document.querySelectorAll("#main .menu-panel button:not([disabled])"));
+    if (k === "ArrowDown" || k === "ArrowUp") { e.preventDefault(); const i = list.indexOf(document.activeElement); const n = list[(i < 0 ? 0 : i + (k === "ArrowDown" ? 1 : -1) + list.length) % list.length]; if (n) n.focus(); return; }
+    if (k === "Escape") { e.preventDefault(); if (menu && menu !== "main") act("menuBack", {}); else if (S) act("menuGo", {}); return; }
+    if (menu === "slots" && /^[1-3]$/.test(k) && slotInfo(+k)) { e.preventDefault(); act("slotPlay", { n: k }); }
+  }
   /* ---------- Rendern ---------- */
   function render() {
     try { render0(); }
     catch (e) { reportErr(e, "Anzeige"); if (sheet) { sheet = null; try { render0(); } catch (x) { } } }
   }
   function render0() {
-    if (!S) {
-      $("hdr").innerHTML = FLAG + '<div class="firm">Flaggschiff</div><div></div>';
-      $("main").innerHTML = A.title ? '<div class="hero-img">' + img("title", "", "Hamburger Hafen 1880") + '<div class="ttl"><h1>Flaggschiff</h1><p>Spielbarer Prototyp · Personenschifffahrt ab 1880</p></div></div>'
-        : '<div class="hero"><svg viewBox="0 0 320 120" aria-hidden="true">' + shipSVG() + "</svg><h1>Flaggschiff</h1><p>Spielbarer Prototyp · Personenschifffahrt ab 1880</p></div>";
-      deskRender(); renderModal(); translateDom(document.body); return;
-    }
+    if (!S || menu) { renderMenu(); return; }
     renderHeader();
     if (S.uiRetire && !E.duePending(S)) { sheet = { kind: "retire", id: S.uiRetire }; S.uiRetire = null; }
     const views = { kontor: kontorView, linien, flotte, werft, werbung: marktView, bank };
@@ -1872,7 +2045,36 @@
     let err = null;
     switch (a) {
       case "rollfirm": { startName = randomFirm(); const i = $("nm"); if (i) { i.value = startName; return; } break; }
-      case "start": { Snd.wake(); Snd.horn(.2); const nm = ($("nm").value || "").trim().slice(0, 28) || randomFirm(); S = E.newGame((Date.now() ^ (Math.random() * 1e9)) | 0, nm, { home: startHome, diff: startDiff }); selA = S.home; const tc = $("tutchk"); if (tc && tc.checked) { S.tut = { step: 0, full: true, ch: {} }; tab = "kontor"; } else { S.tut = { done: true, ch: {} }; tab = "werft"; } break; }
+      case "start": {
+        Snd.wake(); Snd.horn(.2); const nm = (startName || "").trim().slice(0, 28) || randomFirm(), sel = startSel(), tc = $("tutchk"); startTut = !!(tc && tc.checked);
+        if (S && newSlot !== slot) save();
+        setSlot(newSlot);
+        S = E.newGame((Date.now() ^ (Math.random() * 1e9)) | 0, nm, { home: startHome, diff: startDiff, start: sel.a ? { a: sel.a.a, b: sel.a.b, type: sel.ty } : true, start2: sel.b ? { a: sel.b.a, b: sel.b.b, type: sel.b.rec } : undefined });
+        resetView(); menu = null; tab = "kontor";
+        S.tut = startTut ? { step: 0, full: true, ch: {} } : { done: true, ch: {} };
+        break;
+      }
+      case "menu": openMenu("main"); return;
+      case "menuSlotsGo": openMenu("slots"); return;
+      case "menuGo": { if (S) { menu = null; break; } const f = filledSlots().sort((a, b) => (b[1].played || 0) - (a[1].played || 0))[0]; if (f) playSlot(f[0]); break; }
+      case "menuNew": { const free = SLOTS.find(n => !slotInfo(n)); newSlot = free || slot; newStep = 1; menu = "new"; startName = startName || randomFirm(); window.scrollTo(0, 0); break; }
+      case "menuSlots": menu = "slots"; slotUi = {}; window.scrollTo(0, 0); break;
+      case "menuSettings": menu = "settings"; window.scrollTo(0, 0); break;
+      case "menuNews": menu = "news"; window.scrollTo(0, 0); break;
+      case "menuBack": if (menu === "new" && newStep === 2) newStep = 1; else { menu = "main"; slotUi = {}; } menuMsg = ""; window.scrollTo(0, 0); break;
+      case "newSlot": newSlot = +d.v; break;
+      case "newNext": newStep = 2; startLine = null; startType = null; startLine2 = null; window.scrollTo(0, 0); break;
+      case "newBack": newStep = 1; window.scrollTo(0, 0); break;
+      case "startLine": if (startLine !== d.v) { startLine = d.v; startType = null; } break;
+      case "startType": startType = d.v; break;
+      case "slotPlay": playSlot(+d.n); break;
+      case "slotNew": newSlot = +d.n; newStep = 1; menu = "new"; window.scrollTo(0, 0); break;
+      case "slotExp": slotUi = { exp: slotUi.exp === +d.n ? null : +d.n }; break;
+      case "slotImp": slotUi = { imp: slotUi.imp === +d.n ? null : +d.n }; break;
+      case "slotDel": {
+        const n = +d.n; if (slotUi.del !== n) { slotUi = { del: n }; break; }
+        wipe(n); slotUi = {}; if (n === slot && S) { S = null; resetView(); } menuMsg = "Platz " + n + " ist gelöscht."; break;
+      }
       case "choose": { if (Date.now() < evReadyAt) return; const was = S.pending[0] && S.pending[0].id, n = S.stats.sunk; E.resolve(S, +d.i); if (was === "seenot") { if (S.stats.sunk > n) Snd.storm(0); else Snd.horn(0); toast(esc(S.log[0].head)); } else Snd.bell(0, 520, .1); break; }
       case "price": E.stepPrice(S, d.id, +d.c, +d.d); break;
       case "align": E.alignPrices(S, d.id); Snd.bell(0, 660, .08); break;
@@ -2005,12 +2207,13 @@
         return;
       }
       case "doImport": {
-        const raw = (($("importcode") || {}).value || "").trim();
+        const raw = (($("importcode") || {}).value || "").trim(), n = d.n ? +d.n : slot;
         try {
           const b64 = raw.replace(/^FLAGGSCHIFF1:/, "").replace(/\s+/g, "");
           const st = JSON.parse(decodeURIComponent(escape(atob(b64))));
           if (!st || !Array.isArray(st.ships) || typeof st.m !== "number") throw new Error("ungültig");
-          S = E.migrate(st); sheet = null; tab = "kontor"; save(); toast("Spielstand geladen: " + esc(S.name));
+          if (S && n !== slot) save();
+          setSlot(n); S = E.migrate(st); resetView(); menu = null; slotUi = {}; tab = "kontor"; save(); toast("Spielstand geladen: " + esc(S.name));
         } catch (e) { toast("Der Code ist ungültig oder unvollständig."); return; }
         break;
       }
@@ -2018,8 +2221,7 @@
       case "music": Snd.toggleMusic(); break;
       case "nexttrack": Snd.next(false); return;
       case "repay": { const l = S.loans.find(x => x.id === d.id); if (l) err = E.repay(S, d.id, d.a === "all" ? l.out : 50000); break; }
-      case "reset": if (confirmReset) { wipe(); S = null; tab = "kontor"; confirmReset = false; } else { confirmReset = true; render(); return; } break;
-      case "reset2": wipe(); S = null; tab = "kontor"; startName = randomFirm(); break;
+      case "reset2": wipe(); S = null; resetView(); tab = "kontor"; startName = randomFirm(); newSlot = slot; newStep = 1; menu = "new"; break;
     }
     if (a !== "sell") confirmSell = null;
     if (a !== "cancelOrder") confirmCancel = null;
@@ -2041,6 +2243,8 @@
     if (t.dataset.act === "ins") { const err = E.setInsured(S, t.dataset.id, t.checked); if (err) toast(esc(err)); save(); render(); }
     if (t.dataset.act === "agency") { const err = E.setAgency(S, t.dataset.k, t.checked); if (err) toast(esc(err)); save(); render(); }
     if (t.dataset.act === "selA") { selA = t.value; if (selA === selB) selB = ""; render(); }
+    if (t.dataset.act === "startLine2") { startLine2 = t.value; render(); }
+    if (t.dataset.act === "zk") { const err = E.setZk(S, t.dataset.id, t.checked); if (err) toast(esc(err)); save(); render(); }
     if (t.dataset.act === "selB") { selB = t.value; render(); }
     if (t.dataset.act === "selStop") { selStops[+t.dataset.i] = t.value; render(); }
     if (t.dataset.act === "selCruise") { selCruise = t.checked; render(); }
@@ -2061,12 +2265,12 @@
     if (t.dataset.act === "plan") { const sh = S.ships.find(x => x.id === t.dataset.id); if (sh) { const p = (sh.plan || []).map(x => Object.assign({}, x)), i = +t.dataset.i; if (p[i]) { p[i][t.dataset.f] = t.dataset.f === "line" ? t.value : +t.value; openPlan[sh.id] = true; E.setPlan(S, sh.id, p); save(); render(); } } }
   });
   document.addEventListener("input", e => { if (e.target.id === "boqty" && sheet && sheet.kind === "bo") { sheet.v = e.target.value.replace(/[^0-9]/g, ""); const q = $("boq"); if (q) { q.innerHTML = boQuoteHtml(); translateDom(q); } } if (e.target.id === "shipname" && sheet) sheet.name = e.target.value; if (e.target.id === "nm") startName = e.target.value; });
-  $("tabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (!b || !S) return; tab = b.dataset.tab; confirmSell = null; mapPick = null; render(); window.scrollTo(0, 0); });
+  $("tabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (!b || !S || menu) return; tab = b.dataset.tab; confirmSell = null; mapPick = null; render(); window.scrollTo(0, 0); });
   /* ---------- Uhr ---------- */
   const SEC = [0, 4, 2, 1];
   let accT = 0, lastT = performance.now(), dirty = false;
   const busy = () => { const a = document.activeElement; return !!(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && a.closest("#main")); };
-  const running = () => S && !S.over && S.speed > 0 && !sheet && !document.hidden && !E.duePending(S);
+  const running = () => S && !menu && !S.over && S.speed > 0 && !sheet && !document.hidden && !E.duePending(S);
   function renderFull() { if (busy()) { dirty = true; renderLive(); renderModal(); translateDom($("modal")); } else render(); }
   function renderLive() {
     const d = document.querySelector("#hdr .date"), c = document.querySelector("#hdr .cash b"), p = document.querySelector("#tele .mprog i");
@@ -2144,7 +2348,7 @@
   document.addEventListener("keydown", onKey);
   if (MQ) { const f = () => { layout(); render(); }; if (MQ.addEventListener) MQ.addEventListener("change", f); else if (MQ.addListener) MQ.addListener(f); }
   layout();
-  S = load(); if (S) E.migrate(S);
+  S = load(); if (S) E.migrate(S); else menu = "main";
   render();
 })();
 

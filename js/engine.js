@@ -289,7 +289,7 @@
   /* ---------- Streckenmodell ---------- */
   // v5.1: Langstrecke – höhere Fahrpreise und Frachtraten (passend zu den teureren Schiffen), dafür viel höhere Fixkosten der Hochseeschiffe:
   // Heuer, Versicherung und Hafengebühren. So kostet ein halbleerer Ozeandampfer richtig Geld (Werte per Simulation, docs/konzept-v5.1.md)
-  const FARE_LONG = .7, OCEAN_CREW = 2, OCEAN_INS = 4.5, OCEAN_FEE = 5, FERRY_COMP = .55;
+  const FARE_LONG = .7, OCEAN_CREW = 2, OCEAN_INS = 4.5, OCEAN_FEE = 5, FERRY_COMP = .55, POST_BONUS = 1.25;
   const fareF = d => 1 + FARE_LONG * clamp(Math.log(Math.max(1, d) / 350) / Math.log(9), 0, 1);
   let infoCache = { key: null, map: {} };
   function tourOpen(s, id) { const p = PORTS[id]; return p.tour > 0 && yearOf(s) >= p.tourFrom; }
@@ -1730,7 +1730,8 @@
     // Postverträge: Zuschuss täglich, solange ein schnelles Schiff die Linie bedient
     for (const k of Object.keys(s.contracts)) {
       const c = s.contracts[k];
-      if (s.ships.some(sh => { if (!active(s, sh) || !sh.v || sh.v.r !== sh.line) return false; const r = routeOf(s, sh); return r && ((r.a === c.a && r.b === c.b) || (r.a === c.b && r.b === c.a)) && TYPES[sh.type].speed * fahrtF(s, sh) >= (c.minSpeed || 0); })) income(s, "Postverträge", c.sub * fd);
+      const srv = s.ships.filter(sh => { if (!active(s, sh) || !sh.v || sh.v.r !== sh.line) return false; const r = routeOf(s, sh); return r && ((r.a === c.a && r.b === c.b) || (r.a === c.b && r.b === c.a)) && TYPES[sh.type].speed * fahrtF(s, sh) >= (c.minSpeed || 0); });
+      if (srv.length) income(s, "Postverträge", c.sub * fd * (srv.some(sh => TYPES[sh.type].post) ? POST_BONUS : 1)); // v5.1: mit Postraum an Bord zahlt die Post mehr
     }
     // Zeitkarten (v5.1): fester Monatsbetrag der Pendler, solange auf der Linie gefahren wird
     for (const r of s.routes) if (zkOn(r) && r.zk.n > 0 && s.ships.some(sh => sh.line === r.id && active(s, sh))) { const v = r.zk.n * zkPrice(s, r) * fd; income(s, "Zeitkarten", v); if (r.cur) r.cur.rev += v; }
@@ -3698,7 +3699,7 @@
   // Börse unter Kontor geöffnet
   function boSeen(s) { const b = boState(s); if (b.on) b.seen = true; }
 
-  const api = { creditInfo, CREDIT, startOptions, STARTS, FERRY_TYPES, setZk, zkPossible, zkOn, zkPrice, wagDemand, wagCap, wagFare, WAGON, ipKind, ISLANDS, konzOn, rivalTypes, fareF, ZK_PK,
+  const api = { creditInfo, CREDIT, OCEAN_CREW, startOptions, STARTS, FERRY_TYPES, setZk, zkPossible, zkOn, zkPrice, wagDemand, wagCap, wagFare, WAGON, ipKind, ISLANDS, konzOn, rivalTypes, fareF, ZK_PK,
     setStrict, takeErrors, tDate, departures, shipStatus, shipPos, lineGeo, coalCap, portTier, coalPortPrice, coalPorts, bunkerValue, rivalPk, pkStart, RIV_PK, TIER, TIER_NAME, BUNK, BUNK_ORDER, BUF, BUF_NAME, DIFF, DIFF_ORDER, PAUSE_DEF, COAL_T, diffOf,
     setBunkRule, setShipBunk, setBuffer, setReserve, setCatchUp, markShip, setPause, setDifficulty, orderInfo, cancelInfo, cancelOrder, yardGap, MONTHS, TYPES, TYPE_ORDER, SPECIAL_ORDER, TYPE_NOTE, MAINT, EQUIP, MK_BUDGET, MK_AGENCY, FIN, PORTS, REGIONS, HOME, SEG, World: W,
     cal, dateStr, fmt, newGame, migrate, nextMonth, resolve, eventOptions, buyNew, buyUsed, rename, randomName, openRoute, closeRoute, routeInfo, canServe, routePrice,
