@@ -5,7 +5,7 @@
    Seit v5.0 fahren die Schiffe nach Fahrplan: Fahrkarten zahlen die Gäste bei der Abfahrt, Kohle kostet beim Bekohlen,
    Verspätungen kosten Fahrgäste. Verglichen wird der Gewinn (Summe der Monatsergebnisse, ohne Schiffskäufe),
    gemittelt über viele Läufe. Geprüft wird:
-     schwierigkeit  Leicht liegt etwa bei v4.6 (±10 %), Normal 20–35 % darunter, Schwer 40–60 % darunter
+     schwierigkeit  (seit v5.1) Normal 20–35 % unter Leicht, Schwer 45–65 % unter Leicht, wie in v5.0.1; dazu jede Stufe gegen v5.0.1 (Normal)
      fuehrung       „schlecht getaktet“ macht auf dem Atlantik Verlust (im Schnitt oder in mindestens 3 von 10 Jahren),
                     „gut geführt“ geht nirgends unter und bringt auf dem Atlantik mindestens so viel wie auf der Kurzstrecke;
                     Kurzstrecke (Fähre, Küste) und Langstrecke (Atlantik, Südamerika) liegen in der Rendite auf den Flottenwert
@@ -26,7 +26,7 @@
      node tools/simulation.js --nur gegen,bunker  nur bestimmte Prüfungen (Schlüssel siehe oben, mehrere mit Komma)
      node tools/simulation.js --linien hochsee    nur bestimmte Linienarten (Schlüssel siehe LINIEN)
      node tools/simulation.js --jahre 40          Betriebsjahre je Lauf
-     node tools/simulation.js --alt cd82205       Vergleichsstand für „Leicht ≈ v4.6“ (Standard: v4.6)
+     node tools/simulation.js --alt 7f7c8be       Vergleichsstand für den Schwierigkeitsgrad (Standard: v5.0.1)
      node tools/simulation.js --json datei        Ergebnisse zusätzlich als JSON speichern
 */
 "use strict";
@@ -58,13 +58,13 @@ const linien = f => (E, s) => { for (const r of s.routes) f(E, s, r); };
 const KAPITAL = 1e6;
 const breit = (E, s, betrag) => { const ks = E.BO_ORDER.filter(k => E.boListed(s, k)); for (const k of ks) E.boBuy(s, k, E.boFor(s, k, betrag / ks.length)); };
 const boStart = f => (E, s) => { s.bo.on = true; s.cash += KAPITAL * 1.3; f(E, s); };
-const ALLE = ["schwierigkeit", "fuehrung", "gegen", "bunker", "serie", "fahrt", "kueche", "vertrag", "boerse", "hauszeche", "prokurist"];
+const ALLE = ["schwierigkeit", "fuehrung", "gegen", "bunker", "serie", "fahrt", "kueche", "vertrag", "boerse", "hauszeche", "prokurist", "start"];
 const STRAT = {
-  basis: { gruppe: ALLE, name: "nichts anfassen (Normal, im Heimathafen volltanken)" },
+  basis: { gruppe: ALLE.filter(g => g !== "start"), name: "nichts anfassen (Normal, im Heimathafen volltanken)" },
   // Schwierigkeitsgrad und Vergleich mit v4.6
   leicht: { gruppe: ["schwierigkeit"], name: "Leicht, sonst nichts anfassen", diff: "leicht" },
   schwer: { gruppe: ["schwierigkeit"], name: "Schwer, sonst nichts anfassen", diff: "schwer" },
-  alt: { gruppe: ["schwierigkeit"], name: "nichts anfassen mit v4.6", engine: "alt" },
+  alt: { gruppe: ["schwierigkeit"], name: "nichts anfassen mit v5.0.1", engine: "alt" },
   // Führung
   gut: { gruppe: ["fuehrung"], name: "gut geführt: Puffer 10 %, Maschine gut", start: (E, s) => { E.setStaff(s, "maschine", 2); for (const r of s.routes) E.setBuffer(s, r.id, 2); } },
   gut1: { gruppe: ["fuehrung"], name: "gut geführt mit einem Schiff je Linie", per: 1, start: (E, s) => { E.setStaff(s, "maschine", 2); for (const r of s.routes) E.setBuffer(s, r.id, 2); } },
@@ -119,6 +119,7 @@ function entscheiden(E, s, ev) {
   if (!opts.length) return 0;
   if (ABLEHNEN.has(ev.id)) return opts.length - 1;
   if (ev.id === "seenot") return Math.min(2, opts.length - 1);
+  if (ev.id === "konzession") return 2; // v5.1: hoch bieten, sonst müssten die Linien-Bots ihre Testlinie räumen
   let i = 0; while (i < opts.length - 1 && opts[i].ok === false) i++;
   return i;
 }
@@ -212,6 +213,76 @@ function spielen(E, li, key, seed, jahre, mitSchwelle) {
     kohleIdx: kohleN ? kohleSum / kohleN : null, sw: mitSchwelle ? sw : null };
 }
 
+// ---------- Start als Fährreederei (v5.1) ----------
+// Ohne Geldspritze: Gründungskredit und Startfähre(n) nach Schwierigkeit, Startlinie wie vorgeschlagen (die erste je Heimathafen).
+// Fährreederei: wächst nur mit Fähren (weitere Startlinien, zweites Schiff auf volle Linien), kauft bar oder mit Bankkredit.
+// Aufsteiger: so schnell wie möglich über eine Küstenlinie und die Nordsee zum Atlantik, mit der kleinsten Anzahlung, die der Kreditrahmen erlaubt.
+const AUFSTIEG = {
+  ham: [["kueste", "ham", "hel", "moewe"], ["see", "ham", "lon", "nordsee"], ["atlantik", "ham", "ny", "kurier"]],
+  lpl: [["kueste", "lpl", "dub", "moewe"], ["see", "lpl", "lon", "nordsee"], ["atlantik", "lpl", "ny", "kurier"]],
+  lon: [["kueste", "lon", "dov", "moewe"], ["see", "lon", "ham", "nordsee"], ["atlantik", "sou", "ny", "kurier"]],
+};
+const STUFE_NAME = { kueste: "Küste", see: "Nordsee", atlantik: "Atlantik" };
+const ZEITZIEL = { leicht: { kueste: [1, 4], see: [5, 10], atlantik: [11, 17] }, normal: { kueste: [3, 5], see: [8, 12], atlantik: [15, 20] }, schwer: { kueste: [4, 8], see: [11, 18], atlantik: [18, 28] } };
+const START_BOT = { faehre: "Fährreederei", aufsteiger: "Aufsteiger" };
+const START_HOMES = ["ham", "lpl", "lon"], START_DIFFS = ["leicht", "normal", "schwer"];
+function entscheidenStart(E, s, ev) {
+  if (ev.id === "konzession") return 1; // fair bieten
+  if (ev.id === "inselvertrag") return 0;
+  return entscheiden(E, s, ev);
+}
+function spielenStart(E, job) {
+  const { bot, diff, home, seed, jahre } = job;
+  { const R = rng(seed * 7919 + 17); Math.random = R; }
+  const s = E.newGame(seed, "Simulation", { home, diff, start: true });
+  const opts = E.startOptions(home), stufen = AUFSTIEG[home], ms = {}, endY = 1880 + jahre;
+  let st = 0, flotteSum = 0, flotteN = 0;
+  const reserve = () => Math.max(40000 * s.pidx, s.hist.slice(-6).reduce((a, h) => a + (h.cost || 0), 0)); // gut gespielt: ein halbes Jahr Kosten in der Kasse
+  const hat = (a, b) => s.routes.find(r => !r.cruise && ((r.a === a && r.b === b) || (r.a === b && r.b === a)));
+  // Raten nur, wenn sie aus dem Ergebnis der letzten 12 Monate bezahlt werden können (höchstens 60 % davon für alle Kredite außer dem Gründungskredit)
+  const res12 = () => s.hist.slice(-12).reduce((a, h) => a + (h.profit || 0), 0), raten = () => s.loans.filter(l => !l.founder).reduce((a, l) => a + l.pay, 0) * 12;
+  const wie = (type, arten) => { const p = E.newPrice(s, type) + 2000 * s.pidx; for (const k of arten) { const q = E.quote(s, p, k);
+    if (q.ok && s.cash - q.now >= reserve() && (!q.loan || raten() + q.pay * 12 <= .6 * Math.max(0, res12()))) return k; } return null; };
+  const kaufen = (type, line, arten) => { const k = wie(type, arten); return k && !E.buyNew(s, type, k, null, false, { n: 1, line }) ? k : null; };
+  // erst rechnen, dann die Linie eröffnen (Agentur und Anleger kosten)
+  const neueLinie = (a, b, type, arten) => { if (!wie(type, arten)) return null; let r = hat(a, b); const neu = !r; if (neu) { if (E.openRoute(s, a, b, false, [])) return null; r = s.routes[s.routes.length - 1]; }
+    const how = kaufen(type, r.id, arten); if (!how && neu) E.closeRoute(s, r.id); return how; };
+  // Schiffe ohne Linie (zum Beispiel nach verlorener Konzession) fahren auf der nächsten freien Startlinie
+  const einsetzen = () => { for (const sh of s.ships.filter(x => x.ready <= s.m && !x.line && !x.museum)) { const o = opts.find(x => !hat(x.a, x.b) && !E.canServe(s, sh.type, x.a, x.b, false));
+    if (o && !E.openRoute(s, o.a, o.b, false, [])) E.setLine(s, sh.id, s.routes[s.routes.length - 1].id); } };
+  // Preise wie in spielen(): rauf, wenn eine Klasse in drei Monaten ausgebucht war, sonst langsam zurück auf 100 %
+  const preis = {};
+  const buchen = () => { for (const r of s.routes) { const L = r.last; if (!L || !L.cls) continue; const P = preis[r.id] || (preis[r.id] = [0, 1, 2].map(() => ({ voll: 0, n: 0 })));
+    L.cls.forEach((c, i) => { if (c.cap > 0 && c.dem > 0) { P[i].n++; if (c.no > 0 && c.no >= .05 * c.pax) P[i].voll++; } }); } };
+  const preise = r => { const P = preis[r.id]; if (!P) return; P.forEach((x, c) => { if (x.n) { const f = E.pricePct(s, r, c); E.setPrice(s, r.id, c, x.voll >= 3 ? Math.min(2.5, Math.max(1, f) * 1.06) : f > 1 ? Math.max(1, f * .96) : 1); } x.voll = x.n = 0; }); };
+  const schiffe = {};
+  while (!s.over && E.yearOf(s) < endY) {
+    for (const r of s.routes) if (!r.zk && E.zkPossible(E.rInfo(s, r))) E.setZk(s, r.id, true);
+    for (const sh of s.ships) { if (sh.ready > s.m || sh.museum) continue; const fi = E.fristInfo(s, sh);
+      if (fi.left <= 30 && s.cash > fi.cost) E.renewFrist(s, sh.id); else if (sh.cond < 55 && !E.inDock(s, sh) && s.cash > E.dockInfo(s, sh).cost + reserve()) E.dock(s, sh.id); }
+    if (E.cal(s.m).mo === 0) for (const r of s.routes) preise(r);
+    einsetzen();
+    const bau = s.ships.some(x => x.ready > s.m);
+    if (!bau && bot === "aufsteiger" && st < stufen.length) {
+      const [key, a, b, t] = stufen[st];
+      if (E.typeOpen(s, t)) { const how = neueLinie(a, b, t, ["werft", "bank", "bar"]); if (how) { ms[key] = { m: s.m, how }; st++; } }
+    }
+    if (!bau && bot === "faehre") {
+      const o = opts.find(x => !hat(x.a, x.b));
+      const voll = s.routes.filter(r => r.last && r.last.load >= .75 && s.ships.filter(x => x.line === r.id).length < 2).sort((a, b) => b.last.load - a.last.load)[0];
+      if (o) neueLinie(o.a, o.b, o.rec, ["bar", "bank"]);
+      else if (voll) { const sh = s.ships.find(x => x.line === voll.id); if (sh) kaufen(sh.type, voll.id, ["bar", "bank"]); }
+    }
+    let rep = null;
+    for (let g = 0; g < 80; g++) { rep = E.nextMonth(s); if (rep || s.over) break; if (E.duePending(s)) E.resolve(s, entscheidenStart(E, s, s.pending[0])); }
+    buchen(); flotteSum += E.fleetValue(s); flotteN++;
+    const y = E.yearOf(s); if (!schiffe[y]) schiffe[y] = s.ships.length;
+  }
+  const ys = Object.keys(s.years).map(Number).filter(y => y >= 1881 && y < endY);
+  return { start: true, bot, diff, home, seed, ms, over: s.over ? s.m : null, jahrGewinn: ys.map(y => s.years[y].profit), eq: E.equity(s), ships: s.ships.length, schiffe,
+    flotte: flotteN ? flotteSum / flotteN : 0, linien: s.routes.length, ersteLinie: s.flags.ferryStart };
+}
+
 // ---------- Engines laden ----------
 function ladeEngine(dir) {
   global.window = global;
@@ -236,7 +307,7 @@ if (process.argv[2] === "--arbeiter") {
     if (job.ende) process.exit(0);
     const dir = job.engine === "alt" ? job.altDir : ROOT;
     const E = engines[dir] || (engines[dir] = ladeEngine(dir));
-    let res; try { res = spielen(E, job.li, job.key, job.seed, job.jahre, job.schwelle); } catch (e) { res = { li: job.li, key: job.key, seed: job.seed, fehler: String(e && e.stack || e) }; }
+    let res; try { res = job.start ? spielenStart(E, job) : spielen(E, job.li, job.key, job.seed, job.jahre, job.schwelle); } catch (e) { res = { li: job.li, key: job.key, start: job.start, seed: job.seed, fehler: String(e && e.stack || e) }; }
     process.send(res);
   });
   return;
@@ -244,22 +315,24 @@ if (process.argv[2] === "--arbeiter") {
 
 // ---------- Auswertung ----------
 const arg = (k, d) => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] : d; };
-const LAEUFE = +arg("laeufe", 12), JAHRE = +arg("jahre", 40), ALT = arg("alt", "cd82205"), JSON_OUT = arg("json", null);
+const LAEUFE = +arg("laeufe", 12), JAHRE = +arg("jahre", 40), ALT = arg("alt", "7f7c8be"), JSON_OUT = arg("json", null);
 const NUR = (arg("nur", ALLE.join(","))).split(","), NUR_L = (arg("linien", Object.keys(LINIEN).join(","))).split(",");
 const keys = Object.keys(STRAT).filter(k => STRAT[k].gruppe.some(g => NUR.includes(g)));
 let altDir = null;
 if (keys.includes("alt")) {
   try { altDir = altOrdner(ALT); }
-  catch (e) { console.log(`Vergleich mit v4.6 übersprungen: Der Stand ${ALT} ist nicht per git erreichbar (${String(e.message).split("\n")[0]}).`); keys.splice(keys.indexOf("alt"), 1); }
+  catch (e) { console.log(`Vergleich mit v5.0.1 übersprungen: Der Stand ${ALT} ist nicht per git erreichbar (${String(e.message).split("\n")[0]}).`); keys.splice(keys.indexOf("alt"), 1); }
 }
 const jobs = [];
 for (const li of NUR_L) for (const key of keys) for (let i = 0; i < LAEUFE; i++) jobs.push({ li, key, seed: 1000 + i * 97, jahre: JAHRE, engine: STRAT[key].engine || "neu", altDir, schwelle: key === "basis" && NUR.includes("fahrt") });
+if (NUR.includes("start")) for (const home of START_HOMES) for (const bot of Object.keys(START_BOT)) for (const diff of START_DIFFS) for (let i = 0; i < LAEUFE; i++)
+  jobs.push({ start: true, bot, diff, home, seed: 2000 + i * 89, jahre: Math.min(JAHRE, 30), engine: "neu" });
 // lange Spiele zuerst, damit am Ende kein Kern allein rechnet
-const dauer = j => (j.li === "faehre" ? 3 : j.li === "kreuz" ? .6 : 1) * (j.schwelle ? 1.4 : 1);
+const dauer = j => j.start ? (j.bot === "aufsteiger" ? 1.5 : 1) : (j.li === "faehre" ? 3 : j.li === "kreuz" ? .6 : 1) * (j.schwelle ? 1.4 : 1);
 jobs.sort((a, b) => dauer(b) - dauer(a));
 const t0 = Date.now(), results = [];
 const N = Math.max(1, Math.min(os.cpus().length, jobs.length));
-console.log(`Flaggschiff-Simulation: ${jobs.length} Spiele (${NUR_L.length} Linienarten × ${keys.length} Strategien × ${LAEUFE} Läufe, je ${JAHRE} Betriebsjahre) auf ${N} Kernen …`);
+console.log(`Flaggschiff-Simulation: ${jobs.length} Spiele (${NUR_L.length} Linienarten × ${keys.length} Strategien × ${LAEUFE} Läufe, je ${JAHRE} Betriebsjahre${NUR.includes("start") ? "; dazu Start-Bots: 3 Heimathäfen × 2 Bots × 3 Schwierigkeiten × " + LAEUFE + " Läufe, je " + Math.min(JAHRE, 30) + " Jahre" : ""}) auf ${N} Kernen …`);
 let next = 0, done = 0;
 const workers = Array.from({ length: N }, () => cp.fork(__filename, ["--arbeiter"]));
 for (const w of workers) {
@@ -307,12 +380,14 @@ function fertig() {
     console.log("\n  " + (ueberall ? "ACHTUNG: „" + STRAT[s[0]].name + "“ ist überall die beste." : "Ziel erreicht: keine Einstellung ist auf allen Linienarten die beste (" + [...new Set(s)].map(k => STRAT[k].name).join(", ") + ")."));
     return !ueberall;
   };
-  const titel = { schwierigkeit: "1. Schwierigkeitsgrad gegen v4.6", fuehrung: "2. Gut geführt und schlecht getaktet", gegen: "3. Gegenmittel gegen Verspätungen", bunker: "4. Bekohlungsregeln", serie: "5. Serienbestellung",
-    fahrt: "6. Fahrstufe", kueche: "7. Verpflegung", vertrag: "8. Kohle-Lieferverträge", boerse: "9. Börse: nur Aktien gegen eine gut geführte Reederei", hauszeche: "10. Hauszeche gegen breites Depot", prokurist: "11. Prokurist gegen breites Depot" };
+  const titel = { schwierigkeit: "1. Schwierigkeitsgrad: Abstand der Stufen und Vergleich mit v5.0.1", fuehrung: "2. Gut geführt und schlecht getaktet", gegen: "3. Gegenmittel gegen Verspätungen", bunker: "4. Bekohlungsregeln", serie: "5. Serienbestellung",
+    fahrt: "6. Fahrstufe", kueche: "7. Verpflegung", vertrag: "8. Kohle-Lieferverträge", boerse: "9. Börse: nur Aktien gegen eine gut geführte Reederei", hauszeche: "10. Hauszeche gegen breites Depot", prokurist: "11. Prokurist gegen breites Depot",
+    start: "12. Start als Fährreederei: Zeitziele und Fährgeschäft" };
   for (const g of ALLE.filter(g => NUR.includes(g))) {
     console.log("=== " + titel[g] + " ===");
     if (["boerse", "hauszeche", "prokurist"].includes(g)) { boAuswertung(g); continue; }
     if (g === "schwierigkeit") { schwierigkeit(); continue; }
+    if (g === "start") { startAuswertung(); continue; }
     const sk = keys.filter(k => STRAT[k].gruppe.includes(g));
     out.gruppen[g] = {};
     for (const li of NUR_L) {
@@ -340,30 +415,31 @@ function fertig() {
     if (g === "bunker") console.log("  „Wo es am billigsten ist“ fährt hier wie „im Heimathafen volltanken“: Auf allen Testlinien ist der Heimathafen zugleich der billigste. Anders wird es, wenn eine Linie im teuren Hafen beginnt.");
     console.log("");
   }
-  // 1. Schwierigkeitsgrad: je Linienart der Mittelwert, zusammengezählt; Standardfehler aus den gepaarten Unterschieden
+  // 1. Schwierigkeitsgrad: je Linienart der Mittelwert, zusammengezählt. Seit v5.1 zählt der Abstand der Stufen zu Leicht (wie in v5.0.1),
+  // der Vergleich mit v5.0.1 (Normal) steht zur Information daneben: Die neuen Preise und Fixkosten der Hochsee verschieben die Gewinne bewusst.
   function schwierigkeit() {
     out.gruppen.schwierigkeit = {};
-    const ziel = { leicht: [-.1, .1], basis: [-.35, -.2], schwer: [-.6, -.4] }, name = { leicht: "Leicht", basis: "Normal", schwer: "Schwer" };
-    console.log(`  ${"".padEnd(26)} ${"v4.6".padStart(11)} ${["Leicht", "Normal", "Schwer"].map(x => x.padStart(18)).join("")}`);
+    const ziel = { basis: [-.35, -.2], schwer: [-.65, -.45] }, name = { leicht: "Leicht", basis: "Normal", schwer: "Schwer" };
+    console.log(`  ${"".padEnd(26)} ${"v5.0.1".padStart(11)} ${["Leicht", "Normal", "Schwer"].map(x => x.padStart(18)).join("")}`);
     const tot = { alt: 0 }, vari = {};
     for (const li of NUR_L) {
-      const a = by(li, "alt"); if (!a.length) continue;
-      const ma = mean(a.map(r => r.profit / r.jahre)); tot.alt += ma;
-      const cells = [];
+      const a = by(li, "alt"), ma = a.length ? mean(a.map(r => r.profit / r.jahre)) : null; if (ma != null) tot.alt += ma;
+      const cells = [], L0 = by(li, "leicht");
       for (const k of ["leicht", "basis", "schwer"]) {
         const b = by(li, k); if (!b.length) { cells.push("–".padStart(18)); continue; }
-        const mb = mean(b.map(r => r.profit / r.jahre)), d = b.map((r, i) => a[i] ? r.profit / r.jahre - a[i].profit / a[i].jahre : 0);
-        tot[k] = (tot[k] || 0) + mb; vari[k] = (vari[k] || 0) + (d.length > 1 ? sd(d) ** 2 / d.length : 0);
-        cells.push((fmt(mb) + " (" + pc(ma ? (mb - ma) / Math.abs(ma) : 0) + ")").padStart(18));
+        const mb = mean(b.map(r => r.profit / r.jahre)); tot[k] = (tot[k] || 0) + mb;
+        if (k !== "leicht" && L0.length) { const d = b.map((r, i) => L0[i] ? r.profit / r.jahre - L0[i].profit / L0[i].jahre : 0); vari[k] = (vari[k] || 0) + (d.length > 1 ? sd(d) ** 2 / d.length : 0); }
+        cells.push((fmt(mb) + (ma ? " (" + pc((mb - ma) / Math.abs(ma)) + ")" : "")).padStart(18));
         out.gruppen.schwierigkeit[li] = Object.assign(out.gruppen.schwierigkeit[li] || { alt: ma }, { [k]: mb });
       }
-      console.log(`  ${kurz(li).padEnd(26)} ${fmt(ma).padStart(11)} ${cells.join("")}`);
+      console.log(`  ${kurz(li).padEnd(26)} ${ma == null ? "–".padStart(11) : fmt(ma).padStart(11)} ${cells.join("")}`);
     }
     console.log("");
-    for (const k of ["leicht", "basis", "schwer"]) {
-      if (tot[k] == null || !tot.alt) continue;
-      const m = (tot[k] - tot.alt) / Math.abs(tot.alt), se = Math.sqrt(vari[k]) / Math.abs(tot.alt), [lo, hi] = ziel[k], okk = m >= lo - 2 * se && m <= hi + 2 * se;
-      console.log(`  ${name[k].padEnd(7)} alle Linienarten zusammen ${pc(m)} ± ${(se * 100).toFixed(1)} % gegenüber v4.6 (Ziel ${pc(lo)} bis ${pc(hi)}) → ${okk ? "Ziel erreicht" : "ACHTUNG"}.`);
+    if (tot.alt) for (const k of ["leicht", "basis", "schwer"]) if (tot[k] != null) console.log(`  ${name[k].padEnd(7)} alle Linienarten zusammen ${pc((tot[k] - tot.alt) / Math.abs(tot.alt))} gegenüber v5.0.1 (Normal), zur Information.`);
+    for (const k of ["basis", "schwer"]) {
+      if (tot[k] == null || !tot.leicht) continue;
+      const m = (tot[k] - tot.leicht) / Math.abs(tot.leicht), se = Math.sqrt(vari[k] || 0) / Math.abs(tot.leicht), [lo, hi] = ziel[k], okk = m >= lo - 2 * se && m <= hi + 2 * se;
+      console.log(`  ${name[k].padEnd(7)} ${pc(m)} ± ${(se * 100).toFixed(1)} % gegenüber Leicht (Ziel ${pc(lo)} bis ${pc(hi)}, v5.0.1: Normal −27 %, Schwer −55 %) → ${okk ? "Ziel erreicht" : "ACHTUNG"}.`);
       out.gruppen.schwierigkeit["gesamt_" + k] = { rel: m, se };
     }
     console.log("");
@@ -452,6 +528,40 @@ function fertig() {
         for (const k of ks) { const a = rendite(li, k), br = k.startsWith("pk") ? rendite(li, k, true) : null; out.gruppen[g][li][k] = Object.assign(a, br ? { brutto: br.m } : {});
           console.log(`    ${STRAT[k].name.padEnd(52)} ${pc(a.m).padStart(8)} ± ${(a.se * 100).toFixed(1)} % im Jahr` + (br ? `   vor Gehalt und Beteiligung ${pc(br.m)}` : "")); }
       }
+    }
+    console.log("");
+  }
+  // 12. Start als Fährreederei (v5.1): Zeitziele des Aufsteigers, Fährreederei ohne Geldspritze
+  function startAuswertung() {
+    const S = ok.filter(r => r.start); out.start = { aufsteiger: {}, faehre: {} };
+    const q = (a, p) => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[Math.round(p * (b.length - 1))] : null; };
+    const f1 = x => x == null ? "–" : x.toFixed(1).replace(".", ",");
+    const HN = { ham: "Hamburg", lpl: "Liverpool", lon: "London" };
+    console.log("  Aufsteiger: Spieljahre bis zur Bestellung des ersten Schiffs für Küste, Nordsee und Atlantik (Median, in Klammern mittlere Hälfte der Läufe, Anteil der Läufe, die es in 30 Jahren schaffen):");
+    for (const diff of START_DIFFS) {
+      const rs = S.filter(r => r.bot === "aufsteiger" && r.diff === diff); if (!rs.length) continue;
+      const cells = []; let alle = true; out.start.aufsteiger[diff] = {};
+      for (const k of ["kueste", "see", "atlantik"]) {
+        const got = rs.map(r => r.ms[k] ? r.ms[k].m / 12 : null).filter(x => x != null), m = q(got, .5), [lo, hi] = ZEITZIEL[diff][k];
+        const hit = m != null && m >= lo - .5 && m <= hi + .5 && got.length >= rs.length * .6; alle = alle && hit;
+        cells.push(`${STUFE_NAME[k]} ${f1(m)} (${f1(q(got, .25))}–${f1(q(got, .75))}, ${Math.round(got.length / rs.length * 100)} %; Ziel ${lo}–${hi})`);
+        out.start.aufsteiger[diff][k] = { median: m, q25: q(got, .25), q75: q(got, .75), anteil: got.length / rs.length, ziel: [lo, hi] };
+      }
+      const pl = rs.filter(r => r.over != null).length;
+      console.log(`    ${diff.padEnd(7)} ${cells.join("   ")}${pl ? "   Pleiten " + pl + " von " + rs.length : ""} → ${alle ? "Ziel erreicht" : "ACHTUNG"}`);
+      for (const home of START_HOMES) { const rh = rs.filter(r => r.home === home); if (!rh.length) continue;
+        console.log(`      ${HN[home].padEnd(10)} ` + ["kueste", "see", "atlantik"].map(k => STUFE_NAME[k] + " " + f1(q(rh.map(r => r.ms[k] ? r.ms[k].m / 12 : null).filter(x => x != null), .5))).join(", ") + (rh.some(r => r.over != null) ? `, Pleiten ${rh.filter(r => r.over != null).length}` : "")); }
+    }
+    console.log("\n  Fährreederei ohne Geldspritze (wächst nur mit Fähren, kauft bar oder mit Bankkredit):");
+    for (const diff of START_DIFFS) {
+      const rs = S.filter(r => r.bot === "faehre" && r.diff === diff); if (!rs.length) continue;
+      const vj = rs.flatMap(r => r.jahrGewinn), verl = vj.filter(x => x < 0).length / Math.max(1, vj.length), f10 = rs.map(r => r.jahrGewinn.slice(0, 10)).flat();
+      const s10 = rs.map(r => r.schiffe[1890] || r.ships), s20 = rs.map(r => r.schiffe[1900] || r.ships), roiF = mean(rs.map(r => r.flotte ? mean(r.jahrGewinn) / r.flotte : 0)), pl = rs.filter(r => r.over != null).length;
+      const okk = diff !== "normal" || (verl <= .15 && !pl && q(s10, .5) >= 2);
+      console.log(`    ${diff.padEnd(7)} Ø Gewinn ${fmt(mean(f10))} Mark im Jahr (erste 10 Jahre), ${fmt(mean(vj))} (30 Jahre); Verlustjahre ${Math.round(verl * 100)} %; Schiffe nach 10 Jahren ${q(s10, .5)}, nach 20 Jahren ${q(s20, .5)}; Rendite auf den Flottenwert ${pc(roiF)}${pl ? "; Pleiten " + pl + " von " + rs.length : ""}` + (diff === "normal" ? ` → ${okk ? "Ziel erreicht (selten Verlust, wächst aus eigener Kraft)" : "ACHTUNG"}` : ""));
+      for (const home of START_HOMES) { const rh = rs.filter(r => r.home === home); if (!rh.length) continue; const v2 = rh.flatMap(r => r.jahrGewinn);
+        console.log(`      ${HN[home].padEnd(10)} Start ${rh[0].ersteLinie ? rh[0].ersteLinie.a + "–" + rh[0].ersteLinie.b + " (" + rh[0].ersteLinie.type + ")" : "?"}: Ø ${fmt(mean(rh.map(r => mean(r.jahrGewinn.slice(0, 10)))))} Mark (erste 10 Jahre), Verlustjahre ${Math.round(v2.filter(x => x < 0).length / Math.max(1, v2.length) * 100)} %, Schiffe nach 10 Jahren ${q(rh.map(r => r.schiffe[1890] || r.ships), .5)}`); }
+      out.start.faehre[diff] = { gewinn10: mean(f10), gewinn: mean(vj), verlust: verl, schiffe10: q(s10, .5), schiffe20: q(s20, .5), rendite: roiF, pleiten: pl };
     }
     console.log("");
   }
