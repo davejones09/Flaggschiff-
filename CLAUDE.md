@@ -7,7 +7,7 @@
 - Heimathäfen Hamburg, Liverpool, London. Bei britischem Heimathafen Pfund statt Mark (die Währung hängt am Heimathafen, nicht an der Sprache).
 - Hausstil: Nachtblau und Messing, weißer achtzackiger Stern. Grafik vollwertig 2D in hoher Auflösung, keine Pixelart, kein 3D.
 - Ein Spiel für alle Geräte: Handy-Layout unter 1100 px Breite, PC-Layout ab 1100 px (Seitenleisten, Maschinentelegraf oben, Tastatur: Leertaste, 0–3, Bereichstasten, 1–9, Esc).
-- Spielstände müssen nach jedem Update ladbar bleiben (Migration über E.migrate, Speicherschlüssel nicht ändern: `flaggschiff-proto-1880`, `flaggschiff-lang`).
+- Spielstände müssen nach jedem Update ladbar bleiben (Migration über E.migrate, Speicherschlüssel nicht ändern: `flaggschiff-proto-1880` für Platz 1, seit v5.1 dazu `flaggschiff-proto-1880-2`, `-3` und `-platz`, außerdem `flaggschiff-lang`).
 - Das Repo ist öffentlich: keine persönlichen Daten in Code, Commits oder Doku.
 
 ## Ordner
@@ -15,8 +15,8 @@
 - `assets/`: Bilder als WebP, Musik als M4A, so komprimiert, dass die App auf dem iPhone schnell lädt.
 - `originale/`: hochauflösende Bildbögen und Musik-Originale samt `LIESMICH.md` mit der Zuordnung Bildbogen → Spielbild. Nur als Quelle zum Neu-Zuschneiden, nicht in `sw.js` cachen.
 - `neue-bilder/`, `neue-musik/`: hier lädt David neue Bilder und Musik hoch. Nach der Übernahme nach `originale/` verschieben. Was in `neue-bilder/spaeter/` liegt, ist für ein späteres Update und bleibt dort, bis ein Auftrag es nennt.
-- `docs/`: Updatelog (`updatelog.md`, `Updatelog.pdf`) und Konzepte (`konzept-v4.5.md`, `konzept-v4.6.md` und `konzept-v5.0.md` mit den Zahlen und Simulationsergebnissen von „Kohle und Küche“, „Zeitung, Börse und Einführung“ und „Fahrplan und Pünktlichkeit“).
-- `tools/`: Hilfsskripte (Python, dazu ein Node-Skript). `assets.py` erzeugt `js/assets.js` (nach jeder Änderung in `assets/` ausführen), `bilder.py` schneidet die Spielbilder aus `originale/` (Rahmen in `tools/zuschnitt.json`), `musik.py` komprimiert die Musik, `icons.py` erzeugt die App-Icons aus `originale/icon/app-icon.png`, `updatelog_pdf.py` baut aus `docs/updatelog.md` das PDF. `simulation.js` prüft die Balance: Bots spielen jede Linienart 40 Jahre mit verschiedenen Strategien und vergleichen Leicht, Normal und Schwer mit v4.6 (`node tools/simulation.js`, rund eine Viertelstunde; mit `--nur` und `--laeufe` schneller; nach Änderungen an Zahlen der Engine laufen lassen).
+- `docs/`: Updatelog (`updatelog.md`, `Updatelog.pdf`) und Konzepte (`konzept-v4.5.md`, `konzept-v4.6.md`, `konzept-v5.0.md` und `konzept-v5.1.md` mit den Zahlen und Simulationsergebnissen von „Kohle und Küche“, „Zeitung, Börse und Einführung“, „Fahrplan und Pünktlichkeit“ und „Fährreederei und Spieltempo“).
+- `tools/`: Hilfsskripte (Python, dazu ein Node-Skript). `assets.py` erzeugt `js/assets.js` (nach jeder Änderung in `assets/` ausführen), `bilder.py` schneidet die Spielbilder aus `originale/` (Rahmen in `tools/zuschnitt.json`), `musik.py` komprimiert die Musik, `icons.py` erzeugt die App-Icons aus `originale/icon/app-icon.png`, `updatelog_pdf.py` baut aus `docs/updatelog.md` das PDF. `simulation.js` prüft die Balance: Bots spielen jede Linienart 40 Jahre mit verschiedenen Strategien, dazu Start-Bots ab der ersten Fähre („Fährreederei“, „Aufsteiger“ mit den Zeitzielen), und vergleichen Leicht, Normal und Schwer mit v5.0.1 (`node tools/simulation.js`, rund eine Viertelstunde; mit `--nur` und `--laeufe` schneller; nach Änderungen an Zahlen der Engine laufen lassen).
 
 ## Ablauf bei Updates
 1. Bevor gebaut wird: sagen, welche neuen Bilder gebraucht werden (Motiv, Format, Dateiname).

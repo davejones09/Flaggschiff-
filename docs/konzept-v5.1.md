@@ -47,7 +47,25 @@ Die Gründung hat zwei Schritte: zuerst Name, Heimathafen und Schwierigkeit, dan
 
 Alle Häfen gab es schon. Wyk auf Föhr zieht mehr Badegäste an als bisher (Bäderwert 1,4 statt 0,9), damit die Inselfähre im Sommer etwas zu tun hat.
 
-<<STARTLINIEN>>
+### Was die Startlinien bringen
+
+Normal, eine Fähre des empfohlenen Typs, Zeitkarten eingeschaltet, Verträge angenommen, bei der Konzession mittleres Gebot, sonst nichts angefasst. Ø Jahresgewinn der Reederei (mit Zinsen des Gründungskredits) in den ersten fünf vollen Jahren, je 8 Läufe:
+
+| Linie | Fähre | Ø Gewinn im Jahr | Verlustjahre | Einnahmen im Jahr (Ø) |
+|---|---|---|---|---|
+| Hamburg – Blankenese | Fluss-Raddampfer | 32.800 | 0 von 40 | Fahrkarten 65.000, Zeitkarten 26.000 |
+| Glückstadt – Wischhafen | Dampffähre für Fuhrwerke | 28.900 | 2 von 40 | Fuhrwerke 45.000, Fahrkarten 9.000 |
+| Hamburg – Finkenwerder | Fluss-Raddampfer | 15.300 | 6 von 40 | Fahrkarten 39.000, Zeitkarten 23.000 |
+| Dagebüll – Wyk auf Föhr | Inselpostdampfer | 19.200 | 5 von 40 | Fahrkarten 40.000, Inselvertrag 18.000 |
+| Liverpool – Birkenhead | Dampffähre für Fuhrwerke | 47.400 | 0 von 40 | Fuhrwerke 30.000, Fahrkarten 28.000, Zeitkarten 19.000 |
+| Liverpool – Douglas | Inselpostdampfer | 32.400 | 7 von 40 | Fahrkarten 53.000, Inselvertrag 35.000 |
+| Holyhead – Dublin | Inselpostdampfer | 27.000 | 3 von 40 | Fahrkarten 95.000 (Postvertrag erst mit 12 Knoten) |
+| London – Gravesend | Fluss-Raddampfer | 44.100 | 2 von 40 | Fahrkarten 103.000 |
+| Tilbury – Gravesend | Dampffähre für Fuhrwerke | 29.700 | 2 von 40 | Fuhrwerke 43.000, Fahrkarten 10.000 |
+| Dover – Calais | Kanal-Raddampfer | 27.800 | 7 von 40 | Fahrkarten 110.000, Postvertrag 20.000 |
+| Portsmouth – Ryde | Inselpostdampfer | 57.700 | 0 von 40 | Fahrkarten 63.000, Zeitkarten 15.000, Inselvertrag 17.000 |
+
+Bisher verdiente eine Fähre auf Normal rund 25.000 Mark im Jahr, ein Drittel der Jahre endete im Minus. Jetzt bringt die erste Fähre je nach Linie 15.000 bis 58.000 Mark, 8 % der Jahre enden im Minus, meist im ersten Winter. Beträge bei britischem Heimathafen im Spiel in Pfund.
 
 ### Grundkurs
 
@@ -199,4 +217,103 @@ Die erreichten Werte stehen in Abschnitt 7.
 
 ## 7. Simulation
 
-<<SIMULATION>>
+Alle Zahlen sind mit v5.1 gerechnet. `node tools/simulation.js` spielt wie bisher sechs Linienarten über 40 Betriebsjahre mit 38 Strategien (je 12 Läufe), dazu neu die Start-Bots: 3 Heimathäfen × 2 Bots × 3 Schwierigkeiten × 12 Läufe über 30 Jahre ab der Gründung. Insgesamt 2.952 Spiele, rund 12 Minuten auf vier Kernen. Die Linien-Bots bekommen ihre Schiffe wie bisher gestellt und sind nicht an den Kreditrahmen gebunden; sie zeigen, was eine Linie verdient. Die Start-Bots beginnen mit Fähre und Gründungskredit wie im Spiel und müssen alles selbst bezahlen. Weil jedes Spiel eigene Zufälle hat, sind Unterschiede unter etwa 10 % meist Rauschen; **fett** ist, was mehr als zwei Standardfehler ausmacht.
+
+### Neue Bots
+
+- **Fährreederei:** startet auf der ersten Startlinie, schaltet Zeitkarten ein, nimmt Verträge an, bietet bei der Konzession hoch. Sie eröffnet weitere Startlinien und setzt zweite Schiffe auf volle Linien, sobald Kasse und Kreditrahmen es tragen: bar, wenn danach eine Reserve bleibt (40.000 Mark mal Teuerung, mindestens sechs Monate Kosten), sonst Bankkredit, wenn alle Raten zusammen höchstens 60 % des Jahresergebnisses kosten. Keine Geldspritze.
+- **Aufsteiger:** wie die Fährreederei, will aber so schnell wie möglich nach oben: erst eine Küsten- oder Bäderlinie (Hamburg – Helgoland, Liverpool – Dublin, London – Dover), dann Nord- und Ostsee (Hamburg – London, Liverpool – London, London – Hamburg), dann den Atlantik (New York). Er kauft das jeweils nächste Schiff, sobald es bar, über die Bank oder über die Werft im Rahmen geht. Gemessen wird das Spieljahr der Bestellung.
+
+### Zeitziele (Aufsteiger)
+
+Median über 36 Läufe je Schwierigkeit (in Klammern die mittlere Hälfte der Läufe), Spieljahre ab der Gründung bis zur Bestellung des ersten Schiffs; ein halbes Jahr Spielraum zum Ziel:
+
+| | Küste | Nord-/Ostsee | Atlantik | Ergebnis |
+|---|---|---|---|---|
+| Leicht | 0,8 (0,6–1,0) · Ziel 1–4 | 6,3 (4,6–6,7) · Ziel 5–10 | 10,8 (9,5–12,3) · Ziel 11–17 | erreicht, alle Läufe schaffen den Atlantik |
+| Normal | 3,3 (2,4–3,5) · Ziel 3–5 | 11,3 (9,4–13,2) · Ziel 8–12 | 17,5 (15,4–19,8) · Ziel 15–20 | erreicht, 97 % schaffen den Atlantik in 30 Jahren |
+| Schwer | 4,8 (4,3–6,3) · Ziel 4–8 | 17,5 (11,1–19,6) · Ziel 11–18 | 22,7 (19,4–24,9) · Ziel 18–28 | erreicht, 78 % schaffen den Atlantik, 2 von 36 Läufen gehen pleite |
+
+Je Heimathafen auf Normal: Hamburg 3,6 / 11,4 / 17,4, Liverpool 3,3 / 10,4 / 18,1, London 2,2 / 9,6 / 17,9 Jahre. Bei halber Fahrt (2 Sekunden je Tag) sind 17,5 Spieljahre gut 3½ Stunden reine Spielzeit.
+
+### Fährreederei
+
+Ohne Geldspritze, wächst nur mit Fähren, kauft bar oder mit Bankkredit:
+
+| | Ø Gewinn im Jahr, erste 10 Jahre | Ø Gewinn, 30 Jahre | Verlustjahre | Schiffe nach 10 / 20 Jahren |
+|---|---|---|---|---|
+| Leicht | 244.725 | 262.227 | 0 % | 4 / 5 |
+| Normal | 210.163 | 240.098 | 1 % | 4 / 4 |
+| Schwer | 146.305 | 188.039 | 4 % | 4 / 4 |
+
+Auf Normal: Hamburg (Start Blankenese) 135.062, Liverpool (Birkenhead) 196.734, London (Gravesend) 298.692 Mark im Jahr in den ersten zehn Jahren. → **Ziel erreicht:** Eine reine Fährreederei verdient verlässlich, Verlustjahre sind selten, und sie wächst aus eigener Kraft auf vier bis fünf Fähren. Mehr tragen die Fährlinien nicht; das große Geld liegt weiter draußen.
+
+### Schwierigkeitsgrad gegen v5.0.1 – Ø Jahresgewinn, nichts anfassen (Linien-Bots)
+
+| Linienart | v5.0.1 (Normal) | Leicht | Normal | Schwer |
+|---|---|---|---|---|
+| Fähre | 24.760 | 35.814 (+44,6 %) | 30.616 (+23,7 %) | 21.864 (−11,7 %) |
+| Küste und Bäder | 102.900 | 116.693 (+13,4 %) | 105.331 (+2,4 %) | 81.566 (−20,7 %) |
+| Nord- und Ostsee | 492.610 | 642.069 (+30,3 %) | 553.305 (+12,3 %) | 507.927 (+3,1 %) |
+| Atlantik | 1.291.323 | 3.987.853 (+208,8 %) | 1.831.921 (+41,9 %) | 244.895 (−81,0 %) |
+| Südamerika | 518.316 | 1.468.870 (+183,4 %) | 925.548 (+78,6 %) | 201.565 (−61,1 %) |
+| Vergnügungsreise | 2.300.606 | 2.072.716 (−9,9 %) | 1.801.136 (−21,7 %) | 1.365.245 (−40,7 %) |
+| alle zusammen | | +76,0 % | +10,9 % | −48,8 % |
+
+- Normal gegenüber Leicht −37,0 % ± 4,4 % (Ziel −35 % bis −20 %), Schwer gegenüber Leicht −70,9 % ± 5,1 % (Ziel −65 % bis −45 %) → **im Rahmen** (innerhalb der Unsicherheit).
+- Die Linien-Bots fahren mit gestellten Schiffen, deshalb fehlen hier die höheren Schiffspreise; die Zinsen auf die teureren Schiffe zahlen nur Start-Bots und Spieler. Die höheren Fahrpreise auf langen Strecken heben den Gewinn einer laufenden Atlantiklinie, die höheren Fixkosten treffen sie umso härter, je mehr Verspätungen und leere Plätze es gibt: auf Leicht (halb so viele Verspätungen) +209 %, auf Schwer −81 %.
+
+### Gut geführt und schlecht getaktet (Normal)
+
+| Linienart | nichts anfassen | gut geführt (Puffer 10 %, Maschine gut) | gut geführt, ein Schiff je Linie | schlecht getaktet |
+|---|---|---|---|---|
+| Fähre (Dover – Calais) | 30.616 · 22 % Verlustjahre | 30.088 | **49.684** | **1.797** · 52 % Verlustjahre |
+| Küste und Bäder | 105.331 · 13 % | **122.734** | **182.460** | **120.212** |
+| Nord- und Ostsee | 553.305 · 3 % | **636.551** | **636.551** | 488.610 |
+| Atlantik | 1.831.921 · 23 % | **2.598.916** · 18 % | 2.447.255 | **455.894** · 34 % |
+| Südamerika | 925.548 · 30 % | 1.064.013 | **625.048** | 1.168.804 |
+| Vergnügungsreise | 1.801.136 · 17 % | 1.918.549 | 1.918.549 | 1.999.220 |
+
+- Atlantik schlecht getaktet: Ø 455.894 Mark im Jahr, 34 % Verlustjahre → **Ziel erreicht** (Verlust im Schnitt oder in mindestens 3 von 10 Jahren). Im Winter verliert eine Atlantiklinie ohne Gegenmittel Ø 62.656 Mark im Monat, 59 % der Wintermonate sind im Minus.
+- Gut geführt: kein Lauf mit Verlust über alle Jahre → **Ziel erreicht**.
+- Rendite auf den Flottenwert, gut geführt: ein Schiff je Linie Kurzstrecke +38,8 %, Langstrecke +26,1 %; übliche Flotte (zwei Schiffe) Kurzstrecke +12,5 %, Langstrecke +17,5 %; im Mittel Kurzstrecke +25,7 %, Langstrecke +21,8 % → 15 % Unterschied, **Ziel erreicht** (höchstens ein Viertel). Atlantik gut geführt +26,0 % gegen Kurzstrecke +25,7 % → **Ziel erreicht**.
+
+### Prüfungen aus v4.5 bis v5.0
+
+Alle gelten weiter (Einzelheiten in der Ausgabe von `node tools/simulation.js`):
+
+| Prüfung | Ergebnis |
+|---|---|
+| Gegenmittel gegen Verspätungen: keine Einstellung überall die beste | erreicht (am besten: Maschine sehr gut bezahlt, auf Küste und Bäder Pufferzeit groß) |
+| Bekohlungsregeln: keine überall die beste | erreicht (Heimathafen volltanken oder nur das Nötige) |
+| Serienbestellung | besser in 1 von 4 Linienarten mit mehreren Schiffen, deutlich in keiner: Rabatt ja, sonst wie Einzelbestellung |
+| Fahrstufe: keine überall die beste | erreicht (Normal, Maschineninspektor, Volldampf auf Atlantik und Südamerika) |
+| Verpflegung: keine überall die beste | erreicht (Billig-Caterer auf Küste und Bäder, fein/ordentlich/einfach auf Nordsee, Atlantik, Vergnügungsreise) |
+| Kohle-Lieferverträge | lohnen sich in 11 von 24 Fällen |
+| Nur Aktien gegen eine Reederei | Reederei Ø +17,9 %, nur Aktien +5,6 % auf den Flottenwert, Aktien schlechter in 6 von 6 Linienarten |
+| Hauszeche gegen breites Depot | Hauszeche besser auf allen sechs Linienarten, am meisten bei viel Kohle (Atlantik +21,5 % gegen +2,2 %) |
+| Prokurist gegen breites Depot | nur ein sehr gut bezahlter Prokurist schlägt das Depot, und nur knapp |
+
+### Was die Simulation geändert hat
+
+| Wert | Startwert | jetzt | Grund |
+|---|---|---|---|
+| Kreditrahmen | 50 % Eigenkapital + 150 % Jahresergebnis, Bonität A–E × 1,5 / 1,25 / 1 / 0,6 / 0, Leicht × 1,25, Schwer × 0,8 | 25 % + 60 %, × 1,2 / 1 / 0,85 / 0,5 / 0, Leicht × 1, Schwer × 0,85 | Der Aufsteiger kam auf Normal nach einem halben Jahr an die Küste und nach gut 11 Jahren auf den Atlantik; jetzt nach 3,3 und 17,5. |
+| Mehrpreis auf langen Strecken | bis +40 % | bis +70 % | Mit den teureren Schiffen und höheren Fixkosten lohnte sich die Langstrecke nicht mehr. |
+| Heuer auf Hochseeschiffen | × 1,25 | × 2 | Mit höheren Fahrpreisen war der Atlantik auch schlecht getaktet ein sicherer Gewinn. |
+| Versicherung auf Hochseeschiffen | wie bisher | × 4,5 | ebenso |
+| Hafengebühren auf Hochseelinien | × 1,6 | × 5 | ebenso; danach 34 % Verlustjahre bei schlechtem Takt |
+| Hafengebühren kurzer Fährlinien | volle Gebühr beider Häfen | Anlegergebühr: billigerer Hafen, anteilig zur Entfernung | London – Gravesend zahlte 69.000 Mark Gebühren im Jahr, mehr als die Fähre einnahm. |
+| Rivalen auf Fährlinien | zählten zu 55 % auf allen Linien unter 120 Seemeilen mit vielen Pendlern und Durchreisenden | nur unter 20 Seemeilen | Die Fähre kam auf 70 % Rendite, weit vor der Langstrecke. |
+| Fährkonzession | Querungen bis 30 Seemeilen, Gebote 10 / 20 / 32 %, Zuschlag 35 / 70 / 95 % | bis 15 Seemeilen, 8 / 15 / 25 %, 40 / 80 / 97 % | Verlorene Konzessionen trieben Start-Bots in die Pleite, und Dover – Calais ist keine städtische Querung. Ein hohes Gebot gewinnt jetzt fast sicher, kostet aber spürbar Pacht. |
+| Zweite Fähre auf Leicht | auf derselben Linie | auf einer zweiten Startlinie | Zwei Fähren auf einer kurzen Querung brachten weniger als eine. |
+| Bäderwert Wyk auf Föhr | 0,9 | 1,4 | Die Inselfähre nach Föhr verdiente nur mit dem Vertrag. |
+| Linien-Bots bei der Konzession | vorsichtig bieten | hoch bieten | Sonst verloren sie ihre Testlinie. |
+
+### Offene Punkte
+
+- Die Fährreederei hat eine hohe Rendite auf den Flottenwert (Normal +78 %), weil ihre Fähren billig und bald abgeschrieben sind. Absolut bleibt sie mit gut 200.000 Mark im Jahr klein, denn mehr als vier bis fünf Fähren tragen die Querungen nicht. Für den Vergleich Kurz gegen Lang gilt deshalb weiter die Rechnung der Linien-Bots.
+- Auf Leicht verdient eine laufende Atlantiklinie dreimal so viel wie in v5.0.1, auf Schwer ein Fünftel. Der Abstand der Stufen liegt im Ziel, ist auf dem Atlantik aber groß. Falls Schwer sich zäh anfühlt: Verspätungen auf Schwer × 1,3 statt × 1,4.
+- Alte Spielstände mit Hochseeschiffen zahlen ab dem Laden mehr Heuer und Versicherung. Spielstände mit einem halbleeren Ozeandampfer können dadurch ins Minus rutschen.
+- Holyhead – Dublin bekommt den Postvertrag erst mit 12 Knoten, also mit dem Kanal-Raddampfer. Der empfohlene Inselpostdampfer ist billiger, aber zu langsam dafür; das steht in der Gründung und bei der Linie.
+

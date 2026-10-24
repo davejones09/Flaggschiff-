@@ -474,7 +474,7 @@
       ["dag", "wyk", ["inselpost", "hafen"], "Zur Insel Föhr: Post und Versorgung, im Sommer Badegäste."]],
     lpl: [["lpl", "bir", ["wagenfaehre", "hafen"], "Über den Mersey: sehr viele Pendler und Fuhrwerke."],
       ["lpl", "dou", ["inselpost", "kanalrad"], "Zur Isle of Man: Post und Versorgung, im Sommer viele Badegäste."],
-      ["hol", "dub", ["inselpost", "kanalrad"], "Über die Irische See nach Dublin: Bahnreisende und Post. Der Kanal-Raddampfer ist schneller, leidet aber unter dem rauen Wetter."]],
+      ["hol", "dub", ["inselpost", "kanalrad"], "Über die Irische See nach Dublin: Bahnreisende und Post. Der Kanal-Raddampfer ist schneller und schafft die 12 Knoten für den Postvertrag, leidet aber unter dem rauen Wetter."]],
     lon: [["lon", "grv", ["flussrad"], "Themseabwärts nach Gravesend: Reisende und Sommerausflügler."],
       ["til", "grv", ["wagenfaehre"], "Kurze Querung der Themse für Fuhrwerke und Vieh."],
       ["dov", "cal", ["kanalrad", "hafen"], "Über den Kanal nach Calais: Bahnreisende und Post."],
