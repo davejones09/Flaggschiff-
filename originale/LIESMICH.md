@@ -331,6 +331,20 @@ Seit v5.0 (Fahrplan und Pünktlichkeit).
 - `ev_verspaetung` – oben rechts
 - `kt_abfahrten` – oben links
 
+### bogen_faehren.webp
+Seit v5.1 (Fährreederei und Spieltempo). Schiffsporträts im Spielformat (2,3 : 1) aus den Feldern geschnitten.
+- `ship_flussrad` – oben links
+- `ship_inselpost` – unten links
+- `ship_kanalrad` – unten rechts
+- `ship_wagenfaehre` – oben rechts
+
+### bogen_faehrbetrieb.webp
+Seit v5.1 (Fährreederei und Spieltempo).
+- `ev_konzession` – unten links
+- `fa_fuhrwerke` – oben rechts
+- `fa_inselpost` – unten rechts
+- `fa_pendler` – oben links
+
 ### bogen_kohle.webp
 Seit v4.5 (Kohle und Küche).
 - `ev_bunkern` – unten rechts
