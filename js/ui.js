@@ -9,7 +9,14 @@
   const signed = n => (n < 0 ? '<span class="neg">' : "") + E.fmt(n) + (n < 0 ? "</span>" : "");
   const kn = v => String(v).replace(".", ",");
 
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { } }
+  let saveWarned = false;
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); saveWarned = false; } catch (e) { if (!saveWarned) { saveWarned = true; toast("Speichern fehlgeschlagen: Der Speicher des Geräts ist voll. Exportieren Sie den Spielstand im Kontor."); } } }
+  // Fehler einmal melden, das Spiel läuft weiter (v5.0: Uhr absichern)
+  let errAt = 0;
+  function reportErr(e, where) {
+    try { console.error("Flaggschiff-Fehler (" + where + "):", e); } catch (x) { }
+    if (Date.now() - errAt > 30000) { errAt = Date.now(); try { toast("Ein Fehler ist aufgetreten. Das Fenster wurde geschlossen, das Spiel läuft weiter."); } catch (x) { } }
+  }
   function load() { try { const t = localStorage.getItem(KEY); return t ? JSON.parse(t) : null; } catch (e) { return null; } }
   function wipe() { try { localStorage.removeItem(KEY); } catch (e) { } }
 
@@ -264,7 +271,7 @@
     }
     let out = '<svg class="map" viewBox="0 0 ' + cfg.W + " " + cfg.H + '" role="img" aria-label="Seekarte Ihrer Linien">' + laneCache[ck];
     if (hideIn) { const a = P(hideIn.lat1, hideIn.lon0), b = P(hideIn.lat0, hideIn.lon1); out += '<rect x="' + f1(a[0]) + '" y="' + f1(a[1]) + '" width="' + f1(b[0] - a[0]) + '" height="' + f1(b[1] - a[1]) + '" fill="none" stroke="var(--brass)" stroke-width="1" stroke-dasharray="3 2"/>'; }
-    const used = new Map([[S.home || "ham", 9]]), edgeLabels = [], ships = [];
+    const used = new Map([[S.home || "ham", 9]]), edgeLabels = [];
     for (const r of S.routes) {
       const info = E.rInfo(S, r); if (!info) continue;
       const pts = info.path.nodes.map(XY);
@@ -272,13 +279,11 @@
       const n = S.ships.filter(sh => E.active(S, sh) && sh.line === r.id).length;
       const d = "M" + pts.map(p => f1(p[0]) + "," + f1(p[1])).join(" L");
       out += '<path d="' + d + '" fill="none" stroke="' + (n ? (r.cruise ? "var(--brass-2)" : "var(--ink)") : "var(--muted)") + '" stroke-width="' + (n ? 1.3 + Math.min(n, 4) * .45 : .9) + '" stroke-dasharray="' + (n ? "none" : "3 3") + '" stroke-linejoin="round" stroke-linecap="round"' + (n ? "" : ' opacity=".7"') + "/>";
-      if (n && !reduceMotion) { const dur = Math.max(6, Math.min(40, 5 + info.dist / 120)); for (let i = 0; i < Math.min(n, 3); i++) ships.push([d, dur, i * dur / Math.min(n, 3) * 1.0]); }
       for (const id of [r.a, r.b]) {
         if (inside(XY(id))) used.set(id, (used.get(id) || 0) + 1);
         else { const out1 = id === r.b ? pts.findIndex(p => !inside(p)) - 1 : pts.map(inside).lastIndexOf(false) + 1; const p = pts[clampI(out1, 0, pts.length - 1)]; if (p && inside(p)) edgeLabels.push([p, PORTS[id].name]); }
       }
     }
-    for (const [d, dur, off] of ships) out += '<circle r="2.4" fill="var(--brass)" stroke="var(--sea)" stroke-width=".8"><animateMotion dur="' + dur.toFixed(1) + 's" begin="-' + off.toFixed(1) + 's" repeatCount="indefinite" path="' + d + '" keyPoints="0;1;0" keyTimes="0;.5;1" calcMode="linear"/></circle>';
     const hidden = id => hideIn && id !== (S.home || "ham") && (() => { const [la, lo] = Wd.coord(id); return la >= hideIn.lat0 && la <= hideIn.lat1 && lo >= hideIn.lon0 && lo <= hideIn.lon1; })();
     if (mapPick && inside(XY(mapPick)) && !hidden(mapPick)) used.set(mapPick, 99);
     for (const id of Object.keys(PORTS)) { const p = XY(id); if (!inside(p) || used.has(id)) continue; out += '<circle cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="1.3" fill="var(--coast)" opacity=".55"/>'; }
@@ -304,13 +309,31 @@
     for (const [p, name] of cfg.edges ? edgeLabels : []) { if (seen.has(name)) continue; seen.add(name); const right = p[0] > cfg.W - 60; out += '<text x="' + clampI(p[0] + (right ? -3 : 3), 2, cfg.W - 2).toFixed(1) + '" y="' + clampI(p[1] + 11, 10, cfg.H - 3).toFixed(1) + '" font-size="10" font-style="italic" fill="var(--coast)" font-family="Old Standard TT, Georgia, serif" paint-order="stroke" stroke="var(--sea)" stroke-width="2.4" text-anchor="' + (right ? "end" : "start") + '">→ ' + esc(name) + "</text>"; }
     if (mapPick && inside(XY(mapPick)) && !hidden(mapPick)) { const p = XY(mapPick); out += '<circle cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="6" fill="none" stroke="var(--brass)" stroke-width="1.6"/>'; }
     for (const id of DESK ? Object.keys(PORTS).sort((x, y) => (x === (S.home || "ham")) - (y === (S.home || "ham"))) : Object.keys(PORTS)) { const p = XY(id); if (!inside(p) || hidden(id)) continue; out += '<circle cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="' + (DESK ? 5.5 : 9) + '" fill="transparent" data-act="mapPort" data-p="' + id + '" role="button" aria-label="' + esc(PORTS[id].name) + '" style="cursor:pointer"' + (DESK ? "><title>" + esc(PORTS[id].name) + "</title></circle>" : "/>"); }
+    out += '<g class="mships" data-map="' + cfg.key + '">' + mapShips(cfg) + "</g>";
     out += '<rect x="1.5" y="1.5" width="' + (cfg.W - 3) + '" height="' + (cfg.H - 3) + '" fill="none" stroke="var(--coast)" stroke-width=".6"/>';
     return out + "</svg>";
   }
+  // Schiffe auf der Karte (v5.0): auf See an ihrer Position, im Hafen leicht versetzt nebeneinander; wird jeden Tag neu gesetzt
+  function mapShips(cfg) {
+    const P = (lat, lon) => [(lon - cfg.lon0) / (cfg.lon1 - cfg.lon0) * cfg.W, (cfg.lat1 - lat) / (cfg.lat1 - cfg.lat0) * cfg.H], inPort = {};
+    let o = "";
+    for (const sh of S.ships) {
+      if (sh.museum || sh.ready > S.m || !sh.v || !sh.line || sh.laid) continue;
+      const pos = E.shipPos(S, sh); if (!pos) continue;
+      let [x, y] = P(pos.lat, pos.lon);
+      if (x < 0 || x > cfg.W || y < 0 || y > cfg.H) continue;
+      if (!pos.sea) { const k = Math.round(x) + "," + Math.round(y), n = inPort[k] = (inPort[k] || 0) + 1; x += 3.2 * n; y -= 2.6; }
+      const sel = mapShip === sh.id, late = sh.v.st === "see" && sh.v.eta - sh.v.pa >= 1;
+      o += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (sel ? 3.8 : pos.sea ? 2.7 : 2.1) + '" fill="' + (pos.sea ? "var(--brass)" : "var(--paper)") + '" stroke="' + (late ? "var(--red)" : "var(--ink)") + '" stroke-width="' + (sel ? 1.5 : .8) + '" data-act="mapShip" data-id="' + sh.id + '" role="button" aria-label="„' + esc(sh.name) + '“" style="cursor:pointer">' + (DESK ? "<title>„" + esc(sh.name) + "“</title>" : "") + "</circle>";
+    }
+    return o;
+  }
+  function mapShipsLive() { document.querySelectorAll("svg.map g.mships").forEach(g => { const cfg = g.dataset.map === "bight" ? BIGHT : MAIN; g.innerHTML = mapShips(cfg); }); const i = $("mapship"); if (i) { i.innerHTML = mapShipInfo(); translateDom(i); } }
+  function mapShipInfo() { const sh = mapShip && S.ships.find(x => x.id === mapShip); return sh && sh.v ? "<b>„" + esc(sh.name) + "“</b> · " + voyLine(sh).replace(/^<div class="meta voy">|<\/div>$/g, "") : ""; }
   function mapSVG() {
     const inB = id => { const [la, lo] = Wd.coord(id); return la >= BIGHT.lat0 && la <= BIGHT.lat1 && lo >= BIGHT.lon0 && lo <= BIGHT.lon1; };
     const needInset = (S.home || "ham") === "ham" && S.routes.some(r => (r.a !== "ham" && inB(r.a)) || (r.b !== "ham" && inB(r.b)));
-    let h = '<div class="mapwrap">' + drawMap(MAIN, needInset ? BIGHT : null) + "</div>";
+    let h = '<div class="mapwrap">' + drawMap(MAIN, needInset ? BIGHT : null) + "</div>" + '<div class="meta" id="mapship" style="margin:2px 0 0">' + mapShipInfo() + "</div>";
     h += '<div class="meta" style="margin:2px 0 6px">' + (mapPick ? "Start: <b>" + esc(PORTS[mapPick].name) + "</b> – " + (DESK ? "klicken" : "tippen") + " Sie jetzt den Zielhafen an." : (DESK ? "Klicken" : "Tippen") + " Sie zwei Häfen an, um eine neue Linie zu planen.") + "</div>";
     if (needInset) h += '<div class="mapcap">Deutsche Bucht und westliche Ostsee</div><div class="mapwrap">' + drawMap(BIGHT, null) + "</div>";
     return h;
@@ -340,7 +363,7 @@
     let h = "";
     if (!S.ships.length) h += '<div class="hint">Noch fährt kein Schiff unter Ihrer Flagge. Eröffnen Sie unter „Linien“ eine Verbindung, bestellen Sie in der „Werft“ ein Schiff und weisen Sie es in der „Flotte“ der Linie zu.</div>';
     if (S.cash < 0) h += '<div class="hint bad">Die Kasse ist im Minus. Nach vier Monaten in Folge – oder bei zu hohen Schulden – ist die Reederei zahlungsunfähig.</div>';
-    if (S.speed === 0 && !S.over) h += '<div class="hint">Die Zeit steht still. Mit „Langsam“ am Maschinentelegrafen ' + (DESK ? "oben oder der Leertaste" : "unten") + ' geht es los – ein Tag dauert dann zwei Sekunden.</div>';
+    if (S.speed === 0 && !S.over) h += '<div class="hint">Die Zeit steht still. Mit „Langsam“ am Maschinentelegrafen ' + (DESK ? "oben oder der Leertaste" : "unten") + ' geht es los – ein Tag dauert dann vier Sekunden.</div>';
     const over = S.ships.filter(sh => E.detained(S, sh)), soon = S.ships.filter(sh => !E.detained(S, sh) && sh.survey != null && sh.ready <= S.m && sh.survey - S.t <= 60);
     if (over.length) h += '<div class="hint bad">Frist abgelaufen: ' + over.map(sh => "„" + esc(sh.name) + "“").join(", ") + ". Diese Schiffe liegen fest, bis die Frist erneuert ist.</div>";
     if (soon.length) h += '<div class="hint">Frist läuft bald ab: ' + soon.map(sh => "„" + esc(sh.name) + "“ (" + (sh.survey - S.t) + " Tage)").join(", ") + ". Unter Flotte erneuern.</div>";
@@ -358,19 +381,23 @@
     if (!DESK) h += '<h2>' + paperName() + '</h2>' + newsBox(8);
     h += '<details><summary>So funktioniert ' + (DESK ? "das Spiel" : "der Prototyp") + '</summary><ul>' +
       (DESK ? "<li>Tastatur: Die Leertaste hält die Zeit an oder lässt sie weiterlaufen, 0 bis 3 stellen den Maschinentelegrafen, K, L, F, W, M und B wechseln die Bereiche. Bei Ereignissen wählen 1 bis 9 die Antwort, Esc schließt Fenster.</li>" : "") + "<li>Unter <b>Kontor</b> finden Sie auch Statistiken zu Schiffen, Linien und Finanzen sowie Ihr Personal. Unter <b>Markt</b> stehen Werbung, die sechs Rivalen und die Marktforschung.</li>" +
-      (DESK ? "<li>Die Zeit läuft von selbst. Auf <b>Langsam</b> dauert ein Tag zwei Sekunden. Am Maschinentelegrafen oben halten Sie an oder geben mehr Fahrt – oder mit der Leertaste und den Tasten 0 bis 3. Bei Ereignissen stoppt die Zeit.</li>" : "<li>Die Zeit läuft von selbst. Auf <b>Langsam</b> dauert ein Tag zwei Sekunden. Am Maschinentelegrafen unten halten Sie an oder geben mehr Fahrt. Bei Ereignissen stoppt die Zeit.</li>") +
+      "<li>Die Zeit läuft von selbst: Ein Tag dauert auf „Langsam“ vier Sekunden, auf „Halbe“ zwei und auf „Volle“ eine. " + (DESK ? "Am Maschinentelegrafen oben halten Sie an oder geben mehr Fahrt – oder mit der Leertaste und den Tasten 0 bis 3." : "Am Maschinentelegrafen unten halten Sie an oder geben mehr Fahrt.") + " Bei Ereignissen stoppt die Zeit.</li>" +
+      "<li>Ihre Schiffe fahren nach Fahrplan: Abfahrt, Seezeit, Ankunft, Liegezeit. Die Fahrgäste zahlen bei der Abfahrt. Wer zu lange auf Ihr Schiff warten muss, fährt mit der Konkurrenz. Kontor → Abfahrten zeigt die Tafel, unter Linien stellen Sie Puffer, Reserveschiff und Aufholen ein.</li>" +
+      "<li>Kohle kostet erst beim Bekohlen: Menge mal Hafenpreis. Nah an den Zechen ist sie billig, in der Ferne teuer. Die Regel dafür steht unter Kontor → Einkauf, einzelne Schiffe stellen Sie in der Flotte anders ein.</li>" +
+      "<li>Sturm, Nebel, Eis, Streiks und Pannen bringen Verspätungen. Ab zwei Tagen zahlen Sie Entschädigung, große Verspätungen stehen in der Zeitung, und unpünktliche Linien verlieren Fahrgäste.</li>" +
       (DESK ? "<li>Unter <b>Linien</b> wählen Sie Start- und Zielhafen frei aus rund 50 Häfen – oder klicken zwei Häfen auf der Seekarte rechts an.</li>" : "<li>Unter <b>Linien</b> wählen Sie Start- und Zielhafen frei aus rund 50 Häfen – oder tippen zwei Häfen auf der Karte an.</li>") +
       "<li>Größere Schiffe haben Klassen: 1. und 2. Klasse, dazu 3. Klasse oder Zwischendeck. Jede Linie hat ihre eigene Nachfrage je Klasse, und Sie setzen die Preise je Klasse. Kleine Fähren fahren mit einer Einheitsklasse.</li>" +
       "<li>Jeder Hafen hat seine Kundschaft: Badegäste auf den Inseln, Bahnreisende an den Fährhäfen, Kaufleute in den großen Städten, Auswanderer nach Übersee.</li>" +
       "<li>Vergnügungsreisen (ab 1891/92) sind eine eigene Linienart: Nordland im Sommer, Mittelmeer und Orient im Winter.</li>" +
       "<li><b>Werbung</b> macht Sie bekannter und bringt mehr Fahrgäste – laufende Anzeigen, Agenturen, Kampagnen für einzelne Linien.</li>" +
-      "<li>Unter Kontor → Einkauf kaufen Sie Kohle auf Vertrag und bestimmen die Verpflegung an Bord. In der Flotte wählen Sie die Fahrstufe: Sparfahrt spart Kohle, Volldampf schafft mehr Fahrten.</li>" +
+      "<li>Unter Kontor → Einkauf kaufen Sie Kohle auf Vertrag für einen Hafen und bestimmen die Verpflegung an Bord. In der Flotte wählen Sie die Fahrstufe: Sparfahrt spart Kohle, Volldampf schafft mehr Fahrten.</li>" +
       "<li>Ab drei Schiffen und einem Geschäftsjahr mit Gewinn öffnet sich unter Kontor → Börse der Aktienhandel. Wer ihn nicht nutzt, verpasst nichts.</li>" +
       "<li>Auf See droht Seenot. Dann entscheiden Sie: aufgeben, pumpen oder Hilfe rufen. Rettungsboote, Schotten und Funk verbessern die Aussichten.</li>" +
       "<li>Das Spiel läuft endlos. Löhne, Preise und Reisende nehmen über die Jahrzehnte zu, neue Technik und Bahnverbindungen verändern die Märkte.</li></ul></details>";
     h += '<div class="toggles"><button class="btn" data-act="snd">' + (Snd.on ? "Ton ausschalten" : "Ton einschalten") + '</button><button class="btn" data-act="music" ' + (Snd.on && Snd.hasMusic ? "" : "disabled") + ">" +
       (Snd.musicOn ? "Musik ausschalten" : "Musik einschalten") + '</button><button class="btn" data-act="nexttrack" ' + (Snd.on && Snd.musicOn && Snd.hasMusic ? "" : "disabled") + ">Nächstes Stück</button></div>";
     if (Snd.hasMusic && Snd.on && Snd.musicOn) h += '<div class="now">Es spielt: „' + esc(Snd.title) + "“</div>";
+    h += diffBox();
     h += '<label class="field">Sprache</label><div class="seg" role="group" aria-label="Sprache">' + [["de", "Deutsch"], ["en", "English"], ["es", "Español"]].map(([k, n]) => '<button data-act="setLang" data-v="' + k + '" aria-pressed="' + (LANG === k) + '">' + n + "</button>").join("") + "</div>";
     h += tutList();
     h += '<div class="actions"><button class="btn" data-act="exportOpen">Spielstand exportieren</button><button class="btn" data-act="importOpen">Spielstand importieren</button></div>';
@@ -469,6 +496,7 @@
     if (low) h += '<div class="meta">Die üblichen Preise sind mit der Inflation gestiegen. Anheben bis 100 % kostet keine Fahrgäste.</div>';
     if (last && last.ships) h += '<div class="stats"><div><b>' + E.fmt(last.pax) + '</b><span>Fahrgäste</span></div><div><b>' + Math.round(last.load * 100) + ' %</b><span>Auslastung</span></div><div><b>' + Math.round(last.share * 100) + ' %</b><span>Marktanteil</span></div></div><div class="meta">Beitrag nach Kohle, Hafen und Verpflegung: ' + signed(last.rev - last.cost) + " Mark</div>";
     else h += '<div class="meta" style="margin-top:8px">Letzten Monat ohne eigene Schiffe im Einsatz. Passende Schiffe: ' + (fitTypes(r.a, r.b, r.cruise).map(k => E.TYPES[k].name).join(", ") || "keine") + "</div>";
+    if (mine.length) h += fahrplanBox(r, info);
     if (!mine.length) h += '<div class="actions"><button class="btn warn" data-act="closeRoute" data-id="' + r.id + '">Linie schließen</button></div>';
     return h + "</div>";
   }
@@ -522,11 +550,17 @@
       h += '<div class="item">' + img("ship_" + sh.type, "shipimg", t.name, sh) + '<div class="row"><h3>„' + esc(sh.name) + '“' + (t.special ? '<span class="tag gold">Sonderschiff</span>' : "") + (sh.emil ? '<span class="tag gold">Kapitän Emil</span>' : "") + (sh.brandt ? '<span class="tag">Brandt-Bauart</span>' : "") + "</h3>" + (t.special ? "" : '<button class="btn" style="min-height:36px;padding:0 10px;font-size:14px" data-act="renameOpen" data-id="' + sh.id + '">Umbenennen</button>') + "</div>" +
         '<div class="meta">' + t.name + " (" + t.cls + ") · " + kn(Math.round((t.speed + Math.max(0, sh.spd || 0)) * 10) / 10) + " Knoten" + (sh.ready > S.m ? "" : " · Baujahr " + built) + "</div><div class=\"meta\">" + seatsText(t) + "</div><div class=\"meta\">" + typeSpecs(t) + "</div>";
       if (t.special) h += '<div class="trait">' + esc(t.trait) + "</div>" + storyBox(sh.type);
-      if (sh.ready > S.m) { h += '<div class="hint">Im Bau – Ablieferung ' + E.dateStr(sh.ready) + '.</div><label class="field" for="l' + sh.id + '">Linie nach Ablieferung</label>' + lineSelect(sh) + planBox(sh) + capBox(sh) + "</div>"; return h; }
+      if (sh.ready > S.m) {
+        const ser = sh.series ? S.ships.filter(x => x.series === sh.series).sort((a, b) => a.ready - b.ready) : null, ci = E.cancelInfo(S, sh);
+        h += '<div class="hint">Im Bau – Ablieferung ' + E.dateStr(sh.ready) + "." + (ser && ser.length > 1 ? " Schiff " + (ser.indexOf(sh) + 1) + " von " + ser.length + " einer Serie." : "") + '</div><label class="field" for="l' + sh.id + '">Linie nach Ablieferung</label>' + lineSelect(sh) + planBox(sh) + capBox(sh);
+        if (ci) h += ci.can ? '<div class="actions"><button class="btn warn" data-act="cancelOrder" data-id="' + sh.id + '">' + (confirmCancel === sh.id ? "Wirklich abbestellen? Die Werft behält " + M(ci.fee) : "Abbestellen (Werft behält " + M(ci.fee) + ")") + "</button></div>" : '<div class="meta">Der Bau hat begonnen – abbestellen geht nicht mehr.</div>';
+        return h + "</div>";
+      }
       if (sh.charter >= S.m) { h += '<div class="hint">Verchartert an die Marine bis ' + E.dateStr(sh.charter) + " – " + M(sh.charterRate) + " im Monat.</div></div>"; return h; }
       const val = E.shipValue(S, sh), loan = S.loans.find(l => l.ship === sh.id);
       h += '<div class="row" style="margin-top:8px"><span>Zustand ' + Math.round(sh.cond) + " %" + (risk ? '<span class="badge ' + risk.label + '">Sinkgefahr ' + risk.label + "</span>" : "") + '</span><span class="num">Wert ' + M(val) + "</span></div>" + condBar(sh.cond);
       if (E.inDock(S, sh)) h += '<div class="hint">In der Werft bis zum ' + E.dateAfter(S, sh.dockUntil - S.t) + " – noch <span data-dock=\"" + sh.id + "\">" + (sh.dockUntil - S.t) + " Tag" + (sh.dockUntil - S.t === 1 ? "" : "e") + "</span>.</div>";
+      else if (sh.v) h += '<div data-voy="' + sh.id + '">' + voyLine(sh) + "</div>";
       if (E.offDuty(S, sh)) h += '<div class="hint">Auf Sonderfahrt – zurück in ' + (sh.offUntil - S.t) + " Tagen.</div>";
       h += fristLine(sh);
       if (sh.defects && sh.defects.length) h += '<div class="hint">Mängel: ' + sh.defects.map(d => d === "maschine" ? "Maschine läuft unruhig (−0,3 Knoten, etwas höhere Havariegefahr)" : "Schraube verbogen (−0,2 Knoten)").join("; ") + ". Werden bei der nächsten Dockung behoben.</div>";
@@ -535,7 +569,7 @@
       if (sh.line && sh.lastPax != null && E.active(S, sh)) h += '<div class="meta">Letzter Monat: ' + E.fmt(sh.lastPax) + " Fahrgäste, " + Math.round((sh.lastLoad || 0) * 100) + " % Auslastung</div>";
       if (sh.last && sh.last.m === S.m - 1) h += '<div class="meta">Ergebnis im Vormonat: ' + signed(sh.last.rev - sh.last.cost) + " Mark (Umsatz " + E.fmt(sh.last.rev) + ")</div>";
       if (sh.last && sh.last.m === S.m - 1 && sh.last.coal != null) h += '<div class="meta">Kohle im Vormonat: ' + E.fmt(sh.last.coal) + " Mark, " + Math.round(sh.last.coal / Math.max(1, sh.last.cost) * 100) + " % der Kosten" + (sh.last.cater ? " · Verpflegung " + E.fmt(sh.last.cater) + " Mark" : "") + "</div>";
-      h += capBox(sh) + '<label class="field" for="l' + sh.id + '">Linie</label>' + lineSelect(sh) + planBox(sh) + shipFahrtBox(sh);
+      h += capBox(sh) + '<label class="field" for="l' + sh.id + '">Linie</label>' + lineSelect(sh) + planBox(sh) + shipFahrtBox(sh) + shipBunkBox(sh);
       h += '<label class="field">Wartung</label><div class="seg maint" role="group">' + E.MAINT.map((mm, i) => '<button data-act="maint" data-id="' + sh.id + '" data-v="' + i + '" aria-pressed="' + (sh.maint === i) + '">' + mm.name + "<small>" + M(E.maintCost(S, sh, i)) + "/Monat</small></button>").join("") + "</div>" + (E.ageY(sh) >= 10 ? '<div class="meta">Mit ' + Math.floor(E.ageY(sh)) + " Jahren ist das Schiff schwerer instand zu halten: Wartung wirkt schwächer und kostet mehr.</div>" : "");
       h += '<label class="field">Sicherheit</label><div>';
       for (const k of Object.keys(E.EQUIP)) {
@@ -567,7 +601,8 @@
       let b = "";
       for (const sh of list) {
         const [st, cls] = shipStatus(sh), t = E.TYPES[sh.type];
-        b += '<details class="shipd" data-ship="' + sh.id + '"' + (openShip.has(sh.id) ? " open" : "") + '><summary>' + img("ship_" + sh.type, "mini", t.name, sh) + '<span class="sn"><b>„' + esc(sh.name) + '“</b><span class="meta">' + t.name + (sh.ready <= S.m ? " · " + Math.round(sh.cond) + " %" : "") + '</span>' + shipTags(sh) + '</span><span class="st ' + cls + '">' + esc(st) + "</span></summary>" + shipCard(sh) + "</details>";
+        const vs = sh.ready <= S.m && !E.inDock(S, sh) ? voyShort(sh) : null;
+        b += '<details class="shipd" data-ship="' + sh.id + '"' + (openShip.has(sh.id) ? " open" : "") + '><summary>' + img("ship_" + sh.type, "mini", t.name, sh) + '<span class="sn"><b>„' + esc(sh.name) + '“</b><span class="meta">' + t.name + (sh.ready <= S.m ? " · " + Math.round(sh.cond) + " %" : "") + (vs ? " · " + esc(vs) : "") + '</span>' + shipTags(sh) + '</span><span class="st ' + cls + '">' + esc(st) + "</span></summary>" + shipCard(sh) + "</details>";
       }
       h += sec("fl" + id, title, list.length, b);
     }
@@ -686,10 +721,12 @@
     let h = '<h3 style="margin-top:12px">Kohlepreis</h3><p class="sub">In Prozent des Normalpreises, jeden Monat aufgezeichnet – bis zu zehn Jahre zurück.</p>';
     h += '<div class="kv"><div><b>' + E.coalIdx(S) + " % " + coalArrow() + '</b><span>heute</span></div>' + (v.length ? '<div><b>' + Math.round(v.slice(-12).reduce((a, b) => a + b, 0) / v.slice(-12).length * 100) + ' %</b><span>Schnitt der letzten 12 Monate</span></div><div><b>' + Math.round(Math.min(...v) * 100) + ' %</b><span>am billigsten</span></div><div><b>' + Math.round(Math.max(...v) * 100) + " %</b><span>am teuersten</span></div>" : "") + "</div>";
     h += H.length < 2 ? '<div class="hint">Der Verlauf wird jeden Monat aufgezeichnet. Nach zwei Monatsabschlüssen erscheint hier das Diagramm.</div>' : coalChart(H);
-    const years = Object.keys(S.years || {}).sort().reverse().slice(0, 10);
-    if (years.length) h += '<h3 style="margin-top:16px">Kohlekosten je Jahr</h3><div class="tblwrap"><table class="stat"><thead><tr><th>Jahr</th><th class="n">Kohle</th><th class="n">Anteil an den Kosten</th></tr></thead><tbody>' +
-      years.map(y => { const Y = S.years[y], k = (Y.costs && Y.costs.Kohle) || 0; return "<tr><td>" + y + '</td><td class="n">' + E.fmt(k) + '</td><td class="n">' + (Y.cost ? Math.round(k / Y.cost * 100) + " %" : "–") + "</td></tr>"; }).join("") + "</tbody></table></div>";
-    return h + '<div class="meta" style="margin-top:8px">Pro Schiff und pro Linie steht die Kohle in den Reitern Schiffe und Linien – jede Spalte lässt sich sortieren.</div>';
+    const years = Object.keys(S.years || {}).sort().reverse().slice(0, 10), coalCost = Y => Object.keys(Y.costs || {}).filter(k => k === "Kohle" || k === "Kohle-Mindestabnahme" || k.startsWith("Bekohlung")).reduce((a, k) => a + Y.costs[k], 0);
+    if (years.length) h += '<h3 style="margin-top:16px">Kohle je Jahr</h3><div class="tblwrap"><table class="stat"><thead><tr><th>Jahr</th><th class="n">gekauft</th><th class="n">bezahlt</th><th class="n">verbraucht</th><th class="n">Anteil an den Kosten</th></tr></thead><tbody>' +
+      years.map(y => { const Y = S.years[y], C = Y.coal, k = coalCost(Y); return "<tr><td>" + y + '</td><td class="n">' + (C ? E.fmt(C.bt) + " t" : "–") + '</td><td class="n">' + E.fmt(k) + '</td><td class="n">' + (C ? E.fmt(C.ut) + " t" : "–") + '</td><td class="n">' + (Y.cost ? Math.round(k / Y.cost * 100) + " %" : "–") + "</td></tr>"; }).join("") + "</tbody></table></div>";
+    const Yn = S.years && S.years[E.cal(S.m).y], bk = Yn && Yn.costs ? Object.keys(Yn.costs).filter(k => k.startsWith("Bekohlung ")).sort((a, b) => Yn.costs[b] - Yn.costs[a]) : [];
+    if (bk.length) h += '<h3 style="margin-top:16px">Bekohlung nach Häfen (' + E.cal(S.m).y + ')</h3><div class="tblwrap"><table class="stat"><tbody>' + bk.map(k => "<tr><td>" + esc(k.slice(10)) + '</td><td class="n">' + E.fmt(Yn.costs[k]) + " Mark</td></tr>").join("") + "</tbody></table></div>";
+    return h + '<div class="meta" style="margin-top:8px">Gekauft wird beim Bekohlen, verbraucht auf See – was dazwischen im Bunker liegt, zählt zum Eigenkapital. Pro Schiff und pro Linie steht die Kohle in den Reitern Schiffe und Linien – jede Spalte lässt sich sortieren.</div>';
   }
   function shipTags(sh) {
     let t = "";
@@ -730,21 +767,28 @@
       (lv >= 0 ? '<div class="meta" style="margin-top:6px">Wirkung: ' + fx[lv] + ".</div>" + extra() : "") + "</div>";
   }
   function einkauf() {
-    const st = E.staff(S), K = E.kueche(S), act = E.coalActive(S), base = E.coalBase(S), y = E.yearOf(S);
+    const st = E.staff(S), K = E.kueche(S), y = E.yearOf(S);
     let h = img("ev_kohlevertrag", "banner", "Kohlenhändler im Kontor") + '<h2>Einkauf</h2><p class="sub">Kohle und Verpflegung für die ganze Reederei. Einzelne Schiffe stellen Sie in der Flotte anders ein.</p>';
-    // Kohle
-    h += '<h3>Kohle</h3><div class="kv" data-tut="coal"><div><b>' + E.coalIdx(S) + " % " + coalArrow() + '</b><span>Kohlepreis</span></div><div><b>' + M(base) + '</b><span>Verbrauch im Monat zum Normalpreis</span></div></div>' + spark((S.coalHist || []).slice(-36).concat([{ m: S.m, c: S.coal }]), 340, 44);
-    h += '<div class="meta">Der Kohlepreis schwankt jeden Monat um bis zu 3 %. Streiks und neue Zechen bewegen ihn stärker. Mit einem Liefervertrag kaufen Sie zum heutigen Preis mit Aufschlag – wer früh bindet, ist gegen Krisen geschützt.</div>';
+    // Kohle (seit v5.0 in Tonnen, bezahlt beim Bekohlen, Verträge je Hafen)
+    const ports = E.coalPorts(S), use = (S.coalUse || []).slice(-3), useT = use.length ? use.reduce((a, b) => a + b, 0) / use.length : 0;
+    if (!coalPort || !ports.includes(coalPort)) coalPort = ports.slice().sort((a, b) => E.coalBase(S, b) - E.coalBase(S, a))[0];
+    h += '<h3>Kohle</h3><div class="kv" data-tut="coal"><div><b>' + E.coalIdx(S) + " % " + coalArrow() + '</b><span>Kohlepreis</span></div><div><b>' + E.fmt(Math.round(useT)) + ' t</b><span>Verbrauch im Monat</span></div><div><b>' + M(E.bunkerValue(S)) + "</b><span>Kohle in den Bunkern</span></div></div>" + spark((S.coalHist || []).slice(-36).concat([{ m: S.m, c: S.coal }]), 340, 44);
+    h += '<div class="meta">Bezahlt wird beim Bekohlen: Tonnen mal Hafenpreis mal Kohlepreis. Nah an den Zechen ist die Kohle billig, an Kohlestationen mittel, in der Ferne teuer. Der Kohlepreis schwankt jeden Monat um bis zu 3 %; Streiks und neue Zechen bewegen ihn stärker.</div>';
+    h += bunkBox();
+    const tierOf = p => E.TIER_NAME[E.portTier(p)];
+    h += '<div class="tblwrap"><table class="stat"><thead><tr><th>Hafen</th><th>Lage</th><th class="n">Preis je Tonne</th><th class="n">Bekohlt im Monat</th></tr></thead><tbody>' +
+      ports.map(p => "<tr><td>" + pName(p) + (p === (S.home || "ham") ? " ★" : "") + "</td><td>" + tierOf(p) + '</td><td class="n">' + eur(E.coalPortPrice(S, p)) + ' M</td><td class="n">' + E.fmt(Math.round(E.coalBase(S, p))) + " t</td></tr>").join("") + "</tbody></table></div>";
     for (const k of S.coalK || []) {
-      h += '<div class="item"><div class="row"><h3>Liefervertrag über ' + Math.round(k.share * 100) + ' % des Verbrauchs</h3></div><div class="meta">' + (k.years === 1 ? "1 Jahr" : k.years + " Jahre") + " zu " + Math.round(k.price * 100) + " % des Normalpreises · fest " + M(k.qty * k.price) + " im Monat · bis " + E.dateStr(k.until) + "</div>" +
+      h += '<div class="item"><div class="row"><h3>Liefervertrag in ' + pName(k.port || S.home) + '</h3></div><div class="meta">' + E.fmt(k.qty) + " t im Monat zu " + eur(k.pt || 0) + " M je Tonne · " + (k.years === 1 ? "1 Jahr" : k.years + " Jahre") + " · fest " + M(k.qty * (k.pt || 0)) + " im Monat · bis " + E.dateStr(k.until) + "</div>" +
         (k.stop >= S.m ? '<div class="hint bad">Lieferausfall bis ' + E.dateStr(k.stop) + " – bis dahin bunkern Ihre Schiffe zum Marktpreis.</div>" : "") +
         '<div class="actions"><button class="btn warn" data-act="coalCancel" data-id="' + k.id + '">Kündigen (' + M(E.coalCancelFee(S, k)) + ")</button></div></div>";
     }
-    const o = E.coalOffer(S, coalYears, coalShare);
-    h += '<div class="item" data-tut="coalnew"><h3>Neuer Liefervertrag</h3><label class="field">Laufzeit</label><div class="seg lv" role="group">' + [1, 3, 5].map(n => '<button data-act="coalY" data-v="' + n + '" aria-pressed="' + (coalYears === n) + '">' + (n === 1 ? "1 Jahr" : n + " Jahre") + "<small>Aufschlag " + pctSign(E.coalOffer(S, n, coalShare).surch) + "</small></button>").join("") + "</div>" +
-      '<label class="field">Menge</label><div class="seg" role="group" style="grid-template-columns:repeat(2,1fr)">' + [.5, 1].map(v => '<button data-act="coalS" data-v="' + v + '" aria-pressed="' + (coalShare === v) + '">' + Math.round(v * 100) + " % des Verbrauchs</button>").join("") + "</div>";
-    if (o.qty >= 100) h += '<table class="fin" style="width:100%;margin-top:10px"><tr><td>Preis</td><td>' + Math.round(o.price * 100) + " % des Normalpreises (heute " + E.coalIdx(S) + " %)</td></tr><tr><td>Fest im Monat</td><td>" + M(o.qty * o.price) + "</td></tr><tr><td>" + (o.now >= 0 ? "Mehrkosten zum heutigen Preis" : "Ersparnis zum heutigen Preis") + "</td><td>" + M(Math.abs(o.now)) + " im Monat</td></tr><tr><td>Lohnt sich ab</td><td>Kohlepreis über " + Math.round(o.price * 100) + " %</td></tr></table>";
-    h += '<div class="meta">Mindestabnahme 80 % der vereinbarten Menge, Mehrverbrauch zum Marktpreis. Höchstens zwei Verträge, zusammen höchstens 100 % des Verbrauchs. Eine Kündigung kostet ein Viertel der Restsumme.' + (st.ke >= 0 ? " Ihr Kohleneinkäufer drückt den Aufschlag." : "") + "</div>" +
+    const o = E.coalOffer(S, coalYears, coalShare, coalPort);
+    h += '<div class="item" data-tut="coalnew"><h3>Neuer Liefervertrag</h3><label class="field" for="coalport">Hafen</label><select id="coalport" data-act="coalPort">' + ports.map(p => '<option value="' + p + '"' + (p === coalPort ? " selected" : "") + ">" + pName(p) + " – " + E.fmt(Math.round(E.coalBase(S, p))) + " t im Monat</option>").join("") + "</select>" +
+      '<label class="field">Laufzeit</label><div class="seg lv" role="group">' + [1, 3, 5].map(n => '<button data-act="coalY" data-v="' + n + '" aria-pressed="' + (coalYears === n) + '">' + (n === 1 ? "1 Jahr" : n + " Jahre") + "<small>Aufschlag " + pctSign(E.coalOffer(S, n, coalShare, coalPort).surch) + "</small></button>").join("") + "</div>" +
+      '<label class="field">Menge</label><div class="seg" role="group" style="grid-template-columns:repeat(2,1fr)">' + [.5, 1].map(v => '<button data-act="coalS" data-v="' + v + '" aria-pressed="' + (coalShare === v) + '">' + Math.round(v * 100) + " % der Kohle aus diesem Hafen</button>").join("") + "</div>";
+    if (o.qty >= 10) h += '<table class="fin" style="width:100%;margin-top:10px"><tr><td>Menge</td><td>' + E.fmt(o.qty) + " t im Monat</td></tr><tr><td>Preis</td><td>" + eur(o.pt) + " M je Tonne (" + Math.round(o.price * 100) + " % des Normalpreises, heute " + E.coalIdx(S) + " %)</td></tr><tr><td>Fest im Monat</td><td>" + M(o.monthly) + "</td></tr><tr><td>" + (o.now >= 0 ? "Mehrkosten zum heutigen Preis" : "Ersparnis zum heutigen Preis") + "</td><td>" + M(Math.abs(o.now)) + " im Monat</td></tr><tr><td>Lohnt sich ab</td><td>Kohlepreis über " + Math.round(o.price * 100) + " %</td></tr></table>";
+    h += '<div class="meta">Der Vertrag gilt nur für diesen Hafen. Mindestabnahme 80 % der vereinbarten Menge, Mehrbedarf zum Marktpreis. Höchstens zwei Verträge, je Hafen zusammen höchstens 100 %. Eine Kündigung kostet ein Viertel der Restsumme.' + (st.ke >= 0 ? " Ihr Kohleneinkäufer drückt den Aufschlag." : "") + "</div>" +
       (o.ok ? '<div class="actions"><button class="btn solid" data-act="coalSign">Vertrag schließen</button></div>' : '<div class="hint">' + esc(o.why) + "</div>") + "</div>";
     // Verpflegung
     const ku = S.exp && S.exp.ku != null ? S.exp.ku : 50, cat = E.catOn(S, K.cat) ? K.cat : null, lux = E.catOn(S, K.lux) ? K.lux : null;
@@ -779,30 +823,32 @@
   }
   function previewSheet() {
     const P = sheet, p = P.p, K = E.kueche(S);
-    const T = {
-      fahrt: ["Reederei-Fahrstufe: " + (E.FAHRT[P.v] || {}).name, P.v === "spar" ? "fs_sparfahrt" : P.v === "voll" ? "fs_volldampf" : null],
-      shipFahrt: [(() => { const sh = S.ships.find(x => x.id === P.id); return "Fahrstufe der „" + (sh ? sh.name : "") + "“: " + (P.v ? E.FAHRT[P.v].name : "wie die Reederei"); })(), P.v === "spar" ? "fs_sparfahrt" : P.v === "voll" ? "fs_volldampf" : null],
-      kq: [["1. Klasse", "2. Klasse", "3. Klasse und Zwischendeck"][P.c] + ": Verpflegung „" + KQ_NAME[P.v] + "“", P.v === 0 ? "kue_einfach" : P.v === 2 ? "kue_fein" : null],
-      shipKq: [(() => { const sh = S.ships.find(x => x.id === P.id); return "„" + (sh ? sh.name : "") + "“, " + E.clsName(P.c, sh && E.TYPES[sh.type].ocean) + ": " + (P.v < 0 ? "Verpflegung wie die Reederei" : "Verpflegung „" + KQ_NAME[P.v] + "“"); })(), P.v === 0 ? "kue_einfach" : P.v === 2 ? "kue_fein" : null],
-      eigen: [P.v ? "Eigene Küche einrichten" : "Eigene Küche auflösen", "kue_bordkueche"],
-      cat: [(P.k ? E.catName(S, P.k) : "") + " – " + (P.y === 3 ? "3 Jahre" : "1 Jahr"), P.k === "luxus" ? "kue_alacarte" : "kue_caterer"],
-      catCancel: ["Vertrag mit " + (P.name || "") + " kündigen", "kue_caterer"],
-      coal: ["Kohle-Liefervertrag schließen", "ev_kohlevertrag"],
-      coalCancel: ["Kohle-Liefervertrag kündigen", "ev_kohlevertrag"],
-    }[P.what] || ["Vorschau", null];
+    // nur den Titel der gewählten Vorschau berechnen (v4.5–v4.6 rechnete alle und stürzte bei „ordentlich“ und „fein“ ab)
+    const fahrtName = v => (E.FAHRT[v] || {}).name || "";
+    const T = ({
+      fahrt: () => ["Reederei-Fahrstufe: " + fahrtName(P.v), P.v === "spar" ? "fs_sparfahrt" : P.v === "voll" ? "fs_volldampf" : null],
+      shipFahrt: () => { const sh = S.ships.find(x => x.id === P.id); return ["Fahrstufe der „" + (sh ? sh.name : "") + "“: " + (P.v ? fahrtName(P.v) : "wie die Reederei"), P.v === "spar" ? "fs_sparfahrt" : P.v === "voll" ? "fs_volldampf" : null]; },
+      kq: () => [["1. Klasse", "2. Klasse", "3. Klasse und Zwischendeck"][P.c] + ": Verpflegung „" + KQ_NAME[P.v] + "“", P.v === 0 ? "kue_einfach" : P.v === 2 ? "kue_fein" : null],
+      shipKq: () => { const sh = S.ships.find(x => x.id === P.id); return ["„" + (sh ? sh.name : "") + "“, " + E.clsName(P.c, sh && E.TYPES[sh.type].ocean) + ": " + (P.v < 0 ? "Verpflegung wie die Reederei" : "Verpflegung „" + KQ_NAME[P.v] + "“"), P.v === 0 ? "kue_einfach" : P.v === 2 ? "kue_fein" : null]; },
+      eigen: () => [P.v ? "Eigene Küche einrichten" : "Eigene Küche auflösen", "kue_bordkueche"],
+      cat: () => [(P.k ? E.catName(S, P.k) : "") + " – " + (P.y === 3 ? "3 Jahre" : "1 Jahr"), P.k === "luxus" ? "kue_alacarte" : "kue_caterer"],
+      catCancel: () => ["Vertrag mit " + (P.name || "") + " kündigen", "kue_caterer"],
+      coal: () => ["Kohle-Liefervertrag schließen", "ev_kohlevertrag"],
+      coalCancel: () => ["Kohle-Liefervertrag kündigen", "ev_kohlevertrag"],
+    }[P.what] || (() => ["Vorschau", null]))();
     let h = '<div class="veil" data-act="close"><div class="sheet" role="dialog" aria-modal="true">' + (T[1] ? img(T[1], "banner", "") : "") + '<div class="kicker">Vorschau</div><h3>' + esc(T[0]) + "</h3>";
     if (P.what === "coal") {
       const o = P.o;
-      h += '<table class="fin" style="width:100%"><tr><td>Laufzeit</td><td>' + (o.years === 1 ? "1 Jahr" : o.years + " Jahre") + "</td></tr><tr><td>Menge</td><td>" + Math.round(o.share * 100) + " % des Verbrauchs</td></tr><tr><td>Preis</td><td>" + Math.round(o.price * 100) + " % des Normalpreises</td></tr><tr><td>Fest im Monat</td><td>" + M(o.qty * o.price) + "</td></tr><tr><td>" + (o.now >= 0 ? "Mehrkosten zum heutigen Preis" : "Ersparnis zum heutigen Preis") + "</td><td>" + M(Math.abs(o.now)) + " im Monat</td></tr><tr><td>Summe über die Laufzeit</td><td>" + M(o.total) + "</td></tr></table>" +
-        '<p class="meta">Berechnet mit dem Verbrauch der letzten drei Monate. Auf die Fahrgäste wirkt ein Liefervertrag nicht. Steigt der Kohlepreis über ' + Math.round(o.price * 100) + " %, sparen Sie; fällt er, zahlen Sie drauf. Mindestabnahme 80 %.</p>";
+      h += '<table class="fin" style="width:100%"><tr><td>Hafen</td><td>' + pName(o.port) + "</td></tr><tr><td>Laufzeit</td><td>" + (o.years === 1 ? "1 Jahr" : o.years + " Jahre") + "</td></tr><tr><td>Menge</td><td>" + E.fmt(o.qty) + " t im Monat (" + Math.round(o.share * 100) + " % der Kohle aus diesem Hafen)</td></tr><tr><td>Preis</td><td>" + eur(o.pt) + " M je Tonne (" + Math.round(o.price * 100) + " % des Normalpreises)</td></tr><tr><td>Fest im Monat</td><td>" + M(o.monthly) + "</td></tr><tr><td>" + (o.now >= 0 ? "Mehrkosten zum heutigen Preis" : "Ersparnis zum heutigen Preis") + "</td><td>" + M(Math.abs(o.now)) + " im Monat</td></tr><tr><td>Summe über die Laufzeit</td><td>" + M(o.total) + "</td></tr></table>" +
+        '<p class="meta">Berechnet mit dem, was Ihre Schiffe in den letzten drei Monaten dort gebunkert haben. Auf die Fahrgäste wirkt ein Liefervertrag nicht. Steigt der Kohlepreis über ' + Math.round(o.price * 100) + " %, sparen Sie; fällt er, zahlen Sie drauf. Mindestabnahme 80 %.</p>";
     } else if (P.what === "coalCancel" || P.what === "catCancel") {
       h += "<p>Die Kündigung kostet " + M(P.fee) + " – ein Viertel der Restsumme.</p>";
     } else {
       const has = p && p.base && (p.base.pax > 0 || p.base.coal > 0);
-      if (!has) h += "<p>Im Vormonat ist noch kein Schiff gefahren. Eine Vorschau gibt es nach dem ersten vollen Monat.</p>";
+      if (!has) h += "<p>In den nächsten zwei Monaten fährt noch kein Schiff. Eine Vorschau gibt es, sobald Ihre Schiffe nach Fahrplan fahren.</p>";
       else {
         const row = (n, v, good) => "<tr><td>" + n + '</td><td class="' + (v === 0 ? "" : (v > 0) === good ? "pos" : "neg") + '">' + plusM(v) + "</td></tr>";
-        h += '<p class="meta">So wäre der Vormonat (' + E.dateStr(p.m) + ") mit der neuen Einstellung gelaufen" + (/kq|shipKq|eigen|cat/.test(P.what) ? " – auf Dauer gerechnet, denn die Fahrgäste merken sich, wie an Bord gegessen wird" : "") + ".</p>";
+        h += '<p class="meta">So laufen die nächsten 60 Tage mit der neuen Einstellung, ohne Zufälle gerechnet und auf einen Monat umgelegt' + (/kq|shipKq|eigen|cat/.test(P.what) ? " – auf Dauer, denn die Fahrgäste merken sich, wie an Bord gegessen wird" : "") + ".</p>";
         h += '<table class="fin prev" style="width:100%">' + row("Kohlekosten", p.coal, false) + row("Verpflegung", p.cater, false) + row("Einnahmen", p.rev, true) +
           '<tr class="sum"><td><b>' + (p.net >= 0 ? "Ersparnis im Monat" : "Mehrkosten im Monat") + '</b></td><td class="' + (p.net >= 0 ? "pos" : "neg") + '"><b>' + M(Math.abs(p.net)) + "</b></td></tr>" +
           "<tr><td>Fahrgäste</td><td>" + (p.pax > 0 ? "+" : "") + E.fmt(p.pax) + " (" + pctSign(p.paxPct) + ")</td></tr></table>";
@@ -817,6 +863,122 @@
     return h + '<div class="actions"><button class="btn solid" data-act="prevOk" style="flex:1">' + (/Cancel/.test(P.what) ? "Kündigen" : P.what === "coal" || P.what === "cat" ? "Abschließen" : "Übernehmen") + '</button><button class="btn" data-act="close" style="flex:1">Abbrechen</button></div></div></div>';
   }
 
+  /* ---------- Fahrplan, Bekohlung und Pünktlichkeit (v5.0) ---------- */
+  const tD = (T, h) => E.tDate(S, T, h).replace(/ \d{4}(?=,|$)/, "");
+  const pName = id => esc(PORTS[id] ? PORTS[id].name : "");
+  const dDays = d => { const x = Math.round(d * 10) / 10; return x === 1 ? "1 Tag" : String(x).replace(".", ",") + " Tage"; };
+  const lateTxt = d => !(d >= .05) ? "pünktlich" : d < 1 ? "+" + Math.max(1, Math.round(d * 24)) + " Std." : "+" + dDays(d);  // „+5 Std.“, „+1 Tag“, „+2,5 Tage“
+  const lateLong = d => (d < 1 ? Math.max(1, Math.round(d * 24)) + " Std." : dDays(d)) + " Verspätung";
+  const pkTxt = p => p == null ? "–" : Math.round(p * 100) + " %";
+  const pkCls = p => p == null ? "" : p >= .85 ? "pos" : p < .65 ? "neg" : "";
+  const capF = t => t.charAt(0).toUpperCase() + t.slice(1);
+  const BUNK_SHORT = { heim: "Heimathafen", billig: "am billigsten", noetig: "das Nötige" };
+  const BUNK_NOTE = { heim: "Volltanken im Heimathafen der Linie, unterwegs nur das Nötige. Sicher und meist günstig.", billig: "Volltanken im billigsten Hafen der Linie. Spart Geld, wenn ein Ende in der Ferne liegt.", noetig: "Überall nur das Nötige mit knapper Reserve. Wenig Geld im Bunker, aber öfter Kohlemangel bei Sturm." };
+  const DIFF_NOTE = { leicht: "Größerer Gründungskredit, schwächere Rivalen, halb so viele Verspätungen, seltener Unglücke, niedrigere Zinsen.", normal: "Das Spiel, wie es gedacht ist.", schwer: "Kleinerer Gründungskredit, stärkere Rivalen, mehr Verspätungen und Unglücke, höhere Zinsen." };
+  let confirmDiff = null, confirmCancel = null, mapShip = null, abfAll = false, coalPort = null;
+  // Wo ist das Schiff, wann fährt es ab, wie voll ist der Bunker?
+  // Abschnitte mit „ · “ getrennt, damit Datum und Verspätung einzeln übersetzt werden
+  function voyLine(sh) {
+    const o = E.shipStatus(S, sh); if (!o) return "";
+    const p = [];
+    if (o.res) p.push("Reserveschiff");
+    if (o.st === "see") { p.push("Auf See nach " + pName(o.to), "Ankunft " + tD(o.eta, true)); if (o.late >= .05) p.push(lateLong(o.late)); if (o.pax) p.push(E.fmt(o.pax) + " Fahrgäste an Bord"); }
+    else if (o.st === "res") p.push("Wartet in " + pName(o.port) + " auf seinen Einsatz");
+    else if (o.st === "pendel") { const r = E.routeOf(S, sh), i = r && E.rInfo(S, r); p.push("Fährt im Tagespaket"); if (i) p.push(esc(i.name)); }
+    else if (o.next) { const ex = o.next.exp != null ? o.next.exp : o.next.plan, late = ex - o.next.plan; p.push("In " + pName(o.port), "Abfahrt " + tD(ex, true) + " nach " + pName(o.next.to)); if (late >= .05) p.push(lateLong(late)); }
+    else p.push("In " + pName(o.port));
+    p.push("Bunker " + E.fmt(Math.round(o.b)) + " von " + E.fmt(Math.round(o.cap)) + " t");
+    return '<div class="meta voy">' + p.join(" · ") + "</div>";
+  }
+  // kurzer Stand für die Liste in der Flotte
+  function voyShort(sh) {
+    const v = sh.v; if (!v) return null;
+    if (v.st === "see") return "→ " + (PORTS[v.toP] ? PORTS[v.toP].name : "");
+    if (v.st === "res") return "Reserve";
+    return null;
+  }
+  function shipBunkBox(sh) {
+    const own = sh.bunk || "";
+    let h = '<label class="field">Bekohlung</label><div class="seg" role="group" style="grid-template-columns:repeat(4,1fr)">' + [["", "Reederei"]].concat(E.BUNK_ORDER.map(k => [k, BUNK_SHORT[k]])).map(([k, n]) => '<button data-act="shipBunk" data-id="' + sh.id + '" data-v="' + k + '" aria-pressed="' + (own === k) + '" style="font-size:13.5px">' + n + "</button>").join("") + "</div>";
+    h += '<div class="meta">' + (own ? "Eigene Regel: " + E.BUNK[own].name + "." : "Folgt der Regel der Reederei: " + E.BUNK[S.bunk || "heim"].name + ".") + "</div>";
+    return h + '<div class="switch"><span>Ankunft melden <span class="meta">(hält die Zeit an)</span></span><input type="checkbox" data-act="markShip" data-id="' + sh.id + '" ' + (sh.mark ? "checked" : "") + ' aria-label="Ankunft melden"></div>';
+  }
+  // Fahrplan einer Linie: Takt, Pünktlichkeit, Puffer, Reserveschiff, Aufholen
+  function fahrplanBox(r, info) {
+    const tt = r.tt || {}, last = r.last && r.last.m === S.m - 1 ? r.last : null, G = E.lineGeo(S, r), mo = E.cal(S.m).mo;
+    const rv = G ? E.rivalsOf(S, r, info).map(x => E.rivalPk(S, x.k, G, mo)) : [];
+    let h = '<div class="fplan" data-tut="fplan"><div class="row"><h3>Fahrplan</h3><span class="meta">Pünktlichkeit <b class="' + pkCls(r.pk) + '">' + pkTxt(r.pk) + "</b>" + (rv.length ? " · Rivalen " + (rv.length > 1 ? Math.round(Math.min(...rv) * 100) + "–" : "") + Math.round(Math.max(...rv) * 100) + " %" : "") + "</span></div>";
+    if (!tt.n) h += '<div class="meta">Noch kein Schiff im Fahrplan.</div>';
+    else if (tt.short) h += '<div class="meta">Tagespaket: etwa ' + kn(Math.round(tt.n / tt.P * 10) / 10) + " Abfahrten am Tag je Richtung, Umlauf " + Math.max(1, Math.round(tt.P * 24)) + " Stunden. Die Pünktlichkeit zählt als Anteil pünktlicher Fahrten.</div>";
+    else h += '<div class="meta">Abfahrt alle ' + dDays(tt.H) + (r.cruise ? "" : " je Richtung") + ", Umlauf " + dDays(tt.P) + (tt.n > 1 ? " mit " + tt.n + " Schiffen" : "") + ". Das langsamste Schiff bestimmt den Takt.</div>";
+    h += '<label class="field">Pufferzeit</label><div class="seg lv" role="group" aria-label="Pufferzeit" style="grid-template-columns:repeat(4,1fr)">' + E.BUF.map((b, i) => '<button data-act="bufSet" data-id="' + r.id + '" data-v="' + i + '" aria-pressed="' + ((r.buf || 0) === i) + '">' + capF(E.BUF_NAME[i]) + "<small>" + (b ? "+" + Math.round(b * 100) + " % Umlauf" : "eng getaktet") + "</small></button>").join("") + "</div>";
+    h += '<div class="meta">Puffer fängt Verspätungen auf, kostet aber Abfahrten: Die Schiffe liegen länger im Hafen.</div>';
+    const cands = S.ships.filter(sh => !sh.museum && sh.ready <= S.m && (sh.line === r.id || !sh.line || sh.laid) && !E.canServe(S, sh.type, r.a, r.b, r.cruise, r.stops) && !S.routes.some(x => x !== r && x.res === sh.id));
+    h += '<label class="field" for="res' + r.id + '">Reserveschiff</label><select id="res' + r.id + '" data-act="resSel" data-id="' + r.id + '"><option value="">keines</option>' + cands.map(sh => '<option value="' + sh.id + '"' + (r.res === sh.id ? " selected" : "") + ">„" + esc(sh.name) + "“ · " + esc(E.TYPES[sh.type].name) + "</option>").join("") + "</select>";
+    h += '<div class="meta">Es wartet ' + (G ? "in " + pName(G.ports[G.resEnd]) : "am Heimatende der Linie") + " und springt ein, wenn ein Schiff ausfällt oder deutlich zu spät ist. Heuer, Versicherung und Kapital laufen auch im Stillstand, die Wartung zur Hälfte.</div>";
+    h += '<div class="switch"><span>Volldampf zum Aufholen <span class="meta">(mehr Kohle und Verschleiß)</span></span><input type="checkbox" data-act="catchUp" data-id="' + r.id + '" ' + (r.auf ? "checked" : "") + ' aria-label="Volldampf zum Aufholen"></div>';
+    if (last && (last.dep || last.arr)) {
+      h += '<div class="stats"><div><b>' + E.fmt(Math.round(last.dep)) + '</b><span>Abfahrten</span></div><div><b>' + (last.arr ? Math.round((1 - last.lateA / last.arr) * 100) + " %" : "–") + '</b><span>pünktlich angekommen</span></div><div><b>' + (last.avgLate >= .05 ? lateTxt(last.avgLate) : "–") + "</b><span>Ø Verspätung</span></div></div>";
+      const no = (last.cls || []).reduce((a, c) => a + (c.no || 0), 0), bits = [];
+      if (no >= 1) bits.push(E.fmt(no) + " Fahrgäste fanden keinen Platz");
+      if (last.comp >= 1) bits.push("Entschädigung " + E.fmt(last.comp) + " Mark");
+      if (last.cancel >= .5) bits.push(E.fmt(Math.round(last.cancel)) + " Fahrten ausgefallen");
+      if (bits.length) h += '<div class="meta">Im Vormonat · ' + bits.join(" · ") + "</div>";
+    }
+    return h + "</div>";
+  }
+  // Kontor → Abfahrten: nächste Abfahrten, letzte Fahrten, Pünktlichkeit je Linie, automatische Pausen
+  function abfahrten() {
+    let h = img("kt_abfahrten", "banner", "Abfahrtstafel im Kontor") + '<h2>Abfahrten</h2><p class="sub">Die nächsten Abfahrten Ihrer Schiffe und die letzten Fahrten mit Ergebnis.</p>';
+    const deps = E.departures(S, abfAll ? 60 : 12);
+    const when = x => x.short ? "täglich" : x.exp == null ? '<span class="neg">fällt aus</span>' : tD(x.exp, true);
+    const late = x => x.short ? (x.pk != null ? pkTxt(x.pk) + " pünktlich" : "") : x.exp == null ? "" : '<span class="' + (x.late >= 1 ? "neg" : "") + '">' + lateTxt(x.late) + "</span>";
+    const load = x => x.short ? Math.round(x.per) + " Fahrten am Tag" : Math.round(x.load * 100) + " %";
+    const ship = x => x.short ? x.ships + (x.ships > 1 ? " Schiffe" : " Schiff") : "„" + esc(x.nm) + "“" + (x.st === "see" ? ' <span class="meta">noch auf See</span>' : "");
+    h += '<h3 style="margin-top:12px">Nächste Abfahrten</h3>';
+    if (!deps.length) h += '<div class="hint">Noch fährt kein Schiff nach Fahrplan. Weisen Sie in der Flotte einem Schiff eine Linie zu.</div>';
+    else if (DESK) h += '<div class="tblwrap"><table class="stat abf"><thead><tr><th>Abfahrt</th><th>Schiff</th><th>Strecke</th><th class="n">Verspätung</th><th class="n">Auslastung</th></tr></thead><tbody>' +
+      deps.map(x => "<tr><td>" + when(x) + "</td><td>" + ship(x) + "</td><td>" + pName(x.from) + " → " + pName(x.to) + '</td><td class="n">' + late(x) + '</td><td class="n">' + load(x) + "</td></tr>").join("") + "</tbody></table></div>" + '<div class="meta">Auslastung: erwartet bei der Abfahrt, nach den Buchungen bis heute.</div>';
+    else h += '<div class="abfl">' + deps.map(x => '<div class="abfr"><div><b>' + when(x) + "</b> " + late(x) + '</div><div class="meta">' + ship(x) + " · " + pName(x.from) + " → " + pName(x.to) + " · " + load(x) + "</div></div>").join("") + "</div>";
+    if (deps.length >= 12 || abfAll) h += '<div class="actions"><button class="btn" data-act="abfAll">' + (abfAll ? "Weniger zeigen" : "Mehr zeigen") + "</button></div>";
+    const F = (S.fahrten || []).slice(0, abfAll ? 40 : 12);
+    h += '<h3 style="margin-top:16px">Letzte Fahrten</h3>';
+    if (!F.length) h += '<div class="hint">Hier erscheinen die Fahrten Ihrer Schiffe, sobald sie angekommen sind. Kurze Linien im Tagespaket zählen nur in der Linienstatistik.</div>';
+    else if (DESK) h += '<div class="tblwrap"><table class="stat abf"><thead><tr><th>Ankunft</th><th>Schiff</th><th>Strecke</th><th class="n">Fahrgäste</th><th class="n">Auslastung</th><th class="n">Verspätung</th><th class="n">Ergebnis</th></tr></thead><tbody>' +
+      F.map(f => "<tr><td>" + tD(f.t) + "</td><td>„" + esc(f.nm) + "“</td><td>" + pName(f.a) + " → " + pName(f.b) + '</td><td class="n">' + E.fmt(f.aboard || f.n) + '</td><td class="n">' + (f.cap ? Math.round((f.aboard || f.n) / f.cap * 100) + " %" : "–") + '</td><td class="n">' + '<span class="' + (f.late >= 1 ? "neg" : "") + '">' + lateTxt(f.late) + "</span>" + '</td><td class="n">' + num(f.res) + "</td></tr>").join("") + "</tbody></table></div>";
+    else h += '<div class="abfl">' + F.map(f => '<div class="abfr"><div><b>„' + esc(f.nm) + "“</b> " + pName(f.a) + " → " + pName(f.b) + '</div><div class="meta">' + tD(f.t) + " · " + E.fmt(f.aboard || f.n) + " Fahrgäste · " + lateTxt(f.late) + ' <span class="' + (f.res < 0 ? "neg" : "") + '">· Ergebnis ' + E.fmt(f.res) + " Mark</span></div></div>").join("") + "</div>";
+    const lines = S.routes.filter(r => r.tt && r.tt.n);
+    if (lines.length) {
+      h += '<h3 style="margin-top:16px">Pünktlichkeit je Linie</h3><div class="tblwrap"><table class="stat"><thead><tr><th>Linie</th><th class="n">Ihre Schiffe</th><th class="n">Rivalen</th><th class="n">Abfahrten im Vormonat</th></tr></thead><tbody>' +
+        lines.map(r => { const i = E.rInfo(S, r), G = E.lineGeo(S, r), mo = E.cal(S.m).mo, rv = G && i ? E.rivalsOf(S, r, i).map(x => E.rivalPk(S, x.k, G, mo)) : [], l = r.last && r.last.m === S.m - 1 ? r.last : null;
+          return "<tr><td>" + esc(i ? i.name : "?") + '</td><td class="n ' + pkCls(r.pk) + '">' + pkTxt(r.pk) + '</td><td class="n">' + (rv.length ? Math.round(rv.reduce((a, b) => a + b, 0) / rv.length * 100) + " %" : "–") + '</td><td class="n">' + (l ? E.fmt(Math.round(l.dep || 0)) : "–") + "</td></tr>"; }).join("") + "</tbody></table></div>";
+      h += '<div class="meta">Pünktlich heißt: höchstens einen halben Tag zu spät, auf langen Strecken bis 15 % der Seezeit. Wer oft zu spät kommt, verliert für Monate Fahrgäste an pünktlichere Rivalen – vor allem in der 1. Klasse und bei der Post.</div>';
+    }
+    return h + pauseBox();
+  }
+  function pauseBox() {
+    const P = Object.assign({}, E.PAUSE_DEF, S.pause || {});
+    let h = '<h3 style="margin-top:18px" data-tut="pause">Automatische Pausen</h3><p class="sub">Die Zeit hält von selbst an, wenn …</p>';
+    h += '<label class="field">… ein Schiff mit so viel Verspätung ankommt</label><div class="seg" role="group" style="grid-template-columns:repeat(5,1fr)">' + [0, 1, 2, 3, 5].map(v => '<button data-act="pauseSet" data-v="' + v + '" aria-pressed="' + (P.late === v) + '">' + (v ? (v === 1 ? "1 Tag" : v + " Tage") : "nie") + "</button>").join("") + "</div>";
+    for (const [k, n] of [["coal", "… auf einem Schiff die Kohle knapp wird"], ["month", "… ein Monat abgeschlossen ist"], ["mark", "… ein markiertes Schiff ankommt"]])
+      h += '<div class="switch"><span>' + n + '</span><input type="checkbox" data-act="pauseChk" data-k="' + k + '" ' + (P[k] ? "checked" : "") + ' aria-label="' + n + '"></div>';
+    return h + '<div class="meta">Schiffe markieren Sie in der Flotte mit „Ankunft melden“.</div>';
+  }
+  function diffBox() {
+    const d = S.diff || "normal";
+    let h = '<label class="field">Schwierigkeitsgrad</label>';
+    if (S.diffSet) return h + '<div class="meta">' + E.DIFF[d].name + " · " + DIFF_NOTE[d] + " Der Schwierigkeitsgrad wurde schon einmal umgestellt.</div>";
+    h += '<div class="seg" role="group" aria-label="Schwierigkeitsgrad">' + E.DIFF_ORDER.map(k => '<button data-act="diffSet" data-v="' + k + '" aria-pressed="' + ((confirmDiff || d) === k) + '">' + E.DIFF[k].name + "</button>").join("") + "</div>";
+    h += '<div class="meta">' + DIFF_NOTE[confirmDiff || d] + " Umstellen geht einmal, der Gründungskredit bleibt, wie er ist.</div>";
+    if (confirmDiff && confirmDiff !== d) h += '<div class="actions"><button class="btn solid" data-act="diffOk">Auf „' + E.DIFF[confirmDiff].name + '“ umstellen</button><button class="btn" data-act="diffNo">Abbrechen</button></div>';
+    return h;
+  }
+  function bunkBox() {
+    const cur = S.bunk || "heim", ex = S.ships.filter(x => !x.museum && x.bunk).length;
+    let h = '<div class="item" data-tut="bunk"><div class="row"><h3>Bekohlung</h3></div><div class="seg lv" role="group" aria-label="Bekohlung">' + E.BUNK_ORDER.map(k => '<button data-act="bunkSet" data-v="' + k + '" aria-pressed="' + (cur === k) + '">' + capF(E.BUNK[k].name) + "</button>").join("") + "</div>";
+    return h + '<div class="meta" style="margin-top:6px">' + BUNK_NOTE[cur] + " Gilt für alle Schiffe ohne eigene Regel" + (ex ? "; " + ex + (ex > 1 ? " Schiffe haben" : " Schiff hat") + " eine eigene" : "") + ". Bekohlen verlängert die Liegezeit, je nach Menge.</div></div>";
+  }
+
   /* ---------- Unternavigation ---------- */
   let kontorSub = "uebersicht", marktSub = "werbung", statView = "schiffe", statSort = { schiffe: ["erg", -1], linien: ["erg", -1] }, mrRoute = null;
   const subnav = (act, cur, items) => '<div class="subnav" role="tablist">' + items.map(([k, n]) => '<button data-act="' + act + '" data-v="' + k + '" aria-pressed="' + (cur === k) + '">' + n + "</button>").join("") + "</div>";
@@ -825,7 +987,8 @@
 
   /* ---------- Kontor ---------- */
   function kontorView() {
-    let h = subnav("ksub", kontorSub, [["uebersicht", "Übersicht"], ["statistik", "Statistik"], ["einkauf", "Einkauf"], ["personal", "Personal"], ["boerse", "Börse"]]);
+    let h = subnav("ksub", kontorSub, [["uebersicht", "Übersicht"], ["abfahrten", "Abfahrten"], ["statistik", "Statistik"], ["einkauf", "Einkauf"], ["personal", "Personal"], ["boerse", "Börse"]]);
+    if (kontorSub === "abfahrten") return h + abfahrten();
     if (kontorSub === "statistik") return h + statistik();
     if (kontorSub === "boerse") return h + boerse();
     if (kontorSub === "einkauf") return h + einkauf();
@@ -1053,17 +1216,17 @@
       const R = E.RIV[k], st = E.rivState(S, k);
       const mine = S.routes.filter(r => { const i = E.rInfo(S, r); return i && E.rivalsOf(S, r, i).some(x => x.k === k); });
       let their = 0, dem = 0; for (const r of mine) if (r.last && r.last.riv) { their += r.last.riv[k] || 0; dem += r.last.D || 0; }
-      h += '<div class="item rival">' + img(R.img, "rivimg", R.name) + '<div class="rtxt"><h3>' + R.name + '</h3><div class="meta">' + R.city + '</div><div class="pro">＋ ' + R.strong + '</div><div class="con">− ' + R.weak + "</div>" +
+      h += '<div class="item rival">' + img(R.img, "rivimg", R.name) + '<div class="rtxt"><h3>' + R.name + '</h3><div class="meta">' + R.city + " · Pünktlichkeit etwa " + Math.round(E.RIV_PK[k] * 100) + " % bei ruhiger See" + '</div><div class="pro">＋ ' + R.strong + '</div><div class="con">− ' + R.weak + "</div>" +
         '<div class="meta" style="margin-top:4px">' + (mine.length ? "Auf " + mine.length + " Ihrer Linien" + (dem ? ", dort etwa " + pct(their / dem) + " der Fahrgäste" : "") + "." : "Noch keine gemeinsamen Linien.") + (st.mood >= 3 ? " Ist auf Sie nicht gut zu sprechen." : st.mood >= 1 ? " Beobachtet Sie genau." : "") + "</div></div></div>";
     }
     return h;
   }
-  const MR_KEYS = ["Preis", "Tempo", "Komfort", "Ruf", "Erfahrungen", "Bekanntheit", "Küche"];
+  const MR_KEYS = ["Preis", "Tempo", "Komfort", "Ruf", "Erfahrungen", "Bekanntheit", "Küche", "Pünktlichkeit"];
   function forschung() {
     const st = E.staff(S);
     let h = img("ev_marktforschung", "banner", "Befragung am Kai") + "<h2>Marktforschung</h2>";
     const x = E.myExp(S);
-    h += '<p class="sub">So erleben die Fahrgäste Ihre Reederei (50 ist Durchschnitt):</p><div class="expbars">' + [["Komfort", x[0]], ["Service", x[1]], ["Sicherheit", x[2]], ["Küche", S.exp && S.exp.ku != null ? S.exp.ku : 50]].map(([n, v]) => '<div class="eb"><span>' + n + '</span><div class="meter"><i style="width:' + Math.round(v) + '%"></i></div><b>' + Math.round(v) + "</b></div>").join("") + "</div>";
+    h += '<p class="sub">So erleben die Fahrgäste Ihre Reederei (50 ist Durchschnitt):</p><div class="expbars">' + [["Komfort", x[0]], ["Service", x[1]], ["Sicherheit", x[2]], ["Küche", S.exp && S.exp.ku != null ? S.exp.ku : 50], ["Pünktlichkeit", S.exp && S.exp.p != null ? S.exp.p : 50]].map(([n, v]) => '<div class="eb"><span>' + n + '</span><div class="meter"><i style="width:' + Math.round(v) + '%"></i></div><b>' + Math.round(v) + "</b></div>").join("") + "</div>";
     if (!st.markt) return h + '<div class="hint">Für die Auswertung einzelner Linien brauchen Sie eine Marktforschungsabteilung. Sie können sie unter Kontor → Personal einstellen.</div>';
     const routes = S.routes.filter(r => E.rInfo(S, r));
     if (!routes.length) return h + '<div class="hint">Noch keine Linien.</div>';
@@ -1172,25 +1335,35 @@
     { get t() { return "Wählen Sie Start und Ziel. Für den Anfang eignet sich eine kurze Fähre, zum Beispiel " + ({ ham: "Hamburg – Blankenese", lpl: "Liverpool – Birkenhead", lon: "London – Gravesend" }[S.home || "ham"]) + ". Die Tabelle zeigt, wohin viele Menschen reisen wollen. Dann " + tapW("auf „Linie eröffnen“ klicken.", "„Linie eröffnen“ tippen."); }, get sel() { return tab === "linien" ? '[data-act="openRoute"]' : '#tabs [data-tab="linien"]'; }, ok: () => S.routes.length > 0 },
     { get t() { return "Jetzt fehlt ein Schiff. " + tapW("Klicken Sie auf „Werft“ (Taste W)", "Tippen Sie auf „Werft“") + ", klappen Sie „Hafen, Küste und Fähren“ auf und bestellen Sie ein passendes Schiff. Eine Hafenfähre ist billig und robust."; }, get sel() { return tab === "werft" ? '[data-act="buyNew"]' : '#tabs [data-tab="werft"]'; }, ok: () => S.ships.length > 0 },
     { t: "In der „Flotte“ weisen Sie dem Schiff die Linie zu, über das Auswahlfeld „Linie“. Neubauten brauchen ein paar Monate, die Zuweisung gilt ab der Ablieferung.", get sel() { return tab === "flotte" ? '[data-act="line"]' : '#tabs [data-tab="flotte"]'; }, ok: () => S.ships.some(x => x.line) },
-    { get t() { return "Starten Sie die Zeit: " + tapW("oben am Maschinentelegrafen auf „Langsam“ klicken oder die Leertaste drücken.", "unten am Maschinentelegrafen auf „Langsam“ tippen.") + " Ereignisse halten die Zeit automatisch an."; }, sel: '#tele [data-act="speed"][data-v="1"]', ok: () => S.speed > 0 },
-    { t: "Im Kontor zeigt das Hauptbuch Tag für Tag Einnahmen und Kosten. Denken Sie an Ihren Gründungskredit: Die Zinsen laufen schon.", get sel() { return tab === "kontor" ? "#ledger" : '#tabs [data-tab="kontor"]'; }, next: true },
-    { t: "Das war der Grundkurs. Wenn Sie einen Bereich zum ersten Mal öffnen – Werft, Flotte, Einkauf, Personal, Markt, Zeitung oder Börse –, erklärt Ihnen der Berater dort das Wichtigste in wenigen Schritten. Viel Erfolg!", next: true, last: true },
+    { get t() { return "Starten Sie die Zeit: " + tapW("oben am Maschinentelegrafen auf „Langsam“ klicken oder die Leertaste drücken.", "unten am Maschinentelegrafen auf „Langsam“ tippen.") + " Ein Tag dauert dann vier Sekunden. Ereignisse halten die Zeit automatisch an."; }, sel: '#tele [data-act="speed"][data-v="1"]', ok: () => S.speed > 0 },
+    { t: "Im Kontor zeigt das Hauptbuch Tag für Tag Einnahmen und Kosten. Die Fahrgäste zahlen bei der Abfahrt, die Kohle kostet beim Bekohlen – das Geld kommt also in Schüben. Die Zinsen Ihres Gründungskredits laufen schon.", get sel() { return tab === "kontor" ? "#ledger" : '#tabs [data-tab="kontor"]'; }, next: true },
+    { t: "Ihre Schiffe fahren nach Fahrplan. Unter Kontor → Abfahrten sehen Sie, wann sie ablegen, wie voll sie wohl werden und wie pünktlich sie ankommen.", get sel() { return tab === "kontor" ? '[data-act="ksub"][data-v="abfahrten"]' : '#tabs [data-tab="kontor"]'; }, next: true },
+    { t: "Das war der Grundkurs. Wenn Sie einen Bereich zum ersten Mal öffnen – Werft, Flotte, Abfahrten, Einkauf, Personal, Markt, Zeitung oder Börse –, erklärt Ihnen der Berater dort das Wichtigste in wenigen Schritten. Viel Erfolg!", next: true, last: true },
   ];
   const CHAP = {
     werft: { name: "Werft", when: () => tab === "werft", go: () => { tab = "werft"; }, steps: [
       { t: "Hier bestellen Sie Neubauten. Die Schiffe sind nach Einsatz sortiert: Hafen, Küste und Fähren, Nord- und Ostsee, Übersee. Ältere Bauarten stehen jeweils am Ende.", sel: "main details.sec" },
-      { t: "Ein Neubau braucht einige Monate. Sie zahlen bar mit 3 % Skonto oder mit Kredit von Bank oder Werft – die Raten laufen erst ab der Ablieferung.", sel: '[data-act="buyNew"]' },
+      { t: "Ein Neubau braucht einige Monate. Sie zahlen bar mit 3 % Skonto oder mit Kredit von Bank oder Werft – die Raten laufen erst ab der Ablieferung. Mehrere Schiffe einer Bauart bestellen Sie als Serie mit Rabatt; die Werft liefert sie nacheinander.", sel: '[data-act="buyNew"]' },
       { t: "Gebrauchte Schiffe sind sofort da und billiger, aber älter. Ein Gutachten verrät ihren wahren Zustand, bevor Sie kaufen.", sel: '[data-act="buyUsed"]' } ] },
     flotte: { name: "Flotte", when: () => tab === "flotte" && flSub === "schiffe" && S.ships.some(x => !x.museum), go: () => { tab = "flotte"; flSub = "schiffe"; }, steps: [
       { t: "Jedes Schiff hat hier seine Karte: Linie, Wartung, Versicherung und Zustand. " + "Aufklappen zeigt alle Einstellungen.", sel: "main details.sec" },
       { t: "Die Reederei-Fahrstufe gilt für die ganze Flotte: Sparfahrt spart Kohle, Volldampf schafft mehr Fahrten. Einzelne Schiffe können Sie ausnehmen.", sel: "main .item.fahrt" },
+      { t: "Aufgeklappt zeigt jedes Schiff, wo es gerade ist, wann es abfährt und wie viel Kohle es im Bunker hat. Mit „Ankunft melden“ hält die Zeit an, wenn es ankommt." },
       { t: "Bäderlinien lohnen nur im Sommer. Mit dem Saisonfahrplan liegt ein Schiff im Winter auf und spart Kohle und drei Viertel der Heuer.", sel: '[data-act="planAdd"]' },
       { t: "Läuft die Frist eines Schiffs ab, darf es nicht mehr auslaufen. Erneuern Sie sie rechtzeitig – oder stellen Sie unter Kontor → Personal einen Schiffsinspektor ein, der das übernimmt." } ] },
     einkauf: { name: "Einkauf", old: true, when: () => tab === "kontor" && kontorSub === "einkauf", go: () => { tab = "kontor"; kontorSub = "einkauf"; }, steps: [
       { t: "Hier kaufen Sie Kohle und Verpflegung für die ganze Reederei. Oben steht der Kohlepreis mit seinem Verlauf.", sel: '[data-tut="coal"]' },
-      { t: "Ein Liefervertrag sichert den heutigen Preis mit Aufschlag. Er lohnt sich, wenn die Kohle danach teurer wird – und kostet, wenn sie billiger wird.", sel: '[data-tut="coalnew"]' },
+      { t: "Die Kohle bezahlen Sie beim Bekohlen, und jeder Hafen hat seinen Preis: nah an den Zechen billig, in der Ferne teuer. Die Regel legt fest, wo Ihre Schiffe volltanken.", sel: '[data-tut="bunk"]' },
+      { t: "Ein Liefervertrag gilt für einen Hafen und sichert den heutigen Preis mit Aufschlag. Er lohnt sich, wenn die Kohle danach teurer wird – und kostet, wenn sie billiger wird.", sel: '[data-tut="coalnew"]' },
       { t: "Die Verpflegung stellen Sie je Klasse ein. In der 1. Klasse zählt gutes Essen viel, im Zwischendeck wenig. Auf kurzen Fähren gibt es keine Mahlzeiten.", sel: '[data-tut="kq"]' },
-      { t: "Vor jeder Änderung rechnet eine Vorschau aus, wie der Vormonat mit der neuen Einstellung gelaufen wäre. So probieren Sie ohne Risiko." } ] },
+      { t: "Vor jeder Änderung rechnet eine Vorschau die nächsten zwei Monate mit der neuen Einstellung voraus. So probieren Sie ohne Risiko." } ] },
+    abfahrten: { name: "Abfahrten", old: true, when: () => tab === "kontor" && kontorSub === "abfahrten", go: () => { tab = "kontor"; kontorSub = "abfahrten"; }, steps: [
+      { t: "Ihre Schiffe fahren nach Fahrplan: Abfahrt, Seezeit, Ankunft, Liegezeit. Die Tafel zeigt die nächsten Abfahrten mit erwarteter Verspätung und Auslastung, darunter die letzten Fahrten mit ihrem Ergebnis.", sel: "main .banner" },
+      { t: "Die Fahrgäste sammeln sich bis zur nächsten Abfahrt und zahlen beim Einsteigen. Wer zu lange warten muss oder keinen Platz bekommt, fährt mit der Konkurrenz – Kaufleute schneller als Auswanderer." },
+      { t: "Sturm, Nebel, Eis, Streiks und Pannen verspäten die Schiffe. Ab zwei Tagen Verspätung zahlen Sie Entschädigung, und eine unpünktliche Linie verliert für Monate Fahrgäste an pünktlichere Rivalen." },
+      { t: "Dagegen helfen Pufferzeit, ein Reserveschiff, Volldampf zum Aufholen, gutes Maschinenpersonal und gründliche Wartung – jedes Mittel kostet etwas. Puffer, Reserve und Aufholen stellen Sie je Linie unter „Linien“ ein." },
+      { t: "Kohle kostet erst beim Bekohlen, nah an den Zechen billig, in der Ferne teuer. Wo Ihre Schiffe volltanken, legen Sie unter Kontor → Einkauf fest." },
+      { t: "Hier unten bestimmen Sie, wann die Zeit von selbst anhält: bei großer Verspätung, wenn die Kohle knapp wird, am Monatsende oder wenn ein markiertes Schiff ankommt.", sel: '[data-tut="pause"]' } ] },
     personal: { name: "Personal", when: () => tab === "kontor" && kontorSub === "personal", go: () => { tab = "kontor"; kontorSub = "personal"; }, steps: [
       { t: "Deck, Maschine und Service bezahlen Sie nach Lohnstufe. Knapp bezahlte Leute machen mehr Fehler und streiken öfter, gut bezahlte bringen spürbare Vorteile.", sel: "main .item" },
       { t: "Jedes Schiff hat einen Kapitän. Mit den Jahren sammelt er Erfahrung – erfahrene Kapitäne fahren sicherer.", sel: "main .capline" },
@@ -1209,7 +1382,7 @@
       { t: "Im Mai zahlen Firmen mit gutem Vorjahr eine Dividende. Wer mehr als die Hälfte einer Zeche hält, bunkert für seine Kohleschiffe 20 % billiger – das lohnt sich erst für große Flotten.", sel: ".bokv" },
       { t: "Ein Prokurist verwaltet auf Wunsch ein eigenes Depot und schätzt Gerüchte ein. Bedenken Sie: Aktien bringen im Schnitt weniger als eine gut laufende Linie.", sel: ".pkbox" } ] },
   };
-  const CHAP_ORDER = ["werft", "flotte", "einkauf", "personal", "markt", "zeitung", "boerse"];
+  const CHAP_ORDER = ["werft", "flotte", "abfahrten", "einkauf", "personal", "markt", "zeitung", "boerse"];
   function tutState() { if (!S) return null; const T = S.tut || (S.tut = { done: true }); T.ch = T.ch || {}; return T; }
   function tutCur() {
     const T = tutState(); if (!T || T.off) return null;
@@ -1348,7 +1521,6 @@
     const opts = E.factoryEqOptions(S, sheet.type); if (!opts.length) return "";
     return '<label class="field">Ausrüstung ab Werft</label>' + opts.map(o => '<label class="check"><input type="checkbox" data-act="feq" data-k="' + o.k + '"' + (sheet.eq[o.k] ? " checked" : "") + "> " + o.name + ' – ' + M(o.cost) + ' <span class="meta">(nachgerüstet ' + M(o.later) + ")</span></label>").join("");
   }
-  const factoryExtra = () => sheet && sheet.kind === "new" && sheet.eq ? Object.keys(sheet.eq).filter(k => sheet.eq[k]).reduce((a, k) => a + E.factoryEqCost(S, sheet.type, k), 0) : 0;
 
   /* ---------- Außer Dienst stellen ---------- */
   function retireSheet() {
@@ -1432,7 +1604,9 @@
     h += '<div class="l3 head"><span></span><span>' + (p ? "Vormonat" : "") + "</span><span>laufend</span></div>";
     for (const k of keysRev) h += row(k, curRev[k], prevRev[k], false);
     if (exKeys.length) { h += row("Sondereinnahmen", null, null, false, "sub"); for (const k of exKeys) h += row(k, ex[k] || 0, pex[k] || 0, false, "ind"); }
-    for (const k of allCost) h += row(k, c.cost[k] || 0, pc[k] || 0, true);
+    const bk = allCost.filter(k => k.startsWith("Bekohlung ")), sumK = (o, ks) => ks.reduce((a, k) => a + (o[k] || 0), 0);
+    if (bk.length) { h += row("Bekohlung", sumK(c.cost, bk), sumK(pc, bk), true); for (const k of bk) h += row(esc(k.slice(10)), c.cost[k] || 0, pc[k] || 0, true, "ind"); }
+    for (const k of allCost) if (!k.startsWith("Bekohlung ")) h += row(k, c.cost[k] || 0, pc[k] || 0, true);
     h += '<div class="l3 sum"><span>Ergebnis</span><span>' + (p ? signed(p.profit) : "") + "</span><span>" + signed(res) + "</span></div>";
     if (days) h += '<div class="l3 sum2"><span>Hochrechnung Monatsende</span><span></span><span>' + signed(proj) + "</span></div>";
     return h + '<div class="meta" style="margin-top:6px">Beträge in ' + (S.country === "gb" ? "Pfund umgerechnet" : "Mark") + ". Zinsen und Tilgung werden am Monatsende gebucht.</div></details>";
@@ -1481,7 +1655,27 @@
 
   /* ---------- Dialoge ---------- */
   let evKey = null, evReadyAt = 0, startTut = false;
+  // Fenster zeichnen; wirft das Zeichnen einen Fehler, wird das Fenster geschlossen, damit die Uhr nicht hängen bleibt
   function renderModal() {
+    try { renderModal0(); }
+    catch (e) {
+      reportErr(e, "Fenster");
+      const m = $("modal");
+      if (S && S.pending.length && E.duePending(S)) { try { if (eventFallback(m)) return; renderModal0(); return; } catch (x) { reportErr(x, "Fenster"); } }
+      sheet = null; if (m) m.innerHTML = "";
+    }
+  }
+  // schlichtes Ereignisfenster als Ersatz; lassen sich nicht einmal die Antworten bestimmen, wird das Ereignis übersprungen
+  function eventFallback(m) {
+    const ev = S.pending[0]; let opts = null;
+    try { opts = E.eventOptions(S, ev); } catch (x) { opts = null; }
+    if (!opts || !opts.length) { S.pending.shift(); evKey = null; return false; }
+    evReadyAt = 0;
+    m.innerHTML = '<div class="veil"><div class="sheet" role="dialog" aria-modal="true"><h3>' + esc(ev.head || "") + "</h3><p>" + esc(ev.text || "") + '</p><div class="opts">' +
+      opts.map((o, i) => '<button class="opt" data-act="choose" data-i="' + i + '"' + (o.ok === false ? " disabled" : "") + "><b>" + esc(o.t) + "</b><span>" + esc(o.h || "") + "</span></button>").join("") + "</div></div></div>";
+    return true;
+  }
+  function renderModal0() {
     const m = $("modal");
     if (!S) { m.innerHTML = sheet && sheet.kind === "import" ? importSheet() : startSheet(); return; }
     if (S.over === "konkurs") { m.innerHTML = endSheet(); return; }
@@ -1496,13 +1690,14 @@
     if (sheet) { m.innerHTML = sheet.kind === "bo" ? boSheet() : sheet.kind === "prev" ? previewSheet() : sheet.kind === "rename" ? renameSheet() : sheet.kind === "export" ? exportSheet() : sheet.kind === "import" ? importSheet() : sheet.kind === "design" ? designSheet() : sheet.kind === "retire" ? retireSheet() : buySheet(); return; }
     m.innerHTML = "";
   }
-  let startHome = "ham";
+  let startHome = "ham", startDiff = "normal";
   function startSheet() {
-    const hn = { ham: "Hamburg", lpl: "Liverpool", lon: "London" }[startHome];
+    const hn = { ham: "Hamburg", lpl: "Liverpool", lon: "London" }[startHome], loan = E.DIFF[startDiff].loan;
     return '<div class="veil light"><div class="sheet" role="dialog" aria-modal="true">' + (startHome !== "ham" ? img(startHome === "lpl" ? "gb_liverpool" : "gb_dover", "banner", hn) : "") + '<div class="kicker">' + hn + ', im März 1880</div><h3>Gründen Sie Ihre Reederei</h3>' +
       '<div class="seg" role="group" aria-label="Sprache" style="margin-bottom:10px">' + [["de", "Deutsch"], ["en", "English"], ["es", "Español"]].map(([k, n]) => '<button data-act="setLang" data-v="' + k + '" aria-pressed="' + (LANG === k) + '">' + n + "</button>").join("") + "</div>" +
       '<label class="field">Heimathafen</label><div class="seg" role="group" style="margin-bottom:10px">' + [["ham", "Hamburg"], ["lpl", "Liverpool"], ["lon", "London"]].map(([k, n]) => '<button data-act="setHome" data-v="' + k + '" aria-pressed="' + (startHome === k) + '">' + n + "</button>").join("") + "</div>" +
-      "<p>" + (startHome === "ham" ? "450.000 Mark Gründungskredit der Hamburger Bank" : "22.000 Pfund Gründungskredit einer Londoner Bank") + ", ein Kontor am Hafen und über 70 Häfen zwischen Dublin und Shanghai. Welche Verbindungen Sie eröffnen, entscheiden Sie.</p>" +
+      '<label class="field">Schwierigkeitsgrad</label><div class="seg" role="group" aria-label="Schwierigkeitsgrad">' + E.DIFF_ORDER.map(k => '<button data-act="setDiff0" data-v="' + k + '" aria-pressed="' + (startDiff === k) + '">' + E.DIFF[k].name + "</button>").join("") + '</div><div class="meta" style="margin-bottom:10px">' + DIFF_NOTE[startDiff] + "</div>" +
+      "<p>" + (startHome === "ham" ? E.fmt(loan) + " Mark Gründungskredit der Hamburger Bank" : E.fmt(Math.round(loan / 20.43 / 100) * 100) + " Pfund Gründungskredit einer Londoner Bank") + ", ein Kontor am Hafen und über 70 Häfen zwischen Dublin und Shanghai. Welche Verbindungen Sie eröffnen, entscheiden Sie.</p>" +
       '<label class="field" for="nm">Name der Reederei</label><div class="namebox"><input class="name" id="nm" value="' + esc(startName) + '" maxlength="28" autocomplete="off"><button class="dice" data-act="rollfirm" aria-label="Anderer Name">🎲</button></div>' +
       '<div class="actions"><button class="btn solid" data-act="start" style="width:100%">Reederei gründen</button></div><label class="switch" style="margin-top:12px"><span>Mit Einführung spielen</span><input type="checkbox" id="tutchk"' + (startTut ? " checked" : "") + '></label><button class="linkbtn" data-act="importOpen">Vorhandenen Spielstand importieren</button></div></div>';
   }
@@ -1531,11 +1726,21 @@
   function nameBox(v) {
     return '<label class="field" for="shipname">Name des Schiffs</label><div class="namebox"><input id="shipname" value="' + esc(v) + '" maxlength="28" autocomplete="off"><button class="dice" data-act="rollname" aria-label="Zufälliger Name">🎲</button></div>';
   }
+  // Bestellung: ein Schiff oder eine Serie (v5.0); die Werft liefert je Bauart eines nach dem anderen
+  function orderBox(t) {
+    const n = sheet.n || 1, O = E.orderInfo(S, sheet.type, !!sheet.brandt, n, Object.keys(sheet.eq || {}).filter(k => sheet.eq[k]));
+    let h = '<label class="field">Anzahl</label><div class="stepper"><button data-act="orderN" data-d="-1" aria-label="Weniger"' + (n <= 1 ? " disabled" : "") + '>−</button><div class="val"><b>' + n + (n > 1 ? " Schiffe" : " Schiff") + "</b><span>" + (O.disc > 0 ? "Serienrabatt " + Math.round(O.disc * 100) + " %" : n > 1 ? "kein Serienrabatt" : "Einzelbestellung") + '</span></div><button data-act="orderN" data-d="1" aria-label="Mehr"' + (n >= 10 ? " disabled" : "") + ">+</button></div>";
+    h += '<div class="meta">Ablieferung ' + (n === 1 ? E.dateStr(O.plan[0]) : "ab " + E.dateStr(O.plan[0]) + ", dann " + (O.gap === 1 ? "jeden Monat eines" : "alle " + O.gap + " Monate eines") + ", das letzte im " + E.dateStr(O.plan[n - 1])) + ". Die Werft baut von jeder Bauart ein Schiff nach dem anderen" + (O.plan[0] > S.m + Math.max(2, t.build - (sheet.brandt ? 1 : 0)) ? " – vor Ihnen liegen noch eigene Aufträge dieser Bauart" : "") + ".</div>";
+    if (n > 1) h += '<div class="meta">Bezahlt wird die ganze Serie bei der Bestellung, bei Krediten läuft je Schiff ein eigener. Abbestellen geht bis Baubeginn und kostet 15 %. Getauft wird nur das erste Schiff.</div>';
+    const fit = S.routes.filter(r => !E.canServe(S, sheet.type, r.a, r.b, r.cruise, r.stops));
+    if (fit.length) h += '<label class="field" for="ordline">Linie nach Ablieferung</label><select id="ordline" data-act="orderLine"><option value="">später zuweisen</option>' + fit.map(r => '<option value="' + r.id + '"' + (sheet.line === r.id ? " selected" : "") + ">" + esc(E.rInfo(S, r).name) + "</option>").join("") + "</select>";
+    return { h, O };
+  }
   function buySheet() {
-    let price, title, kinds;
-    if (sheet.kind === "new") { const t = E.TYPES[sheet.type]; price = (sheet.brandt ? E.brandtPrice(S, sheet.type) : E.newPrice(S, sheet.type)) + factoryExtra(); title = t.name + (sheet.brandt ? " in Brandt-Bauart" : "") + " bestellen"; kinds = ["bar", "bank", "werft"]; }
+    let price, title, kinds, ob = null;
+    if (sheet.kind === "new") { const t = E.TYPES[sheet.type]; ob = orderBox(t); price = ob.O.total; title = t.name + (sheet.brandt ? " in Brandt-Bauart" : "") + " bestellen"; kinds = ["bar", "bank", "werft"]; }
     else { const L = S.market.find(x => x.id === sheet.id); if (!L) { sheet = null; return ""; } price = L.price; title = "„" + L.name + "“ kaufen"; kinds = ["bar", "used"]; }
-    let h = '<div class="veil" data-act="close"><div class="sheet" role="dialog" aria-modal="true"><div class="kicker">Kaufpreis ' + M(price) + "</div><h3>" + esc(title) + "</h3>" + nameBox(sheet.name) + factoryBox() + '<p style="margin-top:12px">Wie wollen Sie bezahlen?</p>';
+    let h = '<div class="veil" data-act="close"><div class="sheet" role="dialog" aria-modal="true"><div class="kicker">' + (ob && ob.O.n > 1 ? "Zusammen " + M(price) : "Kaufpreis " + M(price)) + "</div><h3>" + esc(title) + "</h3>" + nameBox(sheet.name) + factoryBox() + (ob ? ob.h : "") + '<p style="margin-top:12px">Wie wollen Sie bezahlen?</p>';
     for (const k of kinds) {
       const q = E.quote(S, price, k);
       h += '<button class="opt" data-act="pay" data-k="' + k + '" ' + (q.ok ? "" : "disabled") + "><b>" + q.name + " – jetzt " + (q.now != null ? M(q.now) : "–") + "</b><span>" +
@@ -1593,7 +1798,7 @@
     if (!S) return "";
     const rt = E.rating(S), eq = E.equity(S), act = S.ships.filter(sh => E.active(S, sh)).length;
     const rows = [["Eigenkapital", M(eq), eq < 0], ["Bonität", rt.grade], ["Ruf", Math.round(S.rep)], ["Bekanntheit", Math.round(S.mk.brand)],
-      ["Kohlepreis", E.coalIdx(S) + " % " + coalArrow()], ["Schiffe", S.ships.length ? S.ships.length + " (" + act + " im Dienst)" : "keine"], ["Linien", S.routes.length || "keine"], ["Reederei-Index", E.fmt(E.score(S))]].concat(S.bo && E.boHeld(S) ? [["Depot", M(E.boValue(S))]] : []);
+      ["Kohlepreis", E.coalIdx(S) + " % " + coalArrow()], ["Schiffe", S.ships.length ? S.ships.length + " (" + act + " im Dienst)" : "keine"], ["Linien", S.routes.length || "keine"]].concat((() => { const L = S.routes.filter(r => r.tt && r.tt.n && r.pk != null); return L.length ? [["Pünktlichkeit", pkTxt(L.reduce((a, r) => a + r.pk, 0) / L.length)]] : []; })()).concat([["Reederei-Index", E.fmt(E.score(S))]]).concat(S.bo && E.boHeld(S) ? [["Depot", M(E.boValue(S))]] : []);
     return '<dl class="rs">' + rows.map(r => "<div><dt>" + r[0] + '</dt><dd class="' + (r[2] ? "neg" : "") + '">' + r[1] + "</dd></div>").join("") + "</dl>";
   }
   function sidePanel() {
@@ -1631,6 +1836,10 @@
 
   /* ---------- Rendern ---------- */
   function render() {
+    try { render0(); }
+    catch (e) { reportErr(e, "Anzeige"); if (sheet) { sheet = null; try { render0(); } catch (x) { } } }
+  }
+  function render0() {
     if (!S) {
       $("hdr").innerHTML = FLAG + '<div class="firm">Flaggschiff</div><div></div>';
       $("main").innerHTML = A.title ? '<div class="hero-img">' + img("title", "", "Hamburger Hafen 1880") + '<div class="ttl"><h1>Flaggschiff</h1><p>Spielbarer Prototyp · Personenschifffahrt ab 1880</p></div></div>'
@@ -1656,10 +1865,14 @@
 
   /* ---------- Aktionen ---------- */
   function act(a, d) {
+    try { act0(a, d); }
+    catch (e) { reportErr(e, "Aktion"); sheet = null; try { if (S) save(); render(); } catch (x) { reportErr(x, "Anzeige"); } }
+  }
+  function act0(a, d) {
     let err = null;
     switch (a) {
       case "rollfirm": { startName = randomFirm(); const i = $("nm"); if (i) { i.value = startName; return; } break; }
-      case "start": { Snd.wake(); Snd.horn(.2); const nm = ($("nm").value || "").trim().slice(0, 28) || randomFirm(); S = E.newGame((Date.now() ^ (Math.random() * 1e9)) | 0, nm, { home: startHome }); selA = S.home; const tc = $("tutchk"); if (tc && tc.checked) { S.tut = { step: 0, full: true, ch: {} }; tab = "kontor"; } else { S.tut = { done: true, ch: {} }; tab = "werft"; } break; }
+      case "start": { Snd.wake(); Snd.horn(.2); const nm = ($("nm").value || "").trim().slice(0, 28) || randomFirm(); S = E.newGame((Date.now() ^ (Math.random() * 1e9)) | 0, nm, { home: startHome, diff: startDiff }); selA = S.home; const tc = $("tutchk"); if (tc && tc.checked) { S.tut = { step: 0, full: true, ch: {} }; tab = "kontor"; } else { S.tut = { done: true, ch: {} }; tab = "werft"; } break; }
       case "choose": { if (Date.now() < evReadyAt) return; const was = S.pending[0] && S.pending[0].id, n = S.stats.sunk; E.resolve(S, +d.i); if (was === "seenot") { if (S.stats.sunk > n) Snd.storm(0); else Snd.horn(0); toast(esc(S.log[0].head)); } else Snd.bell(0, 520, .1); break; }
       case "price": E.stepPrice(S, d.id, +d.c, +d.d); break;
       case "align": E.alignPrices(S, d.id); Snd.bell(0, 660, .08); break;
@@ -1694,7 +1907,7 @@
       case "catCancel": { const K = E.kueche(S), c = d.v === "lux" ? K.lux : K.cat; if (c) sheet = { kind: "prev", what: "catCancel", v: d.v, fee: E.catCancelFee(S, c), name: E.catName(S, c.k) }; break; }
       case "coalY": coalYears = +d.v; break;
       case "coalS": coalShare = +d.v; break;
-      case "coalSign": { const o = E.coalOffer(S, coalYears, coalShare); if (!o.ok) err = o.why; else sheet = { kind: "prev", what: "coal", o }; break; }
+      case "coalSign": { const o = E.coalOffer(S, coalYears, coalShare, coalPort); if (!o.ok) err = o.why; else sheet = { kind: "prev", what: "coal", o }; break; }
       case "coalCancel": { const k = (S.coalK || []).find(x => x.id === d.id); if (k) sheet = { kind: "prev", what: "coalCancel", id: d.id, fee: E.coalCancelFee(S, k) }; break; }
       case "prevOk": {
         const P = sheet; if (!P || P.kind !== "prev") break;
@@ -1705,7 +1918,7 @@
         else if (P.what === "eigen") err = E.setEigen(S, P.v);
         else if (P.what === "cat") err = E.signCaterer(S, P.k, P.y);
         else if (P.what === "catCancel") err = E.cancelCaterer(S, P.v);
-        else if (P.what === "coal") err = E.signCoal(S, P.o.years, P.o.share);
+        else if (P.what === "coal") err = E.signCoal(S, P.o.years, P.o.share, false, P.o.port);
         else if (P.what === "coalCancel") err = E.cancelCoal(S, P.id);
         if (!err) { sheet = null; Snd.bell(0, 660, .08); }
         break;
@@ -1747,6 +1960,19 @@
       case "pkSet": { const v = parseInt(((($("pkamt") || {}).value) || "0").replace(/[^0-9]/g, ""), 10) || 0; err = E.pkSet(S, isGB() ? v * 20.43 : v); if (!err) Snd.bell(0, 660, .08); break; }
       case "setLang": setLang(d.v); break;
       case "setHome": startHome = d.v; startName = randomFirm(); break;
+      case "setDiff0": startDiff = E.DIFF[d.v] ? d.v : "normal"; break;
+      // Fahrplan, Bekohlung, Pausen und Schwierigkeit (v5.0)
+      case "abfAll": abfAll = !abfAll; break;
+      case "bufSet": E.setBuffer(S, d.id, +d.v); break;
+      case "bunkSet": err = E.setBunkRule(S, d.v); break;
+      case "shipBunk": E.setShipBunk(S, d.id, d.v || null); break;
+      case "pauseSet": E.setPause(S, "late", +d.v); break;
+      case "diffSet": confirmDiff = d.v === (S.diff || "normal") ? null : d.v; render(); return;
+      case "diffNo": confirmDiff = null; break;
+      case "diffOk": if (confirmDiff) { err = E.setDifficulty(S, confirmDiff); confirmDiff = null; if (!err) Snd.bell(0, 660, .08); } break;
+      case "cancelOrder": if (confirmCancel === d.id) { err = E.cancelOrder(S, d.id); confirmCancel = null; if (!err) openShip.delete(d.id); } else { confirmCancel = d.id; render(); return; } break;
+      case "mapShip": mapShip = mapShip === d.id ? null : d.id; break;
+      case "orderN": sheet.n = Math.max(1, Math.min(10, (sheet.n || 1) + +d.d)); renderModal(); translateDom($("modal")); return;
       case "buyBrandt": sheet = { kind: "new", type: d.type, name: E.randomName(S), brandt: true }; break;
       case "budget": E.setBudget(S, +d.v); break;
       case "campaign": err = E.campaign(S, d.id); break;
@@ -1763,8 +1989,9 @@
       case "survey": err = E.survey(S, d.id); break;
       case "pay": {
         const used = sheet.kind === "used", name = typedName();
-        err = sheet.kind === "new" ? E.buyNew(S, sheet.type, d.k, name, sheet.brandt, { eq: Object.keys(sheet.eq || {}).filter(k => sheet.eq[k]) }) : E.buyUsed(S, sheet.id, d.k, name);
-        if (!err) { sheet = null; tab = "flotte"; toast("Gekauft. Weisen Sie dem Schiff eine Linie zu."); Snd.coins(); if (used) Snd.horn(.4); }
+        const n = sheet.kind === "new" ? sheet.n || 1 : 1, line = sheet.kind === "new" ? sheet.line || null : null;
+        err = sheet.kind === "new" ? E.buyNew(S, sheet.type, d.k, name, sheet.brandt, { eq: Object.keys(sheet.eq || {}).filter(k => sheet.eq[k]), n, line }) : E.buyUsed(S, sheet.id, d.k, name);
+        if (!err) { sheet = null; tab = "flotte"; toast(line ? (n > 1 ? "Bestellt. Die Schiffe fahren nach der Ablieferung auf der gewählten Linie." : "Bestellt. Das Schiff fährt nach der Ablieferung auf der gewählten Linie.") : n > 1 ? "Bestellt. Weisen Sie den Schiffen eine Linie zu." : "Gekauft. Weisen Sie dem Schiff eine Linie zu."); Snd.coins(); if (used) Snd.horn(.4); }
         break;
       }
       case "close": sheet = null; break;
@@ -1795,6 +2022,7 @@
       case "reset2": wipe(); S = null; tab = "kontor"; startName = randomFirm(); break;
     }
     if (a !== "sell") confirmSell = null;
+    if (a !== "cancelOrder") confirmCancel = null;
     if (a !== "reset") confirmReset = false;
     if (err) toast(esc(err));
     if (S) save();
@@ -1824,12 +2052,18 @@
     if (t.dataset.act === "capswap") { const v = t.value; if (v) { const err = v === "__res" ? E.assignCaptain(S, t.dataset.id, null) : E.assignCaptain(S, t.dataset.id, v); if (err) toast(esc(err)); save(); render(); } }
     if (t.dataset.act === "staffchk") { E.setStaff(S, t.dataset.k, t.checked); save(); render(); }
     if (t.dataset.act === "mrsel") { mrRoute = t.value; render(); }
+    if (t.dataset.act === "resSel") { const err = E.setReserve(S, t.dataset.id, t.value || null); if (err) toast(esc(err)); save(); render(); }
+    if (t.dataset.act === "catchUp") { E.setCatchUp(S, t.dataset.id, t.checked); save(); render(); }
+    if (t.dataset.act === "markShip") { E.markShip(S, t.dataset.id, t.checked); save(); render(); }
+    if (t.dataset.act === "pauseChk") { E.setPause(S, t.dataset.k, t.checked); save(); render(); }
+    if (t.dataset.act === "coalPort") { coalPort = t.value; render(); }
+    if (t.dataset.act === "orderLine") { sheet.line = t.value || null; renderModal(); translateDom($("modal")); }
     if (t.dataset.act === "plan") { const sh = S.ships.find(x => x.id === t.dataset.id); if (sh) { const p = (sh.plan || []).map(x => Object.assign({}, x)), i = +t.dataset.i; if (p[i]) { p[i][t.dataset.f] = t.dataset.f === "line" ? t.value : +t.value; openPlan[sh.id] = true; E.setPlan(S, sh.id, p); save(); render(); } } }
   });
   document.addEventListener("input", e => { if (e.target.id === "boqty" && sheet && sheet.kind === "bo") { sheet.v = e.target.value.replace(/[^0-9]/g, ""); const q = $("boq"); if (q) { q.innerHTML = boQuoteHtml(); translateDom(q); } } if (e.target.id === "shipname" && sheet) sheet.name = e.target.value; if (e.target.id === "nm") startName = e.target.value; });
   $("tabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (!b || !S) return; tab = b.dataset.tab; confirmSell = null; mapPick = null; render(); window.scrollTo(0, 0); });
   /* ---------- Uhr ---------- */
-  const SEC = [0, 2, 1, 1 / 3];
+  const SEC = [0, 4, 2, 1];
   let accT = 0, lastT = performance.now(), dirty = false;
   const busy = () => { const a = document.activeElement; return !!(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && a.closest("#main")); };
   const running = () => S && !S.over && S.speed > 0 && !sheet && !document.hidden && !E.duePending(S);
@@ -1843,6 +2077,8 @@
     }
     let l = $("ledger"); if (l && tab === "kontor") { const tmp = document.createElement("div"); tmp.innerHTML = ledger2(); const n = tmp.firstElementChild; n.open = l.open; l.replaceWith(n); l = n; }
     if (DESK && S) { const rs = $("railStats"); if (rs) { rs.innerHTML = railStats(); translateDom(rs); } }
+    mapShipsLive();
+    document.querySelectorAll("[data-voy]").forEach(el => { const sh = S.ships.find(x => x.id === el.dataset.voy); if (sh) { el.innerHTML = voyLine(sh); translateDom(el); } });
     if (tutCheck()) { $("tutbox").innerHTML = tutBox(); document.body.classList.toggle("tut-on", !!$("tutbox").firstChild); translateDom($("tutbox")); tutGlow(); }
     translateDom($("hdr")); translateDom($("tele")); if (l) translateDom(l);
     document.querySelectorAll("[data-dock]").forEach(el => { const sh = S.ships.find(x => x.id === el.dataset.dock); if (sh) { const n = Math.max(0, (sh.dockUntil || 0) - S.t); el.textContent = n + " Tag" + (n === 1 ? "" : "e"); translateDom(el); } });
@@ -1859,8 +2095,17 @@
   function step() {
     const logTop = S.log[0];
     const r = E.advanceDay(S);
+    { const er = E.takeErrors(); if (er.length) reportErr(er[0].msg, er[0].what); }
     if (!r) { save(); renderFull(); return false; }
     if (r.month) monthFx(r.month, logTop);
+    // automatische Pausen (Verspätung, Kohle knapp, Monatsende, markiertes Schiff)
+    if (r.pause && r.pause.length && !E.duePending(S)) {
+      S.speed = 0; Snd.telegraph(0);
+      const pz = r.pause.find(x => x.k !== "month") || r.pause[0];
+      toast((pz.k === "month" && r.month ? E.dateStr(r.month.m) + " abgeschlossen: Ergebnis " + (r.month.profit >= 0 ? "+" : "") + E.fmt(r.month.profit) + " Mark · Die Zeit ist angehalten." : esc(pz.text) + " Die Zeit ist angehalten."));
+      if (pz.ship) { openShip.add(pz.ship); }
+      save(); renderFull(); return false;
+    }
     if (E.duePending(S)) { const ev = S.pending[0]; if (ev.id === "seenot") Snd.storm(0); else Snd.telegraph(0); save(); renderFull(); return false; }
     if (r.month || S.log[0] !== logTop || S.over) { save(); renderFull(); return true; }
     if (S.day % 3 === 0) save();
@@ -1869,11 +2114,28 @@
   }
   setInterval(() => {
     const now = performance.now(), dt = Math.min(1, (now - lastT) / 1000); lastT = now;
-    if (!running()) { accT = 0; return; }
-    accT += dt;
-    const sec = SEC[S.speed];
-    for (let i = 0; i < 4 && accT >= sec; i++) { accT -= sec; if (!step()) { accT = 0; break; } }
+    try {
+      if (!running()) { accT = 0; return; }
+      accT += dt;
+      const sec = SEC[S.speed];
+      for (let i = 0; i < 4 && accT >= sec; i++) { accT -= sec; if (!step()) { accT = 0; break; } }
+    } catch (e) { reportErr(e, "Tagesschritt"); accT = 0; }
   }, 100);
+  // Wächter: Steht die Zeit länger als 3 s, obwohl ein Tempo eingestellt ist und weder Fenster noch Ereignis zu sehen sind,
+  // wird der hängende Zustand zurückgesetzt (unsichtbares Fenster schließen, fälliges Ereignis neu zeichnen)
+  let wdT = null, wdSince = 0, wdNote = 0;
+  setInterval(() => {
+    const now = performance.now();
+    if (!S || S.over || !(S.speed > 0) || document.hidden) { wdSince = now; return; }
+    if (S.t !== wdT) { wdT = S.t; wdSince = now; return; }
+    const box = $("modal") && $("modal").firstElementChild, shown = !!(box && box.getClientRects().length);
+    if (shown) { wdSince = now; return; }
+    if (now - wdSince < (SEC[S.speed] || 1) * 1000 + 3000) return;
+    wdSince = now;
+    sheet = null; evKey = null; dirty = false; accT = 0;
+    try { render(); } catch (e) { reportErr(e, "Wächter"); }
+    if (Date.now() - wdNote > 60000) { wdNote = Date.now(); toast("Die Zeit hing. Das Spiel hat sich wieder in Gang gesetzt."); }
+  }, 1000);
   document.addEventListener("toggle", e => { const d = e.target; if (d && d.id === "ledger") ledgerOpen = d.open; if (d && d.dataset && d.dataset.ship) { if (d.open) openShip.add(d.dataset.ship); else openShip.delete(d.dataset.ship); } if (d && d.dataset && d.dataset.sec) openSec[d.dataset.sec] = d.open; if (d && d.dataset && d.dataset.plan) openPlan[d.dataset.plan] = d.open; }, true);
   document.addEventListener("focusout", () => setTimeout(() => { if (dirty && !busy()) { dirty = false; render(); } }, 60));
   document.addEventListener("visibilitychange", () => { if (document.hidden && S) save(); });

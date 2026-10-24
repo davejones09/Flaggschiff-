@@ -324,6 +324,13 @@ Seit v4.6 (Zeitung, Börse und Einführung).
 - `ev_geruecht` – unten links
 - `pers_prokurist` – oben rechts
 
+### bogen_fahrplan.webp
+Seit v5.0 (Fahrplan und Pünktlichkeit).
+- `ev_entschaedigung` – unten rechts
+- `ev_kohle_knapp` – unten links
+- `ev_verspaetung` – oben rechts
+- `kt_abfahrten` – oben links
+
 ### bogen_kohle.webp
 Seit v4.5 (Kohle und Küche).
 - `ev_bunkern` – unten rechts

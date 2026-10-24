@@ -400,7 +400,7 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 
 - Sortierte Spalten in den Statistiken waren auf Englisch und Spanisch nicht übersetzt, ebenso einige ältere Hinweise (abgelaufene Fristen mehrerer Schiffe, verchartertes Schiff, hohe Sinkgefahr, Zinsen).
 
-## v4.6 · Zeitung, Börse und Einführung · aktuell
+## v4.6 · Zeitung, Börse und Einführung
 
 *Die Zeitung bekommt Rubriken und einen Kurszettel, wer Geld übrig hat, kann es an der Börse anlegen – und der Berater erklärt jeden Bereich beim ersten Besuch.*
 
@@ -427,7 +427,49 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Das Depot zählt zum Eigenkapital. Steht die Kasse am Monatsende im Minus, verkauft die Bank zuerst Aktien, bevor sie an die Schiffe geht.
 - Die Simulation prüft jetzt auch die Börse (Aktien gegen Reederei, Hauszeche, Prokurist). Alles Nähere im Konzept (docs/konzept-v4.6.md).
 
+## v5.0 · Fahrplan und Pünktlichkeit · aktuell
+
+*Die Schiffe fahren nach Fahrplan: Die Fahrgäste zahlen bei der Abfahrt, die Kohle kostet beim Bekohlen, und wer zu spät kommt, verliert Fahrgäste an die Konkurrenz. Auf „Normal“ ist das Spiel spürbar schwerer, „Leicht“ spielt sich etwa wie v4.6.*
+
+**NEU**
+
+- Fahrplan: Jedes Schiff fährt einen Umlauf aus Abfahrt, Seezeit, Ankunft und Liegezeit. Die Schiffe einer Linie fahren im Takt abwechselnd von beiden Enden, das langsamste bestimmt den Takt. Kurze Linien mit mehreren Fahrten am Tag laufen als Tagespaket.
+- Die Fahrgäste sammeln sich bis zur nächsten Abfahrt und zahlen beim Einsteigen. Wer keinen Platz bekommt oder zu lange wartet, während die Rivalen ablegen, fährt mit der Konkurrenz – Kaufleute schneller als Auswanderer.
+- Abfahrtstafel unter Kontor → Abfahrten: die nächsten Abfahrten mit erwarteter Verspätung und Auslastung, die letzten Fahrten mit Ergebnis und die Pünktlichkeit je Linie. Am PC als Tabelle, am Handy kompakt.
+- Die Seekarte zeigt die Schiffe an ihrer echten Position, ein Tipp nennt Ziel, Ankunft und Bunker. In der Flotte steht bei jedem Schiff, wo es ist, wann es abfährt und wie viel Kohle es geladen hat.
+- Bekohlung: Kohle wird in Tonnen gerechnet und erst beim Bekohlen bezahlt, Menge mal Hafenpreis mal Kohlepreis. Zechenhäfen sind am billigsten (Hamburg, Liverpool, London, Rotterdam, Stettin, Glasgow, Leith, Hull …), übrige europäische Häfen 6 % teurer, Kohlestationen 18 % (Funchal, Las Palmas, Lissabon, St. Thomas, New York …) und die Ferne 40 % (Rio, Buenos Aires, Kapstadt, Schanghai, Konstantinopel, Hammerfest …).
+- Drei Bekohlungsregeln unter Kontor → Einkauf: im Heimathafen volltanken (Standard), wo es am billigsten ist, immer nur das Nötige. Jedes Schiff kann in der Flotte eine eigene Regel bekommen. Bekohlen verlängert die Liegezeit.
+- Reicht die Kohle nach einem Sturm nicht, entscheiden Sie: langsam weiterfahren, im nächsten Hafen teuer nachbunkern oder Holz und Mobiliar verfeuern. Ein Maschineninspektor entscheidet das selbst. Eigenes Bild für den Kohlemangel.
+- Verspätungen durch Sturm (Nordatlantik im Herbst und Winter), Nebel (Ärmelkanal und eigene Küste), Eis (Ostsee), Streiks, Pannen und knappe Liegezeit. Die Ereignisse Nebel, Sturmwarnung, Eisgang und Streik halten die Schiffe jetzt wirklich auf. Ab zwei Tagen Verspätung zahlt die Reederei Entschädigung, ab drei Tagen steht es in der Zeitung.
+- Pünktlichkeit je Linie und als fünfte Erfahrung der Fahrgäste neben Komfort, Service, Sicherheit und Küche: wichtig in der 1. Klasse und bei der Post, kaum bei Auswanderern und Ausflüglern. Unpünktliche Linien verlieren für Monate Fahrgäste an pünktlichere Rivalen. Jeder Rivale hat seine eigene Pünktlichkeit, zu sehen bei den Rivalen und in der Marktforschung.
+- Gegenmittel je Linie unter „Linien“: Pufferzeit (5, 10 oder 20 % längerer Umlauf), ein Reserveschiff (springt bei Werft, Havarie oder großer Verspätung ein) und Volldampf zum Aufholen. Dazu wie bisher die Lohnstufe der Maschine und die Wartung. Jedes Mittel kostet etwas.
+- Schwierigkeitsgrad beim Gründen: Leicht (550.000 Mark Gründungskredit, schwächere Rivalen, halb so viele Verspätungen, seltener Unglücke, einen halben Prozentpunkt weniger Zins), Normal (wie bisher 450.000 Mark) und Schwer (350.000 Mark, stärkere Rivalen, mehr Verspätungen und Unglücke, einen Prozentpunkt mehr Zins). Im Kontor lässt er sich einmal umstellen.
+- Automatische Pausen, einzeln einstellbar unter Kontor → Abfahrten: bei Verspätung ab einer wählbaren Grenze (Standard 3 Tage), wenn die Kohle knapp wird, am Monatsende und bei der Ankunft eines markierten Schiffs („Ankunft melden“ in der Flotte).
+- Serienbestellung in der Werft: 1 bis 10 Schiffe einer Bauart auf einmal, 2 % Rabatt je weiteres Schiff (höchstens 10 %), die Linie gleich mit dazu. Die Werft liefert von jeder Bauart eines nach dem anderen, große Schiffe mit mehr Abstand; das gilt auch für Einzelbestellungen. Abbestellen geht bis Baubeginn und kostet 15 %. Getauft wird das erste Schiff einer Serie.
+- Lieferverträge gelten für einen gewählten Hafen. Die Hauszeche liefert in die Häfen ihrer Region.
+- Neues Kapitel „Abfahrten“ in der Einführung, auch in alten Spielständen. Der Grundkurs erklärt jetzt Fahrplan und Bekohlung.
+- 4 neue Bilder: Abfahrtstafel, große Verspätung, Kohlemangel und Entschädigung.
+
+**GEÄNDERT**
+
+- Tempo: Ein Tag dauert auf Langsam, Halbe und Volle jetzt 4, 2 und 1 Sekunde (vorher 2, 1 und ⅓).
+- Die Kasse schwankt stärker, weil das Geld in Schüben kommt. Der Berater rechnet deshalb mit dem Schnitt aus drei Monaten.
+- Havarien passieren nur noch auf See, im Jahr etwa so oft wie bisher.
+- Die Vorschau bei Fahrstufe und Verpflegung rechnet die nächsten 60 Tage voraus statt den Vormonat nach.
+- Kontor → Statistik → Kohle zeigt gekaufte und verbrauchte Kohle getrennt, das Hauptbuch die Bekohlung je Hafen. Kohle in den Bunkern zählt zum Eigenkapital.
+- Alte Spielstände laufen auf Normal: Alle Schiffe legen am nächsten Tag in ihrem Abfahrthafen ab, mit halb vollem Bunker. Laufende Lieferverträge gelten für den Heimathafen.
+- Die Simulation spielt jetzt nach Fahrplan, mit Südamerika als neuer Linienart. Leicht bringt etwa so viel wie v4.6, Normal rund ein Drittel weniger, Schwer gut die Hälfte weniger. Alles Nähere im Konzept (docs/konzept-v5.0.md).
+
+**BEHOBEN**
+
+- Die Zeit konnte stehen bleiben, nachdem man im Einkauf die Verpflegung auf „ordentlich“ oder „fein“ gestellt hatte: Das Vorschau-Fenster stürzte unsichtbar ab. Dazu fangen Tagesschritt, Fenster und Knöpfe jetzt Fehler ab, und ein Wächter setzt die Uhr wieder in Gang, wenn sie ohne sichtbares Fenster länger als drei Sekunden steht.
+- Der Börsenkauf „nach Betrag“ wurde bei sehr großen Beträgen langsam.
+- Speichern scheiterte still, wenn der Speicher des Geräts voll war. Jetzt kommt einmal eine Warnung.
+- Einige ältere Texte waren auf Englisch und Spanisch nicht übersetzt (Schiffe im Bau, Linie nach Ablieferung, Kredit eines Schiffs, Bestellmeldung der Werft).
+
 ## Als Nächstes geplant
 
+- v5.1 „Entwicklung der Reederei“.
+- Danach: Börsengang der eigenen Reederei.
 - Restliche Musik (Ostsee-Winter, Seenot, Salon, Nordlandfahrt, Mittelmeer, Schiffstaufe-Fanfare), sobald Suno Premium da ist.
 - Später: echte App-Version für App Store bzw. Desktop mit Claude Code am PC, wie im Konzept vorgesehen.
