@@ -55,6 +55,8 @@ p { margin: 0 0 10px; }
 .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin: 10px 0 4px; }
 .kv div { border-left: 2px solid var(--brass); padding-left: 10px; }
 .kv b { display: block; font: 700 21px/1.1 var(--serif); color: var(--ink); font-variant-numeric: tabular-nums; }
+.lagerbar { height: 8px; border: 1px solid var(--line); border-radius: 4px; margin: 4px 0 8px; overflow: hidden; background: var(--paper); }
+.lagerbar i { display: block; height: 100%; background: var(--brass); }
 .kv span { font-size: 14px; color: var(--muted); }
 
 /* Hauptbuch */
@@ -537,3 +539,16 @@ body.desk .mlines, body.desk .mtypes { grid-template-columns: 1fr 1fr; }
 .ferry .frow .thumb { width: 72px; height: 48px; object-fit: cover; border-radius: 4px; flex: none; }
 .ferry .frow > div { flex: 1; min-width: 0; }
 body.desk .ferry { max-width: 820px; }
+/* v5.1.1: Hauptbuch in Farben und Gruppen */
+.l3.rev span:nth-child(n+2) { color: var(--good); } .l3.cst span:nth-child(n+2) { color: var(--red); } .l3.nocol span { color: inherit; }
+details.lgrp > summary { display: block; min-height: 0; list-style: none; cursor: pointer; padding: 0; margin: 0; border: 0; background: none; } details.lgrp > summary::-webkit-details-marker { display: none; }
+.l3.lg span:first-child::before { content: "▸ "; color: var(--ink-2); } details.lgrp[open] .l3.lg span:first-child::before { content: "▾ "; }
+.l3.lg { font-weight: 700; }
+.vbars { display: flex; align-items: stretch; gap: 2px; height: 120px; margin: 8px 0 2px; position: relative; }
+.vbars .vb { flex: 1; position: relative; min-width: 0; }
+.vbars .vb i { position: absolute; left: 0; right: 0; background: var(--good); border-radius: 2px; }
+.vbars .vb.neg i { background: var(--red); }
+.vbars .zero { position: absolute; left: 0; right: 0; border-top: 1px solid var(--rule); }
+.vlab { display: flex; justify-content: space-between; font: 11px var(--sans); color: var(--muted); }
+table.stat td.rev { color: var(--good); } table.stat td.cst { color: var(--red); }
+table.stat tr.fg td { font-weight: 700; cursor: pointer; } table.stat tr.ind td:first-child { padding-left: 18px; }

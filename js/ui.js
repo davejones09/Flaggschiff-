@@ -7,6 +7,7 @@
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const M = n => E.fmt(n) + " M";
   const signed = n => (n < 0 ? '<span class="neg">' : "") + E.fmt(n) + (n < 0 ? "</span>" : "");
+  const signedC = n => '<span class="' + (n < 0 ? "neg" : "pos") + '">' + E.fmt(n) + "</span>";
   const kn = v => String(v).replace(".", ",");
 
   // Drei Spielstände (v5.1): Platz 1 nutzt den bisherigen Schlüssel, Platz 2 und 3 liegen daneben; der zuletzt gespielte Platz wird gemerkt
@@ -182,6 +183,7 @@
     if ((m = core.match(/^Eigener Entwurf auf Basis (.+)$/))) return r.basis + (DD[m[1]] || TY[m[1]] || m[1]);
     if ((m = core.match(/^Eigener Entwurf „(.+)“$/))) return r.own(m[1]);
     if (TY[core]) return TY[core][0].toUpperCase() + TY[core].slice(1);
+    if (window.I18_MISS) window.I18_MISS.add(LANG + "|" + key); // nur im Übersetzungstest gesetzt
     return core;
   }
   function pounds(mark) {
@@ -354,6 +356,11 @@
 
   /* ---------- Kontor ---------- */
   const SPECIAL_COST = ["Werft", "Reparaturen", "Strafen", "Lotsengeld", "Schadenersatz", "Bergelohn", "Gutachten", "Agenturen", "Sonderausgaben", "Museumsbau", "Entschädigungen", "Kursverluste"];
+  // Kostengruppen für Hauptbuch und Statistik (v5.1.1)
+  const COST_GROUPS = [["betrieb", "Betrieb"], ["schiffe", "Schiffe"], ["finanzen", "Finanzen"], ["sonst", "Sonstiges"]];
+  const G_BETRIEB = ["Heuer", "Kapitäne", "Personal", "Verpflegung", "Hafengebühren", "Lotsengeld", "Kontor", "Konzession"], G_SCHIFFE = ["Wartung", "Versicherung", "Werft", "Reparaturen", "Gutachten"], G_FIN = ["Zinsen", "Überziehungszins", "Kursverluste", "Börsengebühren"];
+  function costGroup(k) { return isCoalCost(k) || G_BETRIEB.includes(k) ? "betrieb" : G_SCHIFFE.includes(k) ? "schiffe" : G_FIN.includes(k) ? "finanzen" : "sonst"; }
+  function costName(k) { if (!k.startsWith("Bekohlung ")) return esc(k); const kai = k.endsWith(" (Kai)"), p = k.slice(10, kai ? -6 : undefined); return "<span>Bekohlung</span> <span>" + esc(p) + "</span>" + (kai ? " <span>(Kai)</span>" : ""); }
   const LEDGER_ORDER = ["Kohle", "Heuer", "Verpflegung", "Hafengebühren", "Wartung", "Versicherung", "Werbung", "Zinsen", "Vertragsstrafen", "Überziehungszins", "Kontor"];
   function ledgerOld() {
     const c = S.cur, prev = S.last, ex = c.extra || {};
@@ -396,14 +403,14 @@
       (DESK ? "<li>Tastatur: Die Leertaste hält die Zeit an oder lässt sie weiterlaufen, 0 bis 3 stellen den Maschinentelegrafen, K, L, F, W, M und B wechseln die Bereiche. Bei Ereignissen wählen 1 bis 9 die Antwort, Esc schließt Fenster.</li>" : "") + "<li>Unter <b>Kontor</b> finden Sie auch Statistiken zu Schiffen, Linien und Finanzen sowie Ihr Personal. Unter <b>Markt</b> stehen Werbung, die sechs Rivalen und die Marktforschung.</li>" +
       "<li>Die Zeit läuft von selbst: Ein Tag dauert auf „Langsam“ vier Sekunden, auf „Halbe“ zwei und auf „Volle“ eine. " + (DESK ? "Am Maschinentelegrafen oben halten Sie an oder geben mehr Fahrt – oder mit der Leertaste und den Tasten 0 bis 3." : "Am Maschinentelegrafen unten halten Sie an oder geben mehr Fahrt.") + " Bei Ereignissen stoppt die Zeit.</li>" +
       "<li>Ihre Schiffe fahren nach Fahrplan: Abfahrt, Seezeit, Ankunft, Liegezeit. Die Fahrgäste zahlen bei der Abfahrt. Wer zu lange auf Ihr Schiff warten muss, fährt mit der Konkurrenz. Kontor → Abfahrten zeigt die Tafel, unter Linien stellen Sie Puffer, Reserveschiff und Aufholen ein.</li>" +
-      "<li>Kohle kostet erst beim Bekohlen: Menge mal Hafenpreis. Nah an den Zechen ist sie billig, in der Ferne teuer. Die Regel dafür steht unter Kontor → Einkauf, einzelne Schiffe stellen Sie in der Flotte anders ein.</li>" +
+      "<li>Kohle kostet erst beim Bekohlen. Im Heimathafen nehmen Ihre Schiffe sie aus dem Kohlelager zum Einstandspreis, ist es leer, am Kai 15 % teurer. Auswärts zahlen sie den Hafenpreis, nah an den Zechen billig, in der Ferne teuer.</li>" +
       "<li>Sturm, Nebel, Eis, Streiks und Pannen bringen Verspätungen. Ab zwei Tagen zahlen Sie Entschädigung, große Verspätungen stehen in der Zeitung, und unpünktliche Linien verlieren Fahrgäste.</li>" +
       (DESK ? "<li>Unter <b>Linien</b> wählen Sie Start- und Zielhafen frei aus rund 50 Häfen – oder klicken zwei Häfen auf der Seekarte rechts an.</li>" : "<li>Unter <b>Linien</b> wählen Sie Start- und Zielhafen frei aus rund 50 Häfen – oder tippen zwei Häfen auf der Karte an.</li>") +
       "<li>Größere Schiffe haben Klassen: 1. und 2. Klasse, dazu 3. Klasse oder Zwischendeck. Jede Linie hat ihre eigene Nachfrage je Klasse, und Sie setzen die Preise je Klasse. Kleine Fähren fahren mit einer Einheitsklasse.</li>" +
       "<li>Jeder Hafen hat seine Kundschaft: Badegäste auf den Inseln, Bahnreisende an den Fährhäfen, Kaufleute in den großen Städten, Auswanderer nach Übersee.</li>" +
       "<li>Vergnügungsreisen (ab 1891/92) sind eine eigene Linienart: Nordland im Sommer, Mittelmeer und Orient im Winter.</li>" +
       "<li><b>Werbung</b> macht Sie bekannter und bringt mehr Fahrgäste – laufende Anzeigen, Agenturen, Kampagnen für einzelne Linien.</li>" +
-      "<li>Unter Kontor → Einkauf kaufen Sie Kohle auf Vertrag für einen Hafen und bestimmen die Verpflegung an Bord. In der Flotte wählen Sie die Fahrstufe: Sparfahrt spart Kohle, Volldampf schafft mehr Fahrten.</li>" +
+      "<li>Unter Kontor → Einkauf füllen Sie Ihr Kohlelager, schließen Lieferverträge ins Lager und bestimmen die Verpflegung an Bord. In der Flotte wählen Sie die Fahrstufe: Sparfahrt spart Kohle, Volldampf schafft mehr Fahrten.</li>" +
       "<li>Ab drei Schiffen und einem Geschäftsjahr mit Gewinn öffnet sich unter Kontor → Börse der Aktienhandel. Wer ihn nicht nutzt, verpasst nichts.</li>" +
       "<li>Auf See droht Seenot. Dann entscheiden Sie: aufgeben, pumpen oder Hilfe rufen. Rettungsboote, Schotten und Funk verbessern die Aussichten.</li>" +
       "<li>Das Spiel läuft endlos. Löhne, Preise und Reisende nehmen über die Jahrzehnte zu, neue Technik und Bahnverbindungen verändern die Märkte.</li></ul></details>";
@@ -762,12 +769,12 @@
     let h = '<h3 style="margin-top:12px">Kohlepreis</h3><p class="sub">In Prozent des Normalpreises, jeden Monat aufgezeichnet – bis zu zehn Jahre zurück.</p>';
     h += '<div class="kv"><div><b>' + E.coalIdx(S) + " % " + coalArrow() + '</b><span>heute</span></div>' + (v.length ? '<div><b>' + Math.round(v.slice(-12).reduce((a, b) => a + b, 0) / v.slice(-12).length * 100) + ' %</b><span>Schnitt der letzten 12 Monate</span></div><div><b>' + Math.round(Math.min(...v) * 100) + ' %</b><span>am billigsten</span></div><div><b>' + Math.round(Math.max(...v) * 100) + " %</b><span>am teuersten</span></div>" : "") + "</div>";
     h += H.length < 2 ? '<div class="hint">Der Verlauf wird jeden Monat aufgezeichnet. Nach zwei Monatsabschlüssen erscheint hier das Diagramm.</div>' : coalChart(H);
-    const years = Object.keys(S.years || {}).sort().reverse().slice(0, 10), coalCost = Y => Object.keys(Y.costs || {}).filter(k => k === "Kohle" || k === "Kohle-Mindestabnahme" || k.startsWith("Bekohlung")).reduce((a, k) => a + Y.costs[k], 0);
+    const years = Object.keys(S.years || {}).sort().reverse().slice(0, 10), coalCost = Y => Object.keys(Y.costs || {}).filter(isCoalCost).reduce((a, k) => a + Y.costs[k], 0);
     if (years.length) h += '<h3 style="margin-top:16px">Kohle je Jahr</h3><div class="tblwrap"><table class="stat"><thead><tr><th>Jahr</th><th class="n">gekauft</th><th class="n">bezahlt</th><th class="n">verbraucht</th><th class="n">Anteil an den Kosten</th></tr></thead><tbody>' +
       years.map(y => { const Y = S.years[y], C = Y.coal, k = coalCost(Y); return "<tr><td>" + y + '</td><td class="n">' + (C ? E.fmt(C.bt) + " t" : "–") + '</td><td class="n">' + E.fmt(k) + '</td><td class="n">' + (C ? E.fmt(C.ut) + " t" : "–") + '</td><td class="n">' + (Y.cost ? Math.round(k / Y.cost * 100) + " %" : "–") + "</td></tr>"; }).join("") + "</tbody></table></div>";
-    const Yn = S.years && S.years[E.cal(S.m).y], bk = Yn && Yn.costs ? Object.keys(Yn.costs).filter(k => k.startsWith("Bekohlung ")).sort((a, b) => Yn.costs[b] - Yn.costs[a]) : [];
-    if (bk.length) h += '<h3 style="margin-top:16px">Bekohlung nach Häfen (' + E.cal(S.m).y + ')</h3><div class="tblwrap"><table class="stat"><tbody>' + bk.map(k => "<tr><td>" + esc(k.slice(10)) + '</td><td class="n">' + E.fmt(Yn.costs[k]) + " Mark</td></tr>").join("") + "</tbody></table></div>";
-    return h + '<div class="meta" style="margin-top:8px">Gekauft wird beim Bekohlen, verbraucht auf See – was dazwischen im Bunker liegt, zählt zum Eigenkapital. Pro Schiff und pro Linie steht die Kohle in den Reitern Schiffe und Linien – jede Spalte lässt sich sortieren.</div>';
+    const Yn = S.years && S.years[E.cal(S.m).y], bk = Yn && Yn.costs ? Object.keys(Yn.costs).filter(k => k.startsWith("Bekohlung ") || k === "Kohle aus dem Lager").sort((a, b) => Yn.costs[b] - Yn.costs[a]) : [];
+    if (bk.length) h += '<h3 style="margin-top:16px">Bekohlung nach Häfen (' + E.cal(S.m).y + ')</h3><div class="tblwrap"><table class="stat"><tbody>' + bk.map(k => "<tr><td>" + (k === "Kohle aus dem Lager" ? "Kohlelager" : esc(k.slice(10))) + '</td><td class="n">' + E.fmt(Yn.costs[k]) + " Mark</td></tr>").join("") + "</tbody></table></div>";
+    return h + '<div class="meta" style="margin-top:8px">Als Kosten gebucht wird die Kohle beim Bekohlen, verbraucht auf See – was im Lager und in den Bunkern liegt, zählt zum Eigenkapital. Pro Schiff und pro Linie steht die Kohle in den Reitern Schiffe und Linien – jede Spalte lässt sich sortieren.</div>';
   }
   function shipTags(sh) {
     let t = "";
@@ -810,26 +817,26 @@
   function einkauf() {
     const st = E.staff(S), K = E.kueche(S), y = E.yearOf(S);
     let h = img("ev_kohlevertrag", "banner", "Kohlenhändler im Kontor") + '<h2>Einkauf</h2><p class="sub">Kohle und Verpflegung für die ganze Reederei. Einzelne Schiffe stellen Sie in der Flotte anders ein.</p>';
-    // Kohle (seit v5.0 in Tonnen, bezahlt beim Bekohlen, Verträge je Hafen)
+    // Kohle (seit v5.1.1 mit Kohlelager im Heimathafen; Verträge liefern ins Lager)
     const ports = E.coalPorts(S), use = (S.coalUse || []).slice(-3), useT = use.length ? use.reduce((a, b) => a + b, 0) / use.length : 0;
-    if (!coalPort || !ports.includes(coalPort)) coalPort = ports.slice().sort((a, b) => E.coalBase(S, b) - E.coalBase(S, a))[0];
     h += '<h3>Kohle</h3><div class="kv" data-tut="coal"><div><b>' + E.coalIdx(S) + " % " + coalArrow() + '</b><span>Kohlepreis</span></div><div><b>' + E.fmt(Math.round(useT)) + ' t</b><span>Verbrauch im Monat</span></div><div><b>' + M(E.bunkerValue(S)) + "</b><span>Kohle in den Bunkern</span></div></div>" + spark((S.coalHist || []).slice(-36).concat([{ m: S.m, c: S.coal }]), 340, 44);
-    h += '<div class="meta">Bezahlt wird beim Bekohlen: Tonnen mal Hafenpreis mal Kohlepreis. Nah an den Zechen ist die Kohle billig, an Kohlestationen mittel, in der Ferne teuer. Der Kohlepreis schwankt jeden Monat um bis zu 3 %; Streiks und neue Zechen bewegen ihn stärker.</div>';
-    h += bunkBox();
+    h += '<div class="meta">Der Kohlepreis schwankt jeden Monat um bis zu 3 %; Streiks und neue Zechen bewegen ihn stärker. Nah an den Zechen ist die Kohle billig, an Kohlestationen mittel, in der Ferne teuer.</div>';
+    h += lagerBox();
     const tierOf = p => E.TIER_NAME[E.portTier(p)];
     h += '<div class="tblwrap"><table class="stat"><thead><tr><th>Hafen</th><th>Lage</th><th class="n">Preis je Tonne</th><th class="n">Bekohlt im Monat</th></tr></thead><tbody>' +
-      ports.map(p => "<tr><td>" + pName(p) + (p === (S.home || "ham") ? " ★" : "") + "</td><td>" + tierOf(p) + '</td><td class="n">' + eur(E.coalPortPrice(S, p)) + ' M</td><td class="n">' + E.fmt(Math.round(E.coalBase(S, p))) + " t</td></tr>").join("") + "</tbody></table></div>";
+      ports.map(p => "<tr><td>" + pName(p) + (p === (S.home || "ham") ? " ★" : "") + "</td><td>" + tierOf(p) + '</td><td class="n">' + eur(E.coalPortPrice(S, p) * (p === (S.home || "ham") ? E.KAI : 1)) + " M" + (p === (S.home || "ham") ? " (Kai)" : "") + '</td><td class="n">' + E.fmt(Math.round(E.coalBase(S, p))) + " t</td></tr>").join("") + "</tbody></table></div>";
+    h += '<div class="meta">Auswärts bunkern die Schiffe von selbst so viel, wie sie bis zum nächsten Heimathafen brauchen, mit Reserve für einen Sturmtag. Im Heimathafen nehmen sie die Kohle aus dem Lager und füllen den Bunker.</div>';
     for (const k of S.coalK || []) {
-      h += '<div class="item"><div class="row"><h3>Liefervertrag in ' + pName(k.port || S.home) + '</h3></div><div class="meta">' + E.fmt(k.qty) + " t im Monat zu " + eur(k.pt || 0) + " M je Tonne · " + (k.years === 1 ? "1 Jahr" : k.years + " Jahre") + " · fest " + M(k.qty * (k.pt || 0)) + " im Monat · bis " + E.dateStr(k.until) + "</div>" +
-        (k.stop >= S.m ? '<div class="hint bad">Lieferausfall bis ' + E.dateStr(k.stop) + " – bis dahin bunkern Ihre Schiffe zum Marktpreis.</div>" : "") +
+      h += '<div class="item"><div class="row"><h3>Liefervertrag ins Kohlelager</h3></div><div class="meta">' + E.fmt(k.qty) + " t im Monat zu " + eur(k.pt || 0) + " M je Tonne · " + (k.years === 1 ? "1 Jahr" : k.years + " Jahre") + " · fest " + M(k.qty * (k.pt || 0)) + " im Monat · bis " + E.dateStr(k.until) + "</div>" +
+        (k.stop >= S.m ? '<div class="hint bad">Lieferausfall bis ' + E.dateStr(k.stop) + " – bis dahin kommt keine Kohle ins Lager.</div>" : "") +
         '<div class="actions"><button class="btn warn" data-act="coalCancel" data-id="' + k.id + '">Kündigen (' + M(E.coalCancelFee(S, k)) + ")</button></div></div>";
     }
-    const o = E.coalOffer(S, coalYears, coalShare, coalPort);
-    h += '<div class="item" data-tut="coalnew"><h3>Neuer Liefervertrag</h3><label class="field" for="coalport">Hafen</label><select id="coalport" data-act="coalPort">' + ports.map(p => '<option value="' + p + '"' + (p === coalPort ? " selected" : "") + ">" + pName(p) + " – " + E.fmt(Math.round(E.coalBase(S, p))) + " t im Monat</option>").join("") + "</select>" +
-      '<label class="field">Laufzeit</label><div class="seg lv" role="group">' + [1, 3, 5].map(n => '<button data-act="coalY" data-v="' + n + '" aria-pressed="' + (coalYears === n) + '">' + (n === 1 ? "1 Jahr" : n + " Jahre") + "<small>Aufschlag " + pctSign(E.coalOffer(S, n, coalShare, coalPort).surch) + "</small></button>").join("") + "</div>" +
-      '<label class="field">Menge</label><div class="seg" role="group" style="grid-template-columns:repeat(2,1fr)">' + [.5, 1].map(v => '<button data-act="coalS" data-v="' + v + '" aria-pressed="' + (coalShare === v) + '">' + Math.round(v * 100) + " % der Kohle aus diesem Hafen</button>").join("") + "</div>";
+    const o = E.coalOffer(S, coalYears, coalShare);
+    h += '<div class="item" data-tut="coalnew"><h3>Neuer Liefervertrag</h3>' +
+      '<label class="field">Laufzeit</label><div class="seg lv" role="group">' + [1, 3, 5].map(n => '<button data-act="coalY" data-v="' + n + '" aria-pressed="' + (coalYears === n) + '">' + (n === 1 ? "1 Jahr" : n + " Jahre") + "<small>Aufschlag " + pctSign(E.coalOffer(S, n, coalShare).surch) + "</small></button>").join("") + "</div>" +
+      '<label class="field">Menge</label><div class="seg" role="group" style="grid-template-columns:repeat(2,1fr)">' + [.5, 1].map(v => '<button data-act="coalS" data-v="' + v + '" aria-pressed="' + (coalShare === v) + '">' + Math.round(v * 100) + " % der Kohle im Heimathafen</button>").join("") + "</div>";
     if (o.qty >= 10) h += '<table class="fin" style="width:100%;margin-top:10px"><tr><td>Menge</td><td>' + E.fmt(o.qty) + " t im Monat</td></tr><tr><td>Preis</td><td>" + eur(o.pt) + " M je Tonne (" + Math.round(o.price * 100) + " % des Normalpreises, heute " + E.coalIdx(S) + " %)</td></tr><tr><td>Fest im Monat</td><td>" + M(o.monthly) + "</td></tr><tr><td>" + (o.now >= 0 ? "Mehrkosten zum heutigen Preis" : "Ersparnis zum heutigen Preis") + "</td><td>" + M(Math.abs(o.now)) + " im Monat</td></tr><tr><td>Lohnt sich ab</td><td>Kohlepreis über " + Math.round(o.price * 100) + " %</td></tr></table>";
-    h += '<div class="meta">Der Vertrag gilt nur für diesen Hafen. Mindestabnahme 80 % der vereinbarten Menge, Mehrbedarf zum Marktpreis. Höchstens zwei Verträge, je Hafen zusammen höchstens 100 %. Eine Kündigung kostet ein Viertel der Restsumme.' + (st.ke >= 0 ? " Ihr Kohleneinkäufer drückt den Aufschlag." : "") + "</div>" +
+    h += '<div class="meta">Der Händler liefert jeden Monat die vereinbarte Menge ins Kohlelager. Was nicht mehr hineinpasst, nimmt er zu 80 % des Preises zurück. Höchstens zwei Verträge, zusammen höchstens 100 %. Eine Kündigung kostet ein Viertel der Restsumme.' + (st.ke >= 0 ? " Ihr Kohleneinkäufer drückt den Aufschlag." : "") + "</div>" +
       (o.ok ? '<div class="actions"><button class="btn solid" data-act="coalSign">Vertrag schließen</button></div>' : '<div class="hint">' + esc(o.why) + "</div>") + "</div>";
     // Verpflegung
     const ku = S.exp && S.exp.ku != null ? S.exp.ku : 50, cat = E.catOn(S, K.cat) ? K.cat : null, lux = E.catOn(S, K.lux) ? K.lux : null;
@@ -904,6 +911,8 @@
     return h + '<div class="actions"><button class="btn solid" data-act="prevOk" style="flex:1">' + (/Cancel/.test(P.what) ? "Kündigen" : P.what === "coal" || P.what === "cat" ? "Abschließen" : "Übernehmen") + '</button><button class="btn" data-act="close" style="flex:1">Abbrechen</button></div></div></div>';
   }
 
+  // Kostenposten der Kohle (seit v5.1.1 mit Kohlelager)
+  const isCoalCost = k => k === "Kohle" || k === "Kohle-Mindestabnahme" || k.startsWith("Bekohlung") || k === "Kohle aus dem Lager" || k === "Lagergeld" || k === "Rücknahme Kohle";
   /* ---------- Fahrplan, Bekohlung und Pünktlichkeit (v5.0) ---------- */
   const tD = (T, h) => E.tDate(S, T, h).replace(/ \d{4}(?=,|$)/, "");
   const pName = id => esc(PORTS[id] ? PORTS[id].name : "");
@@ -913,10 +922,8 @@
   const pkTxt = p => p == null ? "–" : Math.round(p * 100) + " %";
   const pkCls = p => p == null ? "" : p >= .85 ? "pos" : p < .65 ? "neg" : "";
   const capF = t => t.charAt(0).toUpperCase() + t.slice(1);
-  const BUNK_SHORT = { heim: "Heimathafen", billig: "am billigsten", noetig: "das Nötige" };
-  const BUNK_NOTE = { heim: "Volltanken im Heimathafen der Linie, unterwegs nur das Nötige. Sicher und meist günstig.", billig: "Volltanken im billigsten Hafen der Linie. Spart Geld, wenn ein Ende in der Ferne liegt.", noetig: "Überall nur das Nötige mit knapper Reserve. Wenig Geld im Bunker, aber öfter Kohlemangel bei Sturm." };
   const DIFF_NOTE = { leicht: "Schwächere Rivalen, halb so viele Verspätungen, seltener Unglücke, niedrigere Zinsen.", normal: "Das Spiel, wie es gedacht ist.", schwer: "Stärkere Rivalen, mehr Verspätungen und Unglücke, höhere Zinsen, weniger Kredit." };
-  let confirmDiff = null, confirmCancel = null, mapShip = null, abfAll = false, coalPort = null;
+  let confirmDiff = null, confirmCancel = null, mapShip = null, abfAll = false;
   // Wo ist das Schiff, wann fährt es ab, wie voll ist der Bunker?
   // Abschnitte mit „ · “ getrennt, damit Datum und Verspätung einzeln übersetzt werden
   function voyLine(sh) {
@@ -939,10 +946,7 @@
     return null;
   }
   function shipBunkBox(sh) {
-    const own = sh.bunk || "";
-    let h = '<label class="field">Bekohlung</label><div class="seg" role="group" style="grid-template-columns:repeat(4,1fr)">' + [["", "Reederei"]].concat(E.BUNK_ORDER.map(k => [k, BUNK_SHORT[k]])).map(([k, n]) => '<button data-act="shipBunk" data-id="' + sh.id + '" data-v="' + k + '" aria-pressed="' + (own === k) + '" style="font-size:13.5px">' + n + "</button>").join("") + "</div>";
-    h += '<div class="meta">' + (own ? "Eigene Regel: " + E.BUNK[own].name + "." : "Folgt der Regel der Reederei: " + E.BUNK[S.bunk || "heim"].name + ".") + "</div>";
-    return h + '<div class="switch"><span>Ankunft melden <span class="meta">(hält die Zeit an)</span></span><input type="checkbox" data-act="markShip" data-id="' + sh.id + '" ' + (sh.mark ? "checked" : "") + ' aria-label="Ankunft melden"></div>';
+    return '<div class="switch"><span>Ankunft melden <span class="meta">(hält die Zeit an)</span></span><input type="checkbox" data-act="markShip" data-id="' + sh.id + '" ' + (sh.mark ? "checked" : "") + ' aria-label="Ankunft melden"></div>';
   }
   // Fahrplan einer Linie: Takt, Pünktlichkeit, Puffer, Reserveschiff, Aufholen
   function fahrplanBox(r, info) {
@@ -1027,10 +1031,18 @@
     if (confirmDiff && confirmDiff !== d) h += '<div class="actions"><button class="btn solid" data-act="diffOk">Auf „' + E.DIFF[confirmDiff].name + '“ umstellen</button><button class="btn" data-act="diffNo">Abbrechen</button></div>';
     return h;
   }
-  function bunkBox() {
-    const cur = S.bunk || "heim", ex = S.ships.filter(x => !x.museum && x.bunk).length;
-    let h = '<div class="item" data-tut="bunk"><div class="row"><h3>Bekohlung</h3></div><div class="seg lv" role="group" aria-label="Bekohlung">' + E.BUNK_ORDER.map(k => '<button data-act="bunkSet" data-v="' + k + '" aria-pressed="' + (cur === k) + '">' + capF(E.BUNK[k].name) + "</button>").join("") + "</div>";
-    return h + '<div class="meta" style="margin-top:6px">' + BUNK_NOTE[cur] + " Gilt für alle Schiffe ohne eigene Regel" + (ex ? "; " + ex + (ex > 1 ? " Schiffe haben" : " Schiff hat") + " eine eigene" : "") + ". Bekohlen verlängert die Liegezeit, je nach Menge.</div></div>";
+  // Kohlelager im Heimathafen (v5.1.1)
+  function lagerBox() {
+    const L = S.lager; if (!L) return "";
+    const days = E.lagerDays(S), pr = E.lagerPrice(S), free = Math.max(0, L.cap - L.t), fill = L.cap ? L.t / L.cap : 0, hz = S.bo && S.bo.hz;
+    let h = '<div class="item" data-tut="lager"><div class="row"><h3>Kohlelager in ' + pName(S.home || "ham") + "</h3></div>";
+    h += '<div class="kv"><div><b>' + E.fmt(Math.round(L.t)) + ' t</b><span>Bestand</span></div><div><b>' + E.fmt(Math.round(free)) + " t</b><span>Platz frei von " + E.fmt(L.cap) + " t</span></div><div><b>" + (L.t >= 1 ? eur(L.v / L.t) + " M" : "–") + "</b><span>Einstandspreis je Tonne</span></div><div><b>" + (days == null ? "–" : days >= 365 ? "über ein Jahr" : Math.round(days) + (Math.round(days) === 1 ? " Tag" : " Tage")) + "</b><span>reicht der Vorrat</span></div></div>";
+    h += '<div class="lagerbar" role="img" aria-label="Lager zu ' + Math.round(fill * 100) + ' % gefüllt"><i style="width:' + Math.round(fill * 100) + '%"></i></div>';
+    h += '<div class="meta">Heute kostet die Tonne fürs Lager ' + eur(pr) + " M" + (hz ? ", Ihre Hauszeche liefert ihren Anteil 20 % billiger" : "") + ". Ist das Lager leer, bunkern Ihre Schiffe am Kai für " + eur(pr * E.KAI) + " M. Lagergeld " + eur(E.LAGERGELD * (S.pidx || 1)) + " M je Tonne und Monat. Die Kohle im Lager zählt zum Eigenkapital und wird erst beim Bunkern zu Kosten.</div>";
+    const opts = [100, 500, 1000].filter(t => t < free).map(t => [t, t + " t"]); if (free >= 1) opts.push([Math.floor(free), "Auffüllen (" + E.fmt(Math.floor(free)) + " t)"]);
+    if (opts.length) h += '<div class="actions">' + opts.map(([t, n]) => { const q = E.lagerQuote(S, t); return '<button class="btn' + (t === Math.floor(free) ? " solid" : "") + '" data-act="lagerBuy" data-v="' + t + '"' + (q.cost > S.cash ? " disabled" : "") + ">" + n + " · " + M(q.cost) + "</button>"; }).join("") + "</div>";
+    else h += '<div class="hint">Das Lager ist voll.</div>';
+    return h + "</div>";
   }
 
   /* ---------- Unternavigation ---------- */
@@ -1081,14 +1093,44 @@
         { k: "schiffe", n: "Schiffe", num: 1, f: r => r.schiffe }, { k: "typ", n: "Typ" }], rows);
       return h;
     }
+    return h + finStat();
+  }
+  // Statistik Finanzen (v5.1.1): Farben, Kostengruppen, Balken der Monatsergebnisse
+  function profitBars(H) {
+    const mx = Math.max(1, ...H.map(x => Math.abs(x.profit || 0))), hasNeg = H.some(x => x.profit < 0), hasPos = H.some(x => x.profit > 0);
+    const top = hasNeg && hasPos ? .5 : hasNeg ? 0 : 1, sc = hasNeg && hasPos ? 50 : 100;
+    let h = '<div class="vbars" role="img" aria-label="Monatsergebnisse">';
+    h += '<div class="zero" style="top:' + (top * 100) + '%"></div>';
+    for (const x of H) { const v = x.profit || 0, ht = Math.max(1, Math.abs(v) / mx * sc);
+      h += '<div class="vb' + (v < 0 ? " neg" : "") + '" title="' + E.dateStr(x.m) + ": " + (v < 0 ? "−" : "") + E.fmt(Math.abs(v)) + '"><i style="' + (v < 0 ? "top:" + (top * 100) : "bottom:" + ((1 - top) * 100)) + "%;height:" + ht.toFixed(1) + '%"></i></div>'; }
+    return h + '</div><div class="vlab"><span>' + E.dateStr(H[0].m) + "</span><span>" + E.dateStr(H[H.length - 1].m) + "</span></div>";
+  }
+  function finStat() {
     const years = Object.keys(S.years || {}).sort();
-    h += '<h3 style="margin-top:12px">Jahre</h3>';
+    let h = "";
+    const H = (S.hist || []).filter(x => x.profit != null).slice(-24);
+    if (H.length >= 2) h += '<h3 style="margin-top:12px">Monatsergebnis</h3><p class="sub">Die letzten ' + H.length + " Monate, über der Linie Gewinn, darunter Verlust.</p>" + profitBars(H);
+    const yN = String(E.cal(S.m).y), yP = String(E.cal(S.m).y - 1), YN = S.years && S.years[yN], YP = S.years && S.years[yP];
+    if (YN || YP) {
+      const cN = (YN && YN.costs) || {}, cP = (YP && YP.costs) || {}, keys = [...new Set(Object.keys(cN).concat(Object.keys(cP)))].filter(k => (cN[k] || 0) + (cP[k] || 0) > .5);
+      const cell = (v, cls) => '<td class="n ' + cls + '">' + (v > .5 ? (cls === "cst" ? "−" : "") + E.fmt(v) : "–") + "</td>";
+      h += '<h3 style="margin-top:16px">Kosten nach Gruppen</h3><p class="sub">' + (DESK ? "Klicken" : "Tippen") + ' Sie auf eine Gruppe, um die Einzelposten zu sehen.</p><div class="tblwrap"><table class="stat"><thead><tr><th></th><th class="n">' + yN + '</th><th class="n">' + (YP ? yP : "") + "</th></tr></thead><tbody>";
+      h += "<tr><td>Umsatz</td>" + cell(YN ? YN.rev : 0, "rev") + (YP ? cell(YP.rev, "rev") : "<td></td>") + "</tr>";
+      for (const [g, gn] of COST_GROUPS) {
+        const ks = keys.filter(k => costGroup(k) === g).sort((a, b) => (cN[b] || cP[b] || 0) - (cN[a] || cP[a] || 0)); if (!ks.length) continue;
+        const sN = ks.reduce((a, k) => a + (cN[k] || 0), 0), sP = ks.reduce((a, k) => a + (cP[k] || 0), 0), open = openSec["fg" + g];
+        h += '<tr class="fg" data-act="fgrp" data-k="' + g + '"><td>' + (open ? "▾ " : "▸ ") + gn + "</td>" + cell(sN, "cst") + (YP ? cell(sP, "cst") : "<td></td>") + "</tr>";
+        if (open) for (const k of ks) h += '<tr class="ind"><td>' + costName(k) + "</td>" + cell(cN[k] || 0, "cst") + (YP ? cell(cP[k] || 0, "cst") : "<td></td>") + "</tr>";
+      }
+      h += '<tr><td><b>Ergebnis</b></td><td class="n ' + (YN && YN.profit < 0 ? "neg" : "pos") + '">' + (YN ? E.fmt(YN.profit) : "–") + "</td>" + (YP ? '<td class="n ' + (YP.profit < 0 ? "neg" : "pos") + '">' + E.fmt(YP.profit) + "</td>" : "<td></td>") + "</tr></tbody></table></div>";
+    }
+    h += '<h3 style="margin-top:16px">Jahre</h3>';
     if (!years.length) h += '<div class="hint">Nach dem ersten Monatsabschluss erscheinen hier die Zahlen.</div>';
     else h += '<div class="tblwrap"><table class="stat"><thead><tr><th>Jahr</th><th class="n">Umsatz</th><th class="n">Kosten</th><th class="n">Ergebnis</th><th class="n">Fahrgäste</th><th class="n">Schiffe</th><th class="n">Eigenkapital</th></tr></thead><tbody>' +
-      years.slice().reverse().map(y => { const Y = S.years[y]; return "<tr><td>" + y + '</td><td class="n">' + E.fmt(Y.rev) + '</td><td class="n">' + E.fmt(Y.cost) + '</td><td class="n">' + num(Y.profit) + '</td><td class="n">' + E.fmt(Y.pax) + '</td><td class="n">' + Y.ships + '</td><td class="n">' + num(Y.eq) + "</td></tr>"; }).join("") + "</tbody></table></div>";
+      years.slice().reverse().map(y => { const Y = S.years[y]; return "<tr><td>" + y + '</td><td class="n rev">' + E.fmt(Y.rev) + '</td><td class="n cst">' + E.fmt(Y.cost) + '</td><td class="n ' + (Y.profit < 0 ? "neg" : "pos") + '">' + E.fmt(Y.profit) + '</td><td class="n">' + E.fmt(Y.pax) + '</td><td class="n">' + Y.ships + '</td><td class="n">' + num(Y.eq) + "</td></tr>"; }).join("") + "</tbody></table></div>";
     const hs = (S.hist || []).slice(-24).reverse();
     if (hs.length) h += '<h3 style="margin-top:16px">Letzte Monate</h3><div class="tblwrap"><table class="stat"><thead><tr><th>Monat</th><th class="n">Umsatz</th><th class="n">Kosten</th><th class="n">Ergebnis</th><th class="n">Fahrgäste</th><th class="n">Kasse</th></tr></thead><tbody>' +
-      hs.map(x => "<tr><td>" + E.dateStr(x.m) + '</td><td class="n">' + (x.rev != null ? E.fmt(x.rev) : "–") + '</td><td class="n">' + (x.cost != null ? E.fmt(x.cost) : "–") + '</td><td class="n">' + num(x.profit) + '</td><td class="n">' + (x.pax != null ? E.fmt(x.pax) : "–") + '</td><td class="n">' + num(x.cash) + "</td></tr>").join("") + "</tbody></table></div>";
+      hs.map(x => "<tr><td>" + E.dateStr(x.m) + '</td><td class="n rev">' + (x.rev != null ? E.fmt(x.rev) : "–") + '</td><td class="n cst">' + (x.cost != null ? E.fmt(x.cost) : "–") + '</td><td class="n ' + (x.profit < 0 ? "neg" : "pos") + '">' + E.fmt(x.profit) + '</td><td class="n">' + (x.pax != null ? E.fmt(x.pax) : "–") + '</td><td class="n">' + num(x.cash) + "</td></tr>").join("") + "</tbody></table></div>";
     return h;
   }
 
@@ -1163,7 +1205,7 @@
     h += '<p class="sub">Der Kurs folgt dem Gewinn der Firma und der Stimmung am Markt. Jeder Auftrag kostet 1 % Gebühr, gekauft wird nur bar.</p>';
     if (b.closed >= S.m) h += '<div class="hint bad">Die Börse ist geschlossen. Der Handel ruht bis ' + E.dateStr(b.closed + 1) + ".</div>";
     h += '<div class="kv bokv"><div><b>' + M(own.val) + '</b><span>Ihr Depot</span></div><div><b>' + signed(own.val - own.cost) + ' M</b><span>Gewinn oder Verlust</span></div><div><b>' + Math.round(b.mk * 100) + ' %</b><span>Stimmung am Markt</span></div><div><b>' + (b.divLast ? M(b.divLast.sum) : "–") + "</b><span>" + (b.divLast ? "Dividende für " + b.divLast.y : "Dividende") + "</span></div></div>";
-    if (b.hz) h += '<div class="item compact">' + img("bo_hauszeche", "", "Hauszeche") + '<div><h3>Hauszeche: ' + esc(E.boName(S, b.hz)) + '</h3><div class="meta">Ihre Kohleschiffe bunkern 20 % unter dem Marktpreis, bis zur Förderung der Zeche.' + (b.hzStop >= S.m ? " Derzeit fällt die Lieferung aus – bis " + E.dateStr(b.hzStop) + " zahlen Sie den Marktpreis." : "") + (S.last && S.last.hzSave ? " Im Vormonat gespart: " + M(S.last.hzSave) + "." : "") + "</div></div></div>";
+    if (b.hz) h += '<div class="item compact">' + img("bo_hauszeche", "", "Hauszeche") + '<div><h3>Hauszeche: ' + esc(E.boName(S, b.hz)) + '</h3><div class="meta">Sie liefert Kohle für Ihr Lager 20 % unter dem Marktpreis, bis zur Förderung der Zeche.' + (b.hzStop >= S.m ? " Derzeit fällt die Lieferung aus – bis " + E.dateStr(b.hzStop) + " zahlen Sie den Marktpreis." : "") + (S.last && S.last.hzSave ? " Im Vormonat gespart: " + M(S.last.hzSave) + "." : "") + "</div></div></div>";
     h += '<h3 style="margin-top:14px">Ihr Depot</h3>' + (own.rows.length ? boDepTable(b.dep) : '<div class="meta bodepot">Noch keine Aktien. ' + (DESK ? "Klicken" : "Tippen") + " Sie unten auf eine Aktie, um sie zu kaufen.</div>");
     h += '<h3 style="margin-top:16px">Kurszettel</h3><div class="bolist">';
     for (const g of Object.keys(E.BO_GRP)) {
@@ -1422,8 +1464,8 @@
       { t: "Läuft die Frist eines Schiffs ab, darf es nicht mehr auslaufen. Erneuern Sie sie rechtzeitig – oder stellen Sie unter Kontor → Personal einen Schiffsinspektor ein, der das übernimmt." } ] },
     einkauf: { name: "Einkauf", old: true, when: () => tab === "kontor" && kontorSub === "einkauf", go: () => { tab = "kontor"; kontorSub = "einkauf"; }, steps: [
       { t: "Hier kaufen Sie Kohle und Verpflegung für die ganze Reederei. Oben steht der Kohlepreis mit seinem Verlauf.", sel: '[data-tut="coal"]' },
-      { t: "Die Kohle bezahlen Sie beim Bekohlen, und jeder Hafen hat seinen Preis: nah an den Zechen billig, in der Ferne teuer. Die Regel legt fest, wo Ihre Schiffe volltanken.", sel: '[data-tut="bunk"]' },
-      { t: "Ein Liefervertrag gilt für einen Hafen und sichert den heutigen Preis mit Aufschlag. Er lohnt sich, wenn die Kohle danach teurer wird – und kostet, wenn sie billiger wird.", sel: '[data-tut="coalnew"]' },
+      { t: "Im Heimathafen haben Sie ein Kohlelager. Kaufen Sie Kohle, wann und so viel Sie wollen: Die Schiffe bunkern zu Hause daraus zum Einstandspreis. Ist es leer, zahlen sie am Kai 15 % mehr. Auswärts nehmen sie von selbst so viel, wie sie bis nach Hause brauchen.", sel: '[data-tut="lager"]' },
+      { t: "Ein Liefervertrag liefert jeden Monat eine feste Menge ins Lager, zum heutigen Preis mit Aufschlag. Er lohnt sich, wenn die Kohle danach teurer wird – und kostet, wenn sie billiger wird. Was nicht ins Lager passt, nimmt der Händler zu 80 % zurück.", sel: '[data-tut="coalnew"]' },
       { t: "Die Verpflegung stellen Sie je Klasse ein. In der 1. Klasse zählt gutes Essen viel, im Zwischendeck wenig. Auf kurzen Fähren gibt es keine Mahlzeiten.", sel: '[data-tut="kq"]' },
       { t: "Vor jeder Änderung rechnet eine Vorschau die nächsten zwei Monate mit der neuen Einstellung voraus. So probieren Sie ohne Risiko." } ] },
     abfahrten: { name: "Abfahrten", old: true, when: () => tab === "kontor" && kontorSub === "abfahrten", go: () => { tab = "kontor"; kontorSub = "abfahrten"; }, steps: [
@@ -1431,7 +1473,7 @@
       { t: "Die Fahrgäste sammeln sich bis zur nächsten Abfahrt und zahlen beim Einsteigen. Wer zu lange warten muss oder keinen Platz bekommt, fährt mit der Konkurrenz – Kaufleute schneller als Auswanderer." },
       { t: "Sturm, Nebel, Eis, Streiks und Pannen verspäten die Schiffe. Ab zwei Tagen Verspätung zahlen Sie Entschädigung, und eine unpünktliche Linie verliert für Monate Fahrgäste an pünktlichere Rivalen." },
       { t: "Dagegen helfen Pufferzeit, ein Reserveschiff, Volldampf zum Aufholen, gutes Maschinenpersonal und gründliche Wartung – jedes Mittel kostet etwas. Puffer, Reserve und Aufholen stellen Sie je Linie unter „Linien“ ein." },
-      { t: "Kohle kostet erst beim Bekohlen, nah an den Zechen billig, in der Ferne teuer. Wo Ihre Schiffe volltanken, legen Sie unter Kontor → Einkauf fest." },
+      { t: "Kohle kostet erst beim Bekohlen. Zu Hause nehmen die Schiffe sie aus Ihrem Kohlelager (Kontor → Einkauf), auswärts zum Hafenpreis. Bekohlen verlängert die Liegezeit; ein leeres Lager kostet am Kai 15 % mehr." },
       { t: "Hier unten bestimmen Sie, wann die Zeit von selbst anhält: bei großer Verspätung, wenn die Kohle knapp wird, am Monatsende oder wenn ein markiertes Schiff ankommt.", sel: '[data-tut="pause"]' } ] },
     personal: { name: "Personal", when: () => tab === "kontor" && kontorSub === "personal", go: () => { tab = "kontor"; kontorSub = "personal"; }, steps: [
       { t: "Deck, Maschine und Service bezahlen Sie nach Lohnstufe. Knapp bezahlte Leute machen mehr Fehler und streiken öfter, gut bezahlte bringen spürbare Vorteile.", sel: "main .item" },
@@ -1448,7 +1490,7 @@
     boerse: { name: "Börse", old: true, when: () => tab === "kontor" && kontorSub === "boerse" && S.bo && S.bo.on, go: () => { tab = "kontor"; kontorSub = "boerse"; }, steps: [
       { t: "Willkommen an der Börse. Hier handeln Sie Aktien der Rivalen, der Zechen, der Werft und der Caterer. Der Kurs folgt dem Gewinn der Firma und der Stimmung am Markt.", sel: ".bolist" },
       { get t() { return tapW("Ein Klick", "Ein Tipp") + " auf eine Aktie öffnet sie: Kurs, Verlauf, Kaufen und Verkaufen – nach Stückzahl oder Betrag. Jeder Auftrag kostet 1 % Gebühr, gekauft wird nur bar."; }, sel: ".borow" },
-      { t: "Im Mai zahlen Firmen mit gutem Vorjahr eine Dividende. Wer mehr als die Hälfte einer Zeche hält, bunkert für seine Kohleschiffe 20 % billiger – das lohnt sich erst für große Flotten.", sel: ".bokv" },
+      { t: "Im Mai zahlen Firmen mit gutem Vorjahr eine Dividende. Wer mehr als die Hälfte einer Zeche hält, bekommt die Kohle fürs Lager 20 % billiger – das lohnt sich erst für große Flotten.", sel: ".bokv" },
       { t: "Ein Prokurist verwaltet auf Wunsch ein eigenes Depot und schätzt Gerüchte ein. Bedenken Sie: Aktien bringen im Schnitt weniger als eine gut laufende Linie.", sel: ".pkbox" } ] },
   };
   const CHAP_ORDER = ["werft", "flotte", "abfahrten", "einkauf", "personal", "markt", "zeitung", "boerse"];
@@ -1668,16 +1710,20 @@
     const curRev = { Fahrkarten: c.rev - (c.freight || 0), Fracht: c.freight || 0 }, prevRev = p ? { Fahrkarten: p.rev - (p.freight || 0), Fracht: p.freight || 0 } : {};
     const exSum = Object.values(ex).reduce((a, b) => a + b, 0), costSum = Object.values(c.cost).reduce((a, b) => a + b, 0), res = c.rev + exSum - costSum;
     const spec = SPECIAL_COST.reduce((a, k) => a + (c.cost[k] || 0), 0), runRes = c.rev - (costSum - spec), proj = days ? runRes * dim / days + exSum - spec : 0;
-    const row = (name, a, b, neg, cls) => '<div class="l3' + (cls ? " " + cls : "") + '"><span>' + name + "</span><span>" + (p ? (b == null ? "" : (neg && b > .5 ? "−" : "") + E.fmt(b)) : "") + "</span><span>" + (a == null ? "" : (neg && a > .5 ? "−" : "") + E.fmt(a)) + "</span></div>";
-    let h = '<details class="ledger2" id="ledger"' + (ledgerOpen ? " open" : "") + '><summary><span>Hauptbuch</span><span class="lres">' + signed(res) + " M</span></summary>";
+    const row = (name, a, b, neg, cls) => '<div class="l3 ' + (neg ? "cst" : "rev") + (cls ? " " + cls : "") + '"><span>' + name + "</span><span>" + (p ? (b == null ? "" : (neg && b > .5 ? "−" : "") + E.fmt(b)) : "") + "</span><span>" + (a == null ? "" : (neg && a > .5 ? "−" : "") + E.fmt(a)) + "</span></div>";
+    let h = '<details class="ledger2" id="ledger"' + (ledgerOpen ? " open" : "") + '><summary><span>Hauptbuch</span><span class="lres">' + signedC(res) + " M</span></summary>";
     h += '<div class="lprog"><i style="width:' + Math.round(days / dim * 100) + '%"></i></div><div class="meta">Tag ' + days + " von " + dim + " · " + E.dateStr(S.m) + "</div>";
     h += '<div class="l3 head"><span></span><span>' + (p ? "Vormonat" : "") + "</span><span>laufend</span></div>";
     for (const k of keysRev) h += row(k, curRev[k], prevRev[k], false);
-    if (exKeys.length) { h += row("Sondereinnahmen", null, null, false, "sub"); for (const k of exKeys) h += row(k, ex[k] || 0, pex[k] || 0, false, "ind"); }
-    const bk = allCost.filter(k => k.startsWith("Bekohlung ")), sumK = (o, ks) => ks.reduce((a, k) => a + (o[k] || 0), 0);
-    if (bk.length) { h += row("Bekohlung", sumK(c.cost, bk), sumK(pc, bk), true); for (const k of bk) h += row(esc(k.slice(10)), c.cost[k] || 0, pc[k] || 0, true, "ind"); }
-    for (const k of allCost) if (!k.startsWith("Bekohlung ")) h += row(k, c.cost[k] || 0, pc[k] || 0, true);
-    h += '<div class="l3 sum"><span>Ergebnis</span><span>' + (p ? signed(p.profit) : "") + "</span><span>" + signed(res) + "</span></div>";
+    if (exKeys.length) { h += row("Sondereinnahmen", null, null, false, "sub nocol"); for (const k of exKeys) h += row(k, ex[k] || 0, pex[k] || 0, false, "ind"); }
+    const sumK = (o, ks) => ks.reduce((a, k) => a + (o[k] || 0), 0);
+    for (const [g, gn] of COST_GROUPS) {
+      const ks = allCost.filter(k => costGroup(k) === g); if (!ks.length) continue;
+      h += '<details class="lgrp" data-sec="lg' + g + '"' + (openSec["lg" + g] ? " open" : "") + "><summary>" + row(gn, sumK(c.cost, ks), sumK(pc, ks), true, "lg") + "</summary>";
+      for (const k of ks) h += row(costName(k), c.cost[k] || 0, pc[k] || 0, true, "ind");
+      h += "</details>";
+    }
+    h += '<div class="l3 sum"><span>Ergebnis</span><span>' + (p ? signedC(p.profit) : "") + "</span><span>" + signedC(res) + "</span></div>";
     if (days) h += '<div class="l3 sum2"><span>Hochrechnung Monatsende</span><span></span><span>' + signed(proj) + "</span></div>";
     return h + '<div class="meta" style="margin-top:6px">Beträge in ' + (S.country === "gb" ? "Pfund umgerechnet" : "Mark") + ". Zinsen und Tilgung werden am Monatsende gebucht.</div></details>";
   }
@@ -2127,6 +2173,7 @@
       case "coalGo": kontorSub = "einkauf"; window.scrollTo(0, 0); break;
       case "msub": marktSub = d.v; window.scrollTo(0, 0); break;
       case "sview": statView = d.v; break;
+      case "fgrp": openSec["fg" + d.k] = !openSec["fg" + d.k]; break;
       case "sort": { const cur = statSort[d.t] || [d.k, 1]; statSort[d.t] = [d.k, cur[0] === d.k ? -cur[1] : (d.k === "name" || d.k === "linie" || d.k === "typ" ? 1 : -1)]; break; }
       case "staff": E.setStaff(S, d.k, +d.v); break;
       case "fahrtSet": if ((S.fahrt || "normal") !== d.v) sheet = { kind: "prev", what: "fahrt", v: d.v, p: E.prevFahrt(S, d.v) }; break;
@@ -2138,7 +2185,7 @@
       case "catCancel": { const K = E.kueche(S), c = d.v === "lux" ? K.lux : K.cat; if (c) sheet = { kind: "prev", what: "catCancel", v: d.v, fee: E.catCancelFee(S, c), name: E.catName(S, c.k) }; break; }
       case "coalY": coalYears = +d.v; break;
       case "coalS": coalShare = +d.v; break;
-      case "coalSign": { const o = E.coalOffer(S, coalYears, coalShare, coalPort); if (!o.ok) err = o.why; else sheet = { kind: "prev", what: "coal", o }; break; }
+      case "coalSign": { const o = E.coalOffer(S, coalYears, coalShare); if (!o.ok) err = o.why; else sheet = { kind: "prev", what: "coal", o }; break; }
       case "coalCancel": { const k = (S.coalK || []).find(x => x.id === d.id); if (k) sheet = { kind: "prev", what: "coalCancel", id: d.id, fee: E.coalCancelFee(S, k) }; break; }
       case "prevOk": {
         const P = sheet; if (!P || P.kind !== "prev") break;
@@ -2195,7 +2242,7 @@
       // Fahrplan, Bekohlung, Pausen und Schwierigkeit (v5.0)
       case "abfAll": abfAll = !abfAll; break;
       case "bufSet": E.setBuffer(S, d.id, +d.v); break;
-      case "bunkSet": err = E.setBunkRule(S, d.v); break;
+      case "lagerBuy": err = E.lagerBuy(S, +d.v); if (!err) Snd.coins(); break;
       case "shipBunk": E.setShipBunk(S, d.id, d.v || null); break;
       case "pauseSet": E.setPause(S, "late", +d.v); break;
       case "diffSet": confirmDiff = d.v === (S.diff || "normal") ? null : d.v; render(); return;
@@ -2289,7 +2336,6 @@
     if (t.dataset.act === "catchUp") { E.setCatchUp(S, t.dataset.id, t.checked); save(); render(); }
     if (t.dataset.act === "markShip") { E.markShip(S, t.dataset.id, t.checked); save(); render(); }
     if (t.dataset.act === "pauseChk") { E.setPause(S, t.dataset.k, t.checked); save(); render(); }
-    if (t.dataset.act === "coalPort") { coalPort = t.value; render(); }
     if (t.dataset.act === "orderLine") { sheet.line = t.value || null; renderModal(); translateDom($("modal")); }
     if (t.dataset.act === "plan") { const sh = S.ships.find(x => x.id === t.dataset.id); if (sh) { const p = (sh.plan || []).map(x => Object.assign({}, x)), i = +t.dataset.i; if (p[i]) { p[i][t.dataset.f] = t.dataset.f === "line" ? t.value : +t.value; openPlan[sh.id] = true; E.setPlan(S, sh.id, p); save(); render(); } } }
   });
