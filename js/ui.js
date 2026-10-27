@@ -1826,7 +1826,7 @@
   let startHome = "ham", startDiff = "normal";
   /* ---------- Hauptmenü, Spielstände und Gründung (v5.1) ---------- */
   let menu = null, newStep = 1, newSlot = 1, startLine = null, startType = null, startLine2 = null, slotUi = {}, menuMsg = "";
-  const VERSION = "5.1.1";
+  const VERSION = "5.1.2";
   const HOME_NAME = { ham: "Hamburg", lpl: "Liverpool", lon: "London" };
   // Geld bei der Gründung: bei britischem Heimathafen in Pfund
   const startMoney = v => startHome === "ham" ? E.fmt(v) + " Mark" : pounds(v);

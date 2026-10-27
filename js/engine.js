@@ -567,6 +567,9 @@
     // die Bunker bleiben, Lieferverträge liefern ab jetzt ins Lager
     // v5.1.1: Betriebsfähige Museumsschiffe brauchen eine gültige Frist; abgelaufene bekommen beim ersten Laden drei Monate Aufschub
     if (!s.musFrist) { s.musFrist = true; for (const sh of s.ships) if (sh.museum === "aktiv" && sh.survey != null && sh.survey < s.t + 90) sh.survey = s.t + 90; }
+    // v5.1.2: In v5.1.1 kostete Kohle aus dem Lager beim Bunkern ein zweites Mal Geld; das bekommen alte Spielstände zurück
+    if (!s.lagerFix) { s.lagerFix = true; if (s.lager) { let back = 0; for (const y in s.years || {}) back += (s.years[y].costs && s.years[y].costs["Kohle aus dem Lager"]) || 0; if (s.cur && s.cur.cost) back += s.cur.cost["Kohle aus dem Lager"] || 0;
+      if (back >= 1) { s.cash += back; s.log.unshift({ m: s.m, head: "Kohlelager: Geld zurück", text: "Kohle aus dem Lager wurde beim Bunkern versehentlich ein zweites Mal bezahlt. Die Reederei bekommt " + fmt(back) + " Mark zurück.", kind: "good", img: "ev_bunkern" }); } } }
     if (!s.lager) {
       const old = (s.hist && s.hist.length > 0) || s.ships.some(sh => sh.v);
       s.lager = { t: 0, v: 0, cap: Math.max(LAGER_CAP, Math.ceil(2 * coalBase(s, s.home || "ham") / 100) * 100), use: [] };
