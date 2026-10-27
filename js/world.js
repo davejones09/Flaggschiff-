@@ -142,6 +142,34 @@
     ["finis", "canary", "atlantic"], ["stvin", "canary", "atlantic"], ["canary", "capeverde", "tropic"], ["capeverde", "rioapp", "tropic"], ["rio", "rioapp", "coast", 10],
     ["rioapp", "plata", "atlantic"], ["bue", "plata", "coast", 120], ["capeverde", "capeapp", "tropic"], ["kap", "capeapp", "coast", 10],
   ];
+  // v5.1.1: Zwischenpunkte nur für die Zeichnung und die Position der Schiffe – die Entfernungen der Kanten bleiben, wie sie sind
+  const VIA = {
+    "gla|clydew": [[55.87, -4.42], [55.95, -4.68], [55.80, -4.90]], // Clyde: Glasgow – Greenock – Cumbrae
+    "bel|belf": [[54.67, -5.80]], // Belfast Lough
+    "lpl|merb": [[53.46, -3.05]], "bir|merb": [[53.45, -3.04]], // Mersey-Mündung
+    "merb|angl": [[53.58, -3.90], [53.52, -4.35]], // Liverpool Bay, nördlich von Anglesey
+    "ams|ijm": [[52.41, 4.75], [52.46, 4.60]], // Nordseekanal bis IJmuiden
+    "rot|maas": [[51.95, 4.25], [51.98, 4.10]], // Nieuwe Waterweg
+    "ant|schelde": [[51.35, 4.25], [51.42, 3.95], [51.44, 3.58]], // Westerschelde
+    "hul|humber": [[53.70, -0.10], [53.58, 0.12]], // Humber
+    "kbucht|fehm": [[54.57, 10.95]], // Fehmarnbelt
+    "holt|kbucht": [[54.43, 10.20]], // Kieler Förde
+    "str|arkona": [[54.45, 13.12], [54.62, 13.12], [54.72, 13.30]], // Strelasund, an Hiddensee vorbei
+    "fre|skag": [[57.55, 10.62]],
+    "ply|startp": [[50.30, -4.10]],
+    "solent|chmid": [[50.74, -1.02], [50.62, -0.95]], // Spithead, östlich an der Isle of Wight vorbei
+    "corkh|clear": [[51.55, -8.60], [51.30, -9.60]],
+    "sgc|chw": [[50.60, -5.95], [50.02, -5.85]], // westlich an Land's End vorbei
+  };
+  // Wasserläufe (Flüsse, Kanäle, Förden, Fahrrinnen), die auf der Karte als schmales Wasser gezeichnet werden
+  const WATERWAY = ["ams|ijm", "rot|maas", "ant|schelde", "hul|humber", "lei|forth", "osl|oslo1", "oslo1|oslofj", "sto|stoapp", "stp|finn", "str|arkona", "holt|kbucht", "emd|ems", "ems|ostfries", "ems|bor",
+    "cux|elbe", "bel|belf", "got|kattn", "ber|wnorway", "ber|stadt", "ndd|bor", "ndd|nor", "ndd|jui", "nor|ostfries", "jui|ostfries", "bor|ostfries", "syl|nfries", "hoy|syl", "wyk|nfries", "dag|wyk", "rig|rigab", "dan|danbay", "kgb|danbay", "ste|pomm", "sas|jasm", "lue|travem", "tra|travem", "travem|lbucht", "war|warnow", "warnow|kadet"];
+  const ekey = (a, b) => a + "|" + b;
+  function via(a, b) { const v = VIA[ekey(a, b)]; if (v) return v; const w = VIA[ekey(b, a)]; return w ? w.slice().reverse() : []; }
+  // gezeichneter Weg einer Knotenfolge: [[Breite, Länge], …]
+  function drawPath(nodes) { const out = [coord(nodes[0])]; for (let i = 1; i < nodes.length; i++) { for (const p of via(nodes[i - 1], nodes[i])) out.push(p); out.push(coord(nodes[i])); } return out; }
+  const isWater = (a, b, area) => area === "river" || area === "canal" || WATERWAY.includes(ekey(a, b)) || WATERWAY.includes(ekey(b, a));
+  function waterways(year) { const out = []; for (const [a, b, area, , from] of EDGES) if ((!from || from <= year) && isWater(a, b, area)) out.push(drawPath([a, b])); return out; }
   const AREA_RISK = { river: [.002, .0025], coast: [.004, .006], north: [.008, .018], baltic: [.006, .016], balticn: [.007, .03], channel: [.008, .016], atlantic: [.014, .038], tropic: [.012, .014], med: [.005, .009], canal: [.002, .003] };
   const OCEAN = { atlantic: 1, tropic: 1 };
 
@@ -215,6 +243,6 @@
     return s;
   }
 
-  const api = { PORTS, REGIONS, HOME, WP, EDGES, ADJ, AREA_RISK, OCEAN, SEG, TOUR_SEASON, coord, seaPath, segments, baseFare, portVal };
+  const api = { VIA, WATERWAY, via, drawPath, isWater, waterways, PORTS, REGIONS, HOME, WP, EDGES, ADJ, AREA_RISK, OCEAN, SEG, TOUR_SEASON, coord, seaPath, segments, baseFare, portVal };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.World = api;
 })(this);

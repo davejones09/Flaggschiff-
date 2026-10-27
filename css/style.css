@@ -114,6 +114,7 @@ select { width: 100%; min-height: 44px; border: 1px solid var(--line); backgroun
 .btn.solid { background: var(--ink); color: var(--paper); }
 .btn.warn { border-color: var(--red); color: var(--red); }
 .btn[disabled] { opacity: .45; cursor: not-allowed; }
+.stepper button[disabled] { opacity: .35; cursor: not-allowed; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
 .hint { background: var(--sheet); border-left: 3px solid var(--brass); padding: 12px 14px; margin: 12px 0; font-size: 16px; }
