@@ -115,11 +115,15 @@ const STRAT = {
 };
 
 // ---------- ein Monat, Tag für Tag ----------
-// Kohlelager (v5.1.1): Ein aufmerksamer Spieler füllt nach, sobald das Lager halb leer ist („billig“: nur bei Kohle unter 95 %, „kein“: nie).
+// Kohlelager (v5.1.1): Ein aufmerksamer Spieler hält Kohle für ein bis zwei Monate im Lager: Fällt der Vorrat unter 30 Tage,
+// kauft er auf 60 Tage nach (höchstens bis das Lager voll ist, und nur mit der Hälfte der Kasse). „billig“: nur bei Kohle unter 95 %, „kein“: nie.
 function lagerFuellen(E, s, art) {
   if (!E.lagerBuy || !s.lager || art === "kein" || (art === "billig" && s.coal >= .95)) return;
-  const L = s.lager; if (L.t > L.cap / 2) return;
-  const t = Math.floor(L.cap - L.t); if (t >= 10 && E.lagerQuote(s, t).cost < s.cash) E.lagerBuy(s, t);
+  const L = s.lager, u = (L.use || []).slice(-3), c = s.cur || {}, d = u.length * 30.4 + (c.days || 0);
+  const proTag = d > 0 ? (u.reduce((a, b) => a + b, 0) + (c.lagT || 0) + (c.kaiT || 0)) / d : 0;
+  const ziel = proTag > 0 ? Math.min(L.cap, 60 * proTag) : Math.min(L.cap, 50);
+  if (L.t >= (proTag > 0 ? 30 * proTag : 20)) return;
+  const t = Math.floor(ziel - L.t); if (t >= 10 && E.lagerQuote(s, t).cost < s.cash / 2) E.lagerBuy(s, t);
 }
 function monat(E, s, lager, wahl) {
   for (let g = 0; g < 400; g++) {

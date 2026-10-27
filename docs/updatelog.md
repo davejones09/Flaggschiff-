@@ -513,7 +513,7 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 
 - Die Vertragszeile im Fährgeschäft und „ohne Linie“ bei einer Schiffstaufe waren auf Englisch und Spanisch nicht übersetzt.
 
-## v5.1.1 · Feinschliff und Kohlelager · aktuell
+## v5.1.1 · Feinschliff und Kohlelager
 
 *Kohle kaufen Sie jetzt selbst: Im Heimathafen gibt es ein Kohlelager, und wer es füllt, bunkert billiger. Dazu Verspätungen mit Grund, ein zweites Schiff, das sich auf vollen Linien lohnt, eine farbige Finanzstatistik und eine Seekarte, auf der alle Linien über Wasser fahren.*
 
@@ -541,6 +541,16 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - „Kohle knapp“ kam auf Hamburg – Amsterdam mehrmals im Jahr, obwohl kaum etwas fehlte. Jetzt nehmen die Schiffe eine Reserve nach den Seegebieten mit, und ein Fehlbetrag unter 5 % fährt still mit etwas weniger Fahrt.
 - Streiktage fehlten in der Pünktlichkeit, ausgefallene Fahrten im Tagespaket zählten nicht mit.
 - Museum: Für betriebsfähige Museumsschiffe ließ sich keine Frist erneuern. Jetzt zeigt das Museum die Frist mit dem Knopf „Frist erneuern“, warnt 30 Tage vorher, und Nostalgiefahrten brauchen eine gültige Frist. Eine Restaurierung bringt eine neue Frist mit, alte Spielstände bekommen für abgelaufene Fristen drei Monate Aufschub.
+
+## v5.1.2 · Kohlelager korrigiert · aktuell
+
+*Kohle aus dem Lager kostet jetzt nur noch einmal Geld. Wer in v5.1.1 doppelt bezahlt hat, bekommt den Betrag zurück.*
+
+**BEHOBEN**
+
+- Kohle aus dem Lager wurde beim Bunkern ein zweites Mal bezahlt: einmal beim Kauf fürs Lager und noch einmal, wenn ein Schiff daraus bunkerte. Jetzt kostet nur der Kauf Geld, beim Bunkern wird die Kohle nur als Kosten gebucht.
+- Spielstände aus v5.1.1 bekommen beim Laden den doppelt bezahlten Betrag zurück, mit der Meldung „Kohlelager: Geld zurück“.
+- Das Konzept zu v5.1.1 mit allen Simulationsergebnissen liegt jetzt bei (docs/konzept-v5.1.1.md).
 
 ## Als Nächstes geplant
 

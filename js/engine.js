@@ -567,6 +567,9 @@
     // die Bunker bleiben, Lieferverträge liefern ab jetzt ins Lager
     // v5.1.1: Betriebsfähige Museumsschiffe brauchen eine gültige Frist; abgelaufene bekommen beim ersten Laden drei Monate Aufschub
     if (!s.musFrist) { s.musFrist = true; for (const sh of s.ships) if (sh.museum === "aktiv" && sh.survey != null && sh.survey < s.t + 90) sh.survey = s.t + 90; }
+    // v5.1.2: In v5.1.1 kostete Kohle aus dem Lager beim Bunkern ein zweites Mal Geld; das bekommen alte Spielstände zurück
+    if (!s.lagerFix) { s.lagerFix = true; if (s.lager) { let back = 0; for (const y in s.years || {}) back += (s.years[y].costs && s.years[y].costs["Kohle aus dem Lager"]) || 0; if (s.cur && s.cur.cost) back += s.cur.cost["Kohle aus dem Lager"] || 0;
+      if (back >= 1) { s.cash += back; s.log.unshift({ m: s.m, head: "Kohlelager: Geld zurück", text: "Kohle aus dem Lager wurde beim Bunkern versehentlich ein zweites Mal bezahlt. Die Reederei bekommt " + fmt(back) + " Mark zurück.", kind: "good", img: "ev_bunkern" }); } } }
     if (!s.lager) {
       const old = (s.hist && s.hist.length > 0) || s.ships.some(sh => sh.v);
       s.lager = { t: 0, v: 0, cap: Math.max(LAGER_CAP, Math.ceil(2 * coalBase(s, s.home || "ham") / 100) * 100), use: [] };
@@ -1123,7 +1126,7 @@
     if (home && !emergency && s.lager && s.lager.t > 0) {
       const L = s.lager, take = Math.min(left, L.t), val = L.v * take / L.t;
       L.t -= take; L.v -= val; if (L.t < 1e-6) { L.t = 0; L.v = 0; } left -= take;
-      cur.lagT = (cur.lagT || 0) + take; expense(s, "Kohle aus dem Lager", val); cost += val;
+      cur.lagT = (cur.lagT || 0) + take; cur.cost["Kohle aus dem Lager"] = (cur.cost["Kohle aus dem Lager"] || 0) + val; cost += val; // schon beim Kauf bezahlt: nur als Kosten buchen
     }
     if (left > 0) { const c = left * mkt; expense(s, "Bekohlung " + PORTS[p].name + (home && !emergency ? " (Kai)" : ""), c); cost += c; if (home && !emergency) cur.kaiT = (cur.kaiT || 0) + left; }
     cur.cbT = (cur.cbT || 0) + tons; cur.cbM = (cur.cbM || 0) + cost;
@@ -2247,7 +2250,7 @@
   function simRun(x) {
     for (let i = 0; i < PREV_DAYS; i++) { dayTick(x); x.t += 1; x.day += 1; }
     const ku = x.cur.kuW ? 50 + x.cur.kuS / x.cur.kuW : null, rep = finalize(x);
-    const buy = Object.keys(rep.cost).filter(k => k.startsWith("Bekohlung")).reduce((a, k) => a + rep.cost[k], 0);
+    const buy = Object.keys(rep.cost).filter(k => k.startsWith("Bekohlung") || k === "Kohle aus dem Lager").reduce((a, k) => a + rep.cost[k], 0);
     rep.coalUse = rep.coal.useM; rep.profit = rep.rev - Object.values(rep.cost).reduce((a, b) => a + b, 0) + buy - rep.coal.useM; rep.ku = ku; return rep;
   }
   function whatIf(s, apply, kitchen) {
