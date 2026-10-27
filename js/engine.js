@@ -983,6 +983,23 @@
   const CARIB = ["sth", "hva", "kin", "bgi"];
   const BRK = .03, BRK_LV = [1.5, 1, .75, .55], BRK_MAINT = [1.4, 1, .7];
   const IMPAT = { biz: .1, transit: .08, local: .08, gen: .05, bath: .05, ausw: .03, tour: .02 }; // Abspringen je Tag bei überfälliger Abfahrt
+  const TAKT_W = 5, TAKT_DEM = .2; // v5.1.1: Wartezeit im Nutzen (je Ungeduld IMPAT), Zusatznachfrage je Halbierung des Abstands
+  function impOf(oi) { if (oi._imp != null) return oi._imp; let imp = 0, iw = 0; for (const k in IMPAT) { const x = oi.share[k] || 0; imp += x * IMPAT[k]; iw += x; } return (oi._imp = iw ? imp / iw : .05); }
+  // Takt gegen die Rivalen und vorsichtige Schätzung für ein Schiff mehr (v5.1.1): Marktanteil nach dem Logit-Modell mit mehr Plätzen und kürzerer Wartezeit,
+  // davon 80 % gerechnet, abzüglich Betriebskosten eines Schiffs wie bisher je Schiff und 10 % Kapitalkosten im Jahr auf den Neupreis.
+  function taktInfo(s, r) {
+    const info = rInfo(s, r), l = r.last && r.last.m === s.m - 1 ? r.last : null; if (!info || r.cruise) return null;
+    const ships = s.ships.filter(x => x.line === r.id && x.ready <= s.m && !x.laid && x.id !== r.res), n = ships.length;
+    const out = { n, mine: l ? (l.dep || 0) / 2 : 0, riv: compDepsOf(s, r, info), gain: 0, worth: false };
+    if (!l || !n || !(l.pax > 0)) return out;
+    let dem = 0, no = 0; for (const c of l.cls || []) { dem += c.dem || 0; no += c.no || 0; }
+    if (!(dem > 0)) return out;
+    const sig = clamp(l.pax / dem, .01, .99), k = (n + 1) / n * Math.exp(TAKT_W * impOf(info) * Math.log((n + 1) / n)), sig2 = k * sig / (k * sig + 1 - sig);
+    const perPax = l.rev / l.pax, extra = (l.pax * (sig2 / sig - 1) + no) * perPax * .8;
+    const perShip = ((l.cost || 0) + (l.fixed || 0)) / n, cap = newPrice(s, ships[0].type) * .1 / 12;
+    out.gain = extra - perShip - cap; out.worth = out.gain > Math.max(500 * (s.pidx || 1), .2 * Math.max(0, l.rev - (l.cost || 0) - (l.fixed || 0)));
+    return out;
+  }
   const SKIM = 5; // Wartende wechseln je Abfahrt eines Rivalen mit SKIM × IMPAT (Kaufleute 50 %, Auswanderer 15 %), soweit die eigene Abfahrt später kommt als die übliche der Rivalen
   const PK_SEG = { biz: 1, transit: .8, local: .6, gen: .5, bath: .4, tour: .3, ausw: .2 }, PK_CLS = [1, .6, .25], W_PK = .35, PK_REF = .85;
   const CMP = [.1, .06, .03], LATE_OK = .5, LATE_REL = .15, PK_MEM = 90;
@@ -1305,10 +1322,14 @@
     const postF = Object.values(s.contracts || {}).some(x => (x.a === r.a && x.b === r.b) || (x.a === r.b && x.b === r.a)) ? 1.5 : 1, myPkT = .6 * (pkLine - PK_REF) / .2 + .4 * (expP - 50) / 50;
     const q0 = r.q || (r.q = {}), first = !r.qi && !tt.short && tt.n > 0, qa = r.qa = {}, tolD = G.cruise || !tt.ref ? LATE_OK : lateTol(seaDays(s, tt.ref, G, 1));
     let Dsum = 0;
+    // Takt (v5.1.1): Mit mehreren Schiffen fährt die Linie öfter. Die Wartezeit sinkt gegenüber einem Schiff allein, das zählt im Nutzen
+    // (Kaufleute und Pendler stark, Ausflügler kaum), und ein dichter Takt weckt auf Pendler- und Bahnlinien zusätzliche Nachfrage.
+    const nT = G.cruise ? 1 : avail.length, lnT = nT > 1 ? Math.log(nT) : 0, taktH = nT > 1 ? Math.log2(nT) : 0;
     for (const od of G.ods) {
       const oi = od.info, w = oi.w, cs = oi.comp, a = G.ports[od.i], b = G.ports[od.j], hops = od.j - od.i;
       let along = 0; for (const k of od.legs) along += G.legDist[k];
-      const D = demandNow(s, r, oi, mo) * fd / (odCount[pairKey(a, b) + (G.cruise ? "c" : "")] || 1) * (info.multi && hops < nLegs ? .6 : 1); Dsum += D;
+      const taktD = taktH ? 1 + TAKT_DEM * ((oi.share.local || 0) + (oi.share.transit || 0)) * 2 * (1 - Math.pow(.5, taktH)) : 1;
+      const D = demandNow(s, r, oi, mo) * fd / (odCount[pairKey(a, b) + (G.cruise ? "c" : "")] || 1) * (info.multi && hops < nLegs ? .6 : 1) * taktD; Dsum += D;
       const compDeps = compDepsOf(s, r, oi);
       const holder = info.multi ? ((r.odRiv = r.odRiv || {})[od.i + "-" + od.j] = r.odRiv[od.i + "-" + od.j] || {}) : r;
       const rv = rivalsOf(s, r, oi, holder).map(x => Object.assign({ k: x.k, w: x.w }, rivalStats(s, r, oi, x.k)));
@@ -1324,7 +1345,7 @@
         for (let xi = 0; xi < rv.length; xi++) { const x = rv[xi], u = w.p * CLS_WP[c] * (1 - x.pf * compMod) + base(x.spd, x.com, x.rep, c) + x.eu + pkW * PK_CLS[c] * rvPk[xi]; const v = ccBase * x.w * x.capF * rf * Math.exp(u); them += v; themK.push([x.k, v]); }
         let my = 0, bo = -1;
         if (capT > 0) {
-          const bonus = myBonusBase + expU(oi, myEx) + pkW * PK_CLS[c] * myPkT;
+          const bonus = myBonusBase + expU(oi, myEx) + pkW * PK_CLS[c] * myPkT + (lnT ? TAKT_W * impOf(oi) * lnT : 0);
           let best = -Infinity;
           for (let o = 0; o < 3; o++) { if (capC[o] <= 0) continue; const u = w.p * CLS_WP[c] * (1 - price[o] / (oi.refC[c] * pid)) + base(spd, com, s.rep, c) - (o > c ? (.7 + 1.0 * CLS_T(oi.dist)) * (o - c) : 0) + bonus + (c === 0 ? firstB : 0) + (meal ? KU_W * KU_CLS[c] * (.5 * (kSc[o] - 50) / 50 + .5 * kuX) : 0); if (u > best) { best = u; bo = o; } }
           if (bo >= 0) my = capC[bo] * Math.exp(best);
@@ -3827,7 +3848,7 @@
   // Börse unter Kontor geöffnet
   function boSeen(s) { const b = boState(s); if (b.on) b.seen = true; }
 
-  const api = { lagerBuy, lagerQuote, lagerDays, lagerPrice, lagerValue, LAGER_CAP, KAI, LAGERGELD, zkRef, canStepPrice, lateWhy, whyQuarter, WHY, WHY_TIP, creditInfo, CREDIT, OCEAN_CREW, startOptions, STARTS, FERRY_TYPES, setZk, zkPossible, zkOn, zkPrice, wagDemand, wagCap, wagFare, WAGON, ipKind, ISLANDS, konzOn, rivalTypes, fareF, ZK_PK,
+  const api = { taktInfo, lagerBuy, lagerQuote, lagerDays, lagerPrice, lagerValue, LAGER_CAP, KAI, LAGERGELD, zkRef, canStepPrice, lateWhy, whyQuarter, WHY, WHY_TIP, creditInfo, CREDIT, OCEAN_CREW, startOptions, STARTS, FERRY_TYPES, setZk, zkPossible, zkOn, zkPrice, wagDemand, wagCap, wagFare, WAGON, ipKind, ISLANDS, konzOn, rivalTypes, fareF, ZK_PK,
     setStrict, takeErrors, tDate, departures, shipStatus, shipPos, lineGeo, coalCap, portTier, coalPortPrice, coalPorts, bunkerValue, rivalPk, pkStart, RIV_PK, TIER, TIER_NAME, BUNK, BUNK_ORDER, BUF, BUF_NAME, DIFF, DIFF_ORDER, PAUSE_DEF, COAL_T, diffOf,
     setBunkRule, setShipBunk, setBuffer, setReserve, setCatchUp, markShip, setPause, setDifficulty, orderInfo, cancelInfo, cancelOrder, yardGap, MONTHS, TYPES, TYPE_ORDER, SPECIAL_ORDER, TYPE_NOTE, MAINT, EQUIP, MK_BUDGET, MK_AGENCY, FIN, PORTS, REGIONS, HOME, SEG, World: W,
     cal, dateStr, fmt, newGame, migrate, nextMonth, resolve, eventOptions, buyNew, buyUsed, rename, randomName, openRoute, closeRoute, routeInfo, canServe, routePrice,

@@ -956,6 +956,9 @@
     if (!tt.n) h += '<div class="meta">Noch kein Schiff im Fahrplan.</div>';
     else if (tt.short) h += '<div class="meta">Tagespaket: etwa ' + kn(Math.round(tt.n / tt.P * 10) / 10) + " Abfahrten am Tag je Richtung, Umlauf " + Math.max(1, Math.round(tt.P * 24)) + " Stunden. Die Pünktlichkeit zählt als Anteil pünktlicher Fahrten.</div>";
     else h += '<div class="meta">Abfahrt alle ' + dDays(tt.H) + (r.cruise ? "" : " je Richtung") + ", Umlauf " + dDays(tt.P) + (tt.n > 1 ? " mit " + tt.n + " Schiffen" : "") + ". Das langsamste Schiff bestimmt den Takt.</div>";
+    const tk = E.taktInfo(S, r);
+    if (tk && tk.n && (tk.mine || tk.riv)) h += '<div class="meta">Takt im Vormonat: ' + kn(Math.round(tk.mine)) + " Abfahrten je Richtung" + (tk.riv ? ", die Rivalen " + kn(Math.round(tk.riv)) : ", keine Rivalen") + ".</div>";
+    if (tk && tk.worth) h += '<div class="hint">' + (tk.n === 1 ? "Ein zweites Schiff" : "Ein weiteres Schiff") + " würde sich hier lohnen: Mit dichterem Takt kommen mehr Fahrgäste. Vorsichtig gerechnet bleiben nach allen Kosten rund " + M(tk.gain) + " im Monat mehr.</div>";
     h += '<label class="field">Pufferzeit</label><div class="seg lv" role="group" aria-label="Pufferzeit" style="grid-template-columns:repeat(4,1fr)">' + E.BUF.map((b, i) => '<button data-act="bufSet" data-id="' + r.id + '" data-v="' + i + '" aria-pressed="' + ((r.buf || 0) === i) + '">' + capF(E.BUF_NAME[i]) + "<small>" + (b ? "+" + Math.round(b * 100) + " % Umlauf" : "eng getaktet") + "</small></button>").join("") + "</div>";
     h += '<div class="meta">Puffer fängt Verspätungen auf, kostet aber Abfahrten: Die Schiffe liegen länger im Hafen.</div>';
     const cands = S.ships.filter(sh => !sh.museum && sh.ready <= S.m && (sh.line === r.id || !sh.line || sh.laid) && !E.canServe(S, sh.type, r.a, r.b, r.cruise, r.stops) && !S.routes.some(x => x !== r && x.res === sh.id));
