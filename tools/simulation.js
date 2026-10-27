@@ -11,7 +11,7 @@
                     Kurzstrecke (Fähre, Küste) und Langstrecke (Atlantik, Südamerika) liegen in der Rendite auf den Flottenwert
                     (gut geführt, im Mittel aus einem und zwei Schiffen je Linie) höchstens ein Viertel auseinander
      gegen          Pufferzeit, Reserveschiff, Volldampf zum Aufholen, Maschine, Wartung: keines ist überall das beste
-     bunker         im Heimathafen volltanken, wo es am billigsten ist, nur das Nötige: keine Regel ist überall die beste
+     lager          (seit v5.1.1) Kohlelager immer auffüllen, nur bei Kohle unter 95 % auffüllen, kein Lager (immer am Kai): keine ist überall die beste
      serie          Serienbestellung gegen Einzelbestellungen (zur Information)
      fahrt          Sparfahrt, Normal, Volldampf, Regel des Maschineninspektors: keine Stufe ist überall die beste
      kueche         einfach, ordentlich, fein, eigene Küche, Caterer: keine Stufe ist überall die beste
@@ -19,11 +19,13 @@
      boerse         „nur Aktien“ bringt im Schnitt weniger als eine gut geführte Reederei (Rendite auf das eingesetzte Kapital)
      hauszeche      über 50 % einer Zeche lohnt sich nur für große Flotten (verglichen mit demselben Geld in einem breiten Depot)
      prokurist      knapp bezahlt liegt er unter dem Markt, sehr gut leicht darüber (verglichen mit einem breiten Depot ohne Prokurist)
+     zweites        (seit v5.1.1) ein zweites Schiff bringt auf starken Linien mindestens 20 % mehr Gewinn, auf schwachen weniger (tools/tests/zweites.js)
+     knapp          (seit v5.1.1) „Kohle knapp“ auf Hamburg–Amsterdam höchstens einmal im Jahr, für jeden zugelassenen Schiffstyp (tools/tests/kohle.js)
 
    Aufruf im Hauptordner (Node 18 oder neuer, für „schwierigkeit“ auch git):
      node tools/simulation.js                     alle Prüfungen (rund eine Viertelstunde, nutzt alle Prozessorkerne)
      node tools/simulation.js --laeufe 6          weniger Läufe je Strategie (Standard 12): schneller, aber ungenauer
-     node tools/simulation.js --nur gegen,bunker  nur bestimmte Prüfungen (Schlüssel siehe oben, mehrere mit Komma)
+     node tools/simulation.js --nur gegen,lager   nur bestimmte Prüfungen (Schlüssel siehe oben, mehrere mit Komma)
      node tools/simulation.js --linien hochsee    nur bestimmte Linienarten (Schlüssel siehe LINIEN)
      node tools/simulation.js --jahre 40          Betriebsjahre je Lauf
      node tools/simulation.js --alt 7f7c8be       Vergleichsstand für den Schwierigkeitsgrad (Standard: v5.0.1)
@@ -58,9 +60,10 @@ const linien = f => (E, s) => { for (const r of s.routes) f(E, s, r); };
 const KAPITAL = 1e6;
 const breit = (E, s, betrag) => { const ks = E.BO_ORDER.filter(k => E.boListed(s, k)); for (const k of ks) E.boBuy(s, k, E.boFor(s, k, betrag / ks.length)); };
 const boStart = f => (E, s) => { s.bo.on = true; s.cash += KAPITAL * 1.3; f(E, s); };
-const ALLE = ["schwierigkeit", "fuehrung", "gegen", "bunker", "serie", "fahrt", "kueche", "vertrag", "boerse", "hauszeche", "prokurist", "start"];
+const ALLE = ["schwierigkeit", "fuehrung", "gegen", "lager", "serie", "fahrt", "kueche", "vertrag", "boerse", "hauszeche", "prokurist", "start", "zweites", "knapp"];
+const EXTERN = { zweites: "zweites.js", knapp: "kohle.js" }; // Prüfungen, die ein eigenes Testskript laufen lassen
 const STRAT = {
-  basis: { gruppe: ALLE.filter(g => g !== "start"), name: "nichts anfassen (Normal, im Heimathafen volltanken)" },
+  basis: { gruppe: ALLE.filter(g => g !== "start" && !EXTERN[g]), name: "nichts anfassen (Normal, Kohlelager immer auffüllen)" },
   // Schwierigkeitsgrad und Vergleich mit v4.6
   leicht: { gruppe: ["schwierigkeit"], name: "Leicht, sonst nichts anfassen", diff: "leicht" },
   schwer: { gruppe: ["schwierigkeit"], name: "Schwer, sonst nichts anfassen", diff: "schwer" },
@@ -69,7 +72,7 @@ const STRAT = {
   gut: { gruppe: ["fuehrung"], name: "gut geführt: Puffer 10 %, Maschine gut", start: (E, s) => { E.setStaff(s, "maschine", 2); for (const r of s.routes) E.setBuffer(s, r.id, 2); } },
   gut1: { gruppe: ["fuehrung"], name: "gut geführt mit einem Schiff je Linie", per: 1, start: (E, s) => { E.setStaff(s, "maschine", 2); for (const r of s.routes) E.setBuffer(s, r.id, 2); } },
   schlecht: { gruppe: ["fuehrung"], name: "schlecht getaktet: gemischt schnelle Schiffe, kein Puffer, nur das Nötige, Maschine knapp, Wartung sparsam", mix: true, wartung: 0,
-    start: (E, s) => { E.setStaff(s, "maschine", 0); E.setBunkRule(s, "noetig"); } },
+    lager: "kein", start: (E, s) => { E.setStaff(s, "maschine", 0); if (E.setBunkRule) E.setBunkRule(s, "noetig"); } },
   // Gegenmittel gegen Verspätungen
   puffer1: { gruppe: ["gegen"], name: "Pufferzeit klein (5 % des Umlaufs)", start: linien((E, s, r) => E.setBuffer(s, r.id, 1)) },
   puffer2: { gruppe: ["gegen"], name: "Pufferzeit mittel (10 %)", start: linien((E, s, r) => E.setBuffer(s, r.id, 2)) },
@@ -79,9 +82,9 @@ const STRAT = {
   maschine2: { gruppe: ["gegen"], name: "Maschine gut bezahlt", start: (E, s) => E.setStaff(s, "maschine", 2) },
   maschine3: { gruppe: ["gegen"], name: "Maschine sehr gut bezahlt", start: (E, s) => E.setStaff(s, "maschine", 3) },
   wartung2: { gruppe: ["gegen"], name: "Wartung gründlich", wartung: 2 },
-  // Bekohlungsregeln (Standard: im Heimathafen volltanken)
-  kBillig: { gruppe: ["bunker"], name: "bekohlen, wo es am billigsten ist", start: (E, s) => E.setBunkRule(s, "billig") },
-  kNoetig: { gruppe: ["bunker"], name: "immer nur das Nötige bekohlen", start: (E, s) => E.setBunkRule(s, "noetig") },
+  // Kohlelager (v5.1.1, Standard: auffüllen, sobald es halb leer ist)
+  lager95: { gruppe: ["lager"], name: "Kohlelager nur bei Kohle unter 95 % auffüllen", lager: "billig" },
+  lagerKein: { gruppe: ["lager"], name: "kein Kohlelager, immer am Kai bunkern", lager: "kein" },
   // Werft
   serie: { gruppe: ["serie"], name: "Schiffe einer Linie als Serie bestellen", serie: true },
   // Fahrstufe (v4.5)
@@ -110,6 +113,23 @@ const STRAT = {
   pk1: { gruppe: ["prokurist"], name: "Prokurist Tarif, ausgewogen, 1 Mio. Mark", kapital: KAPITAL, start: boStart((E, s) => { E.setStaff(s, "pk", 1); E.pkSet(s, KAPITAL); }) },
   pk3: { gruppe: ["prokurist"], name: "Prokurist sehr gut, ausgewogen, 1 Mio. Mark", kapital: KAPITAL, start: boStart((E, s) => { E.setStaff(s, "pk", 3); E.pkSet(s, KAPITAL); }) },
 };
+
+// ---------- ein Monat, Tag für Tag ----------
+// Kohlelager (v5.1.1): Ein aufmerksamer Spieler füllt nach, sobald das Lager halb leer ist („billig“: nur bei Kohle unter 95 %, „kein“: nie).
+function lagerFuellen(E, s, art) {
+  if (!E.lagerBuy || !s.lager || art === "kein" || (art === "billig" && s.coal >= .95)) return;
+  const L = s.lager; if (L.t > L.cap / 2) return;
+  const t = Math.floor(L.cap - L.t); if (t >= 10 && E.lagerQuote(s, t).cost < s.cash) E.lagerBuy(s, t);
+}
+function monat(E, s, lager, wahl) {
+  for (let g = 0; g < 400; g++) {
+    lagerFuellen(E, s, lager || "voll");
+    const d = E.advanceDay(s);
+    if (!d) { if (s.over) return null; if (E.duePending(s)) E.resolve(s, wahl(E, s, s.pending[0])); continue; }
+    if (d.month) return d.month;
+  }
+  return null;
+}
 
 // ---------- ein Spiel ----------
 function rng(seed) { let x = seed >>> 0 || 1; return () => ((x = (Math.imul(x, 1664525) + 1013904223) >>> 0) / 4294967296); }
@@ -188,8 +208,7 @@ function spielen(E, li, key, seed, jahre, mitSchwelle) {
       }
       if (st.monat) st.monat(E, s);
     }
-    let rep = null;
-    for (let g = 0; g < 80; g++) { rep = E.nextMonth(s); if (rep || s.over) break; if (E.duePending(s)) E.resolve(s, entscheiden(E, s, s.pending[0])); }
+    const rep = monat(E, s, auf ? st.lager : "kein", entscheiden);
     buchen(); geld(3e5);
     if (s.m > startM && rep) {
       const mo = E.cal(rep.m).mo; mon[mo] += rep.profit; monN[mo]++; if (rep.profit < 0) monL[mo]++; summe += rep.profit; tief = Math.min(tief, summe);
@@ -207,7 +226,7 @@ function spielen(E, li, key, seed, jahre, mitSchwelle) {
   let offen = 0; if (s.bo && s.bo.co) for (const D of [s.bo.dep, s.bo.pk.dep]) for (const k in D) offen += D[k].n * s.bo.co[k].px - D[k].cost;
   const pkKosten = s.bo && s.bo.pk ? (s.bo.pk.lohn || 0) + (s.bo.pk.paid || 0) : 0;
   return { li, key, seed, jahre: ys.length, offen, pkKosten, kapital, flotte: kohleN ? flotteSum / kohleN : 0, profit: sum("profit"), rev: sum("rev"), pax: sum("pax"),
-    kohle: cost(k => k === "Kohle" || k.startsWith("Bekohlung") || k === "Kohle-Mindestabnahme"), verpf: cost(k => k === "Verpflegung"), entsch: cost(k => k === "Entschädigungen"), over: !!s.over,
+    kohle: cost(k => k === "Kohle" || k.startsWith("Bekohlung") || k === "Kohle-Mindestabnahme" || k === "Kohle aus dem Lager" || k === "Lagergeld" || k === "Rücknahme Kohle"), verpf: cost(k => k === "Verpflegung"), entsch: cost(k => k === "Entschädigungen"), over: !!s.over,
     jahrGewinn: ys.map(y => s.years[y].profit), mon, monN, monL, tief, pk: pk.n ? pk.s / pk.n : null, fahrten, einn, preisEnde: s.routes.map(r => [0, 1, 2].map(c => E.pricePct(s, r, c))),
     costs: ys.reduce((a, y) => { const c = s.years[y].costs || {}; for (const k in c) a[k] = (a[k] || 0) + c[k]; return a; }, {}),
     kohleIdx: kohleN ? kohleSum / kohleN : null, sw: mitSchwelle ? sw : null };
@@ -273,8 +292,7 @@ function spielenStart(E, job) {
       if (o) neueLinie(o.a, o.b, o.rec, ["bar", "bank"]);
       else if (voll) { const sh = s.ships.find(x => x.line === voll.id); if (sh) kaufen(sh.type, voll.id, ["bar", "bank"]); }
     }
-    let rep = null;
-    for (let g = 0; g < 80; g++) { rep = E.nextMonth(s); if (rep || s.over) break; if (E.duePending(s)) E.resolve(s, entscheidenStart(E, s, s.pending[0])); }
+    const rep = monat(E, s, "voll", entscheidenStart);
     buchen(); flotteSum += E.fleetValue(s); flotteN++;
     const y = E.yearOf(s); if (!schiffe[y]) schiffe[y] = s.ships.length;
   }
@@ -380,14 +398,15 @@ function fertig() {
     console.log("\n  " + (ueberall ? "ACHTUNG: „" + STRAT[s[0]].name + "“ ist überall die beste." : "Ziel erreicht: keine Einstellung ist auf allen Linienarten die beste (" + [...new Set(s)].map(k => STRAT[k].name).join(", ") + ")."));
     return !ueberall;
   };
-  const titel = { schwierigkeit: "1. Schwierigkeitsgrad: Abstand der Stufen und Vergleich mit v5.0.1", fuehrung: "2. Gut geführt und schlecht getaktet", gegen: "3. Gegenmittel gegen Verspätungen", bunker: "4. Bekohlungsregeln", serie: "5. Serienbestellung",
+  const titel = { schwierigkeit: "1. Schwierigkeitsgrad: Abstand der Stufen und Vergleich mit v5.0.1", fuehrung: "2. Gut geführt und schlecht getaktet", gegen: "3. Gegenmittel gegen Verspätungen", lager: "4. Kohlelager", serie: "5. Serienbestellung",
     fahrt: "6. Fahrstufe", kueche: "7. Verpflegung", vertrag: "8. Kohle-Lieferverträge", boerse: "9. Börse: nur Aktien gegen eine gut geführte Reederei", hauszeche: "10. Hauszeche gegen breites Depot", prokurist: "11. Prokurist gegen breites Depot",
-    start: "12. Start als Fährreederei: Zeitziele und Fährgeschäft" };
+    start: "12. Start als Fährreederei: Zeitziele und Fährgeschäft", zweites: "13. Zweites Schiff je Linie", knapp: "14. Kohle knapp auf Hamburg–Amsterdam" };
   for (const g of ALLE.filter(g => NUR.includes(g))) {
     console.log("=== " + titel[g] + " ===");
     if (["boerse", "hauszeche", "prokurist"].includes(g)) { boAuswertung(g); continue; }
     if (g === "schwierigkeit") { schwierigkeit(); continue; }
     if (g === "start") { startAuswertung(); continue; }
+    if (EXTERN[g]) { const r = cp.spawnSync(process.execPath, [path.join(ROOT, "tools", "tests", EXTERN[g])], { encoding: "utf8" }); console.log((r.stdout || "").replace(/^/gm, "  ").trimEnd() + "\n"); out.gruppen[g] = { ok: r.status === 0, text: r.stdout }; continue; }
     const sk = keys.filter(k => STRAT[k].gruppe.includes(g));
     out.gruppen[g] = {};
     for (const li of NUR_L) {
@@ -400,7 +419,7 @@ function fertig() {
     }
     if (g === "fuehrung") fuehrung();
     if (g === "fahrt") schwellen();
-    if (["fahrt", "kueche", "gegen", "bunker"].includes(g)) keinerUeberall(g, NUR_L);
+    if (["fahrt", "kueche", "gegen", "lager"].includes(g)) keinerUeberall(g, NUR_L);
     if (g === "vertrag") {
       const v = NUR_L.flatMap(li => (out.gruppen[g][li] || []).filter(r => r.k !== "basis"));
       const plus = v.filter(r => r.delta > 0).length;
@@ -412,7 +431,6 @@ function fertig() {
       const d = NUR_L.filter(li => LINIEN[li].per > 1).map(li => (out.gruppen[g][li] || []).find(r => r.k === "serie")).filter(Boolean), klar = d.filter(r => Math.abs(r.delta) > 2 * r.se);
       console.log(`\n  Linienarten mit mehreren Schiffen: Serie besser in ${d.filter(r => r.delta > 0).length} von ${d.length}, deutlich (über zwei Standardfehler) in ${klar.length}. Der Rabatt spart etwas, sonst liefert die Werft wie bei Einzelbestellungen nacheinander.`);
     }
-    if (g === "bunker") console.log("  „Wo es am billigsten ist“ fährt hier wie „im Heimathafen volltanken“: Auf allen Testlinien ist der Heimathafen zugleich der billigste. Anders wird es, wenn eine Linie im teuren Hafen beginnt.");
     console.log("");
   }
   // 1. Schwierigkeitsgrad: je Linienart der Mittelwert, zusammengezählt. Seit v5.1 zählt der Abstand der Stufen zu Leicht (wie in v5.0.1),
