@@ -1677,6 +1677,12 @@
       h += '<div class="item">' + img("ship_" + sh.type, "shipimg", t.name, sh) + '<div class="row"><h3>„' + esc(sh.name) + '“</h3><span class="tag ' + (sh.museum === "aktiv" ? "gold" : "") + '">' + (rest ? "In Restaurierung" : sh.museum === "aktiv" ? "Betriebsfähig" : "Stillgelegt") + "</span></div>" +
         '<div class="meta">' + t.name + " · " + Math.floor(sh.age / 12) + " Jahre</div>";
       if (rest) h += '<div class="hint">Restaurierung bis ' + E.dateAfter(S, sh.restoreUntil - S.t) + ".</div>";
+      // v5.1.1: Frist der betriebsfähigen Museumsschiffe
+      if (sh.museum === "aktiv" && !rest) {
+        const fi = E.fristInfo(S, sh), dock = E.inDock(S, sh);
+        h += fi.left < 0 ? '<div class="hint bad">Frist abgelaufen – keine Nostalgiefahrten, bis sie erneuert ist.</div>' : '<div class="meta">Frist bis ' + E.dateAfter(S, fi.left) + (dock ? " · in der Werft" : "") + "</div>";
+        if (fi.can && !dock) h += '<div class="actions"><button class="btn" data-act="frist" data-id="' + sh.id + '">Frist erneuern (' + fi.days + " Tage, " + M(fi.cost) + ")</button></div>";
+      }
       h += '<div class="actions">' + (sh.museum === "aktiv" ? '<button class="btn" data-act="musMode" data-id="' + sh.id + '" data-v="still">Stilllegen</button>' : '<button class="btn" data-act="musMode" data-id="' + sh.id + '" data-v="aktiv">Wieder flottmachen (' + E.restoreDays(sh) + " Tage, " + M(E.restoreCost(S, sh)) + ")</button>") + "</div></div>";
     }
     h += "<h2>Ausstellungshalle</h2>" + img("mus_halle", "banner", "Ausstellungshalle") + '<p class="sub">' + ex.length + " Exponat" + (ex.length === 1 ? "" : "e") + " · Platz für " + slots + (ex.length > slots ? " – die übrigen liegen im Magazin" : "") + "</p>";
@@ -1820,7 +1826,7 @@
   let startHome = "ham", startDiff = "normal";
   /* ---------- Hauptmenü, Spielstände und Gründung (v5.1) ---------- */
   let menu = null, newStep = 1, newSlot = 1, startLine = null, startType = null, startLine2 = null, slotUi = {}, menuMsg = "";
-  const VERSION = "5.1";
+  const VERSION = "5.1.1";
   const HOME_NAME = { ham: "Hamburg", lpl: "Liverpool", lon: "London" };
   // Geld bei der Gründung: bei britischem Heimathafen in Pfund
   const startMoney = v => startHome === "ham" ? E.fmt(v) + " Mark" : pounds(v);
@@ -1857,7 +1863,7 @@
     h += mbtn("menuNew", "Neue Reederei gründen", "mit einer Fähre ab März 1880");
     h += mbtn("menuSlots", "Spielstände", used + " von 3 Plätzen belegt");
     h += mbtn("menuSettings", "Einstellungen", "Sprache, Ton und Musik");
-    h += mbtn("menuNews", "Neu in Version " + VERSION, "Fährreederei und Spieltempo");
+    h += mbtn("menuNews", "Neu in Version " + VERSION, "Feinschliff und Kohlelager");
     return h + "</nav>" + langSeg() + (DESK ? '<p class="mkeys">Pfeiltasten und Enter wählen, Esc ' + (S ? "führt zurück ins Spiel" : "schließt Unterseiten") + ".</p>" : "");
   }
   function menuSlots() {
@@ -1884,12 +1890,12 @@
   }
   function menuNews() {
     return '<h2 class="mh">Neu in Version ' + VERSION + '</h2><ul class="mnews">' +
-      "<li><b>Start mit einer Fähre.</b> Bei der Gründung wählen Sie eine Fährlinie nahe Ihrem Heimathafen und den Fährtyp. Die Linie ist gleich eröffnet, das Schiff fährt ab dem ersten Tag.</li>" +
-      "<li><b>Vier neue Fährtypen:</b> Fluss-Raddampfer, Dampffähre für Fuhrwerke, Inselpostdampfer und Kanal-Raddampfer.</li>" +
-      "<li><b>Fährgeschäft:</b> Fuhrwerke und Vieh auf den Querungen, Zeitkarten für Pendler, Insel- und Postverträge und die Fährkonzession.</li>" +
-      "<li><b>Langsamerer Aufstieg:</b> Hochseeschiffe kosten deutlich mehr und haben hohe Fixkosten. Bank und Werft geben Kredit nur im Kreditrahmen.</li>" +
-      "<li><b>Drei Spielstände</b> und dieses Hauptmenü.</li></ul>" +
-      '<p class="meta">Alte Spielstände laden wie gewohnt und behalten ihren Start.</p><div class="actions"><button class="btn" data-act="menuBack">Zurück</button></div>';
+      "<li><b>Kohlelager im Heimathafen.</b> Kaufen Sie Kohle, wann Sie wollen, und bunkern Sie zu Hause zum Einstandspreis. Ist das Lager leer, kostet die Kohle am Kai 15 % mehr. Die Bekohlungsregeln fallen weg.</li>" +
+      "<li><b>Verspätungen mit Grund:</b> Nebel, Sturm, Eis, Panne, Streik oder Bekohlen stehen in der Abfahrtstafel, beim Schiff und auf der Karte.</li>" +
+      "<li><b>Ein zweites Schiff lohnt sich</b> auf vollen Linien: Mit dichterem Takt kommen mehr Fahrgäste. Die Linienkarte sagt, wann.</li>" +
+      "<li><b>Statistik Finanzen</b> in Farbe, mit Kostengruppen und den Monatsergebnissen als Balken.</li>" +
+      "<li><b>Seekarte:</b> Alle Linien fahren über Wasser, und die Fähren pendeln sichtbar hin und her.</li></ul>" +
+      '<p class="meta">Alte Spielstände laden wie gewohnt und bekommen ein Kohlelager.</p><div class="actions"><button class="btn" data-act="menuBack">Zurück</button></div>';
   }
   const START_NOTE = { leicht: "Zwei neue Fähren auf zwei Linien", normal: "Eine neue Fähre", schwer: "Eine gebrauchte Fähre, rund 20 Jahre alt" };
   function startOpts() { return E.startOptions(startHome); }

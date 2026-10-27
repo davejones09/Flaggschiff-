@@ -480,7 +480,7 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Ereignisse, die am letzten Tag eines Monats entstanden, kamen erst einen Monat später, zum Beispiel Seenot oder Kohlemangel. Die Zeit hielt dann an, ohne dass ein Fenster erschien. Jetzt kommen sie am Ersten des neuen Monats.
 - Das Ereignis „Kohle wird knapp“ war auf Englisch und Spanisch nicht übersetzt, dazu zwei ältere Sätze (Versicherung nach einem Untergang, Hilfe der „Carpathia“).
 
-## v5.1 · Fährreederei und Spieltempo · aktuell
+## v5.1 · Fährreederei und Spieltempo
 
 *Jede neue Reederei beginnt mit einer Fähre auf einer Querung nahe dem Heimathafen und wächst in Ruhe: erst weitere Fähren, dann die Küste, später Nord- und Ostsee und nach 15 bis 20 Spieljahren der Atlantik. Dazu ein neues Hauptmenü und drei Spielstände.*
 
@@ -512,6 +512,35 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 **BEHOBEN**
 
 - Die Vertragszeile im Fährgeschäft und „ohne Linie“ bei einer Schiffstaufe waren auf Englisch und Spanisch nicht übersetzt.
+
+## v5.1.1 · Feinschliff und Kohlelager · aktuell
+
+*Kohle kaufen Sie jetzt selbst: Im Heimathafen gibt es ein Kohlelager, und wer es füllt, bunkert billiger. Dazu Verspätungen mit Grund, ein zweites Schiff, das sich auf vollen Linien lohnt, eine farbige Finanzstatistik und eine Seekarte, auf der alle Linien über Wasser fahren.*
+
+**NEU**
+
+- Kohlelager im Heimathafen für 3.000 Tonnen (Kontor → Einkauf): Bestand, freier Platz, Einstandspreis, wie lange der Vorrat reicht, dazu Kaufknöpfe für 100, 500 und 1.000 Tonnen oder „Auffüllen“. Zu Hause bunkern die Schiffe aus dem Lager zum Einstandspreis, ist es leer, am Kai 15 % teurer. Lagergeld 0,10 Mark je Tonne und Monat, die Kohle im Lager zählt zum Eigenkapital.
+- Lieferverträge liefern jeden Monat ihre Menge ins Lager. Was nicht passt, nimmt der Händler zu 80 % zurück („Rücknahme Kohle“ im Hauptbuch). Die Hauszeche liefert 20 % billiger ins Lager.
+- Verspätungen haben einen Grund mit Dauer: Nebel, Sturm, Eis, Panne, Streik, Bekohlen, Kohle knapp, Folgeverspätung oder Seenotrettung. Sie stehen in der Abfahrtstafel (am PC in eigener Spalte), in den letzten Fahrten, beim Schiff in der Flotte und auf der Karte. Jede Linie zeigt, was im letzten Vierteljahr am meisten gekostet hat und was dagegen hilft.
+- Mehrere Schiffe je Linie fahren einen dichteren Takt: Die Fahrgäste warten kürzer, Kaufleute und Pendler wechseln deshalb eher zu Ihnen, und auf Pendler- und Bahnlinien weckt der dichte Takt zusätzliche Nachfrage. Die Linienkarte zeigt Ihren Takt gegen den der Rivalen und meldet, wenn sich ein weiteres Schiff lohnen würde.
+- Statistik Finanzen: Einnahmen grün, Kosten rot, Ergebnis nach Vorzeichen. Die Kosten stehen in vier aufklappbaren Gruppen (Betrieb, Schiffe, Finanzen, Sonstiges), dazu die Monatsergebnisse der letzten 24 Monate als Balken. Das Hauptbuch im Kontor hat dieselben Farben und Gruppen.
+
+**GEÄNDERT**
+
+- Die Bekohlungsregeln fallen weg. Auswärts bunkern die Schiffe von selbst so viel, wie sie bis zum nächsten Heimathafen brauchen, mit einer Reserve nach den Seegebieten der Strecke.
+- Zeitkarten: Maßstab ist jetzt die Pünktlichkeit der Rivalen, ohne Rivalen das in der Jahreszeit Übliche. Wer pünktlicher ist als die Konkurrenz, verliert keine Pendler. Es kündigen höchstens 10 % im Monat, und wenn es wieder läuft, kommen Pendler zurück. Die Meldung nennt den Vergleich.
+- Streiks zählen in der Pünktlichkeit: Tage, an denen ein Streik Abfahrten stoppt oder verzögert, gelten auf kurzen und langen Linien als unpünktlich. Ein Bordstreik bei einem Rivalen senkt auch dessen Pünktlichkeit.
+- Seekarte: Flüsse, Kanäle und Fahrrinnen sind als schmales Wasser gezeichnet, und keine Linie läuft mehr über Land (geprüft für alle Hafenpaare). Die Entfernungen bleiben, wie sie waren. Fähren im Tagespaket pendeln sichtbar hin und her, und die Punkte auf langen Linien rücken auch zwischen zwei Tagen weiter.
+- Alte Spielstände bekommen ein Kohlelager mit so viel Platz, wie ihre Schiffe in zwei Monaten im Heimathafen bunkern, mindestens 3.000 Tonnen, und eine Meldung dazu. Lieferverträge in anderen Häfen liefern ab jetzt ins Lager.
+- Die Simulation prüft drei Lagerstrategien statt der Bekohlungsregeln, dazu das zweite Schiff und „Kohle knapp“ auf Hamburg – Amsterdam. Alles Nähere im Konzept (docs/konzept-v5.1.1.md).
+
+**BEHOBEN**
+
+- Linien liefen auf der Karte über Land, zum Beispiel Hamburg – Amsterdam, London – Amsterdam, Glasgow – Belfast, Liverpool – Dublin, Kiel – Kopenhagen und Lübeck – Kopenhagen.
+- Preise: Nicht jeder Druck auf + oder − änderte den angezeigten Preis, vor allem bei kleinen Mark-Beträgen und bei Pfundpreisen über £10. Jetzt ändert jeder Schritt den Preis sichtbar; unter £10 zeigt das Spiel Schilling und Pence.
+- „Kohle knapp“ kam auf Hamburg – Amsterdam mehrmals im Jahr, obwohl kaum etwas fehlte. Jetzt nehmen die Schiffe eine Reserve nach den Seegebieten mit, und ein Fehlbetrag unter 5 % fährt still mit etwas weniger Fahrt.
+- Streiktage fehlten in der Pünktlichkeit, ausgefallene Fahrten im Tagespaket zählten nicht mit.
+- Museum: Für betriebsfähige Museumsschiffe ließ sich keine Frist erneuern. Jetzt zeigt das Museum die Frist mit dem Knopf „Frist erneuern“, warnt 30 Tage vorher, und Nostalgiefahrten brauchen eine gültige Frist. Eine Restaurierung bringt eine neue Frist mit, alte Spielstände bekommen für abgelaufene Fristen drei Monate Aufschub.
 
 ## Als Nächstes geplant
 

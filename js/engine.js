@@ -565,6 +565,8 @@
     }
     // v5.1.1: Kohlelager im Heimathafen statt Bekohlungsregeln. Alte Spielstände bekommen Platz für zwei Monate Bunkern im Heimathafen, mindestens 3.000 t;
     // die Bunker bleiben, Lieferverträge liefern ab jetzt ins Lager
+    // v5.1.1: Betriebsfähige Museumsschiffe brauchen eine gültige Frist; abgelaufene bekommen beim ersten Laden drei Monate Aufschub
+    if (!s.musFrist) { s.musFrist = true; for (const sh of s.ships) if (sh.museum === "aktiv" && sh.survey != null && sh.survey < s.t + 90) sh.survey = s.t + 90; }
     if (!s.lager) {
       const old = (s.hist && s.hist.length > 0) || s.ships.some(sh => sh.v);
       s.lager = { t: 0, v: 0, cap: Math.max(LAGER_CAP, Math.ceil(2 * coalBase(s, s.home || "ham") / 100) * 100), use: [] };
@@ -3185,6 +3187,10 @@
   function shipsDay(s) {
     for (const sh of s.ships) {
       if (sh.dockUntil === s.t) { const r = routeOf(s, sh); s.log.unshift({ m: s.m, head: "„" + sh.name + "“ ist zurück im Dienst", text: "Die Werft hat die Arbeiten abgeschlossen. " + (r && !sh.laid ? "Das Schiff fährt wieder auf " + rInfo(s, r).name + "." : "Weisen Sie ihm in der Flotte eine Linie zu."), kind: "own", img: "ship_" + sh.type }); }
+      if (sh.survey != null && sh.ready <= s.m && !inDock(s, sh) && sh.museum && sh.museum === "aktiv" && !(sh.restoreUntil > s.t)) { // v5.1.1: Frist der betriebsfähigen Museumsschiffe
+        if (sh.survey - s.t === 30) s.log.unshift({ m: s.m, head: "Frist der „" + sh.name + "“ läuft in 30 Tagen ab", text: "Erneuern Sie die Frist im Museum, sonst darf das Schiff keine Nostalgiefahrten mehr machen.", kind: "bad", img: "wf_besichtigung" });
+        if (sh.survey === s.t) s.log.unshift({ m: s.m, head: "Frist der „" + sh.name + "“ abgelaufen", text: "Das Museumsschiff darf erst wieder fahren, wenn die Frist erneuert ist.", kind: "bad", img: "wf_besichtigung" });
+      }
       if (sh.survey != null && sh.ready <= s.m && !inDock(s, sh) && !sh.museum) {
         if (sh.survey - s.t === 30) s.log.unshift({ m: s.m, head: "Frist der „" + sh.name + "“ läuft in 30 Tagen ab", text: "Erneuern Sie die Frist in der Flotte, sonst darf das Schiff nicht mehr auslaufen.", kind: "bad", img: "wf_besichtigung" });
         if (sh.survey === s.t) s.log.unshift({ m: s.m, head: "Frist der „" + sh.name + "“ abgelaufen", text: "Das Schiff liegt fest und ist nicht versichert, bis die Frist erneuert ist.", kind: "bad", img: "wf_besichtigung" });
@@ -3387,7 +3393,7 @@
     if (mode === "still") { sh.museum = "still"; sh.restoreUntil = null; return null; }
     if (sh.museum === "aktiv") return null;
     const c = restoreCost(s, sh); if (s.cash < c) return "Nicht genug Geld für die Restaurierung.";
-    expense(s, "Museumsbau", c); sh.museum = "aktiv"; sh.restoreUntil = s.t + restoreDays(sh); sh.cond = 100;
+    expense(s, "Museumsbau", c); sh.museum = "aktiv"; sh.restoreUntil = s.t + restoreDays(sh); sh.cond = 100; sh.survey = sh.restoreUntil + 1460; // v5.1.1: Restaurierung mit Fristprüfung
     s.log.unshift({ m: s.m, head: "Restaurierung der „" + sh.name + "“", text: "Kessel, Maschine, Planken und Farbe: Die Werft braucht " + restoreDays(sh) + " Tage und " + fmt(c) + " Mark, bis das Schiff wieder fahren darf.", kind: "own", img: "mus_restaurierung" });
     return null;
   }
@@ -3412,7 +3418,7 @@
     const vis = Math.round(Math.sqrt(PORTS[s.home || "ham"].pop) * 60 * museumDraw(s) * (.5 + s.mk.brand / 100) * season * pr.f * (M.fest === s.m ? 2.5 : 1));
     const rev = Math.round(vis * pr.p * s.pidx);
     let trips = 0;
-    if (M.trips && mo >= 4 && mo <= 8) for (const sh of s.ships.filter(x => x.museum === "aktiv" && !(x.restoreUntil > s.t))) {
+    if (M.trips && mo >= 4 && mo <= 8) for (const sh of s.ships.filter(x => x.museum === "aktiv" && !(x.restoreUntil > s.t) && !inDock(s, x) && !detained(s, x))) { // v5.1.1: nur mit gültiger Frist
       const t = TYPES[sh.type], seats = Math.min(t.seats, 600);
       trips += Math.round(seats * 7 * (.6 + s.mk.brand / 150) * (.8 + t.comfort / 10) * s.pidx - seats * 2.5 * s.pidx);
       if (rnd(s) < .01) { const c = Math.round(PS(s, sh) * .01); expense(s, "Museumsbau", c); s.log.unshift({ m: s.m, head: "Panne bei der Nostalgiefahrt", text: "Die „" + sh.name + "“ musste mit Kesselschaden zurückgeschleppt werden. Reparatur " + fmt(c) + " Mark, die Fahrgäste bekamen ihr Geld zurück.", kind: "bad", img: "mus_nostalgie" }); }
