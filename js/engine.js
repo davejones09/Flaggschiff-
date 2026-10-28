@@ -200,6 +200,7 @@
     rostron: { name: "Kapitän Arthur Rostron", title: "Der Held der Carpathia", img: "cap_rostron", fx: "Führt Rettungen meisterhaft: viel bessere Aussichten in Seenot für sein Schiff, Rettungen bringen doppeltes Ansehen.", pay: 2.2, bound: "carpathia",
       story: "Arthur Rostron (1869–1940) führte im April 1912 die Carpathia mit voller Kraft durch das Eisfeld zur Unglücksstelle der Titanic und nahm über 700 Überlebende an Bord. Später wurde er Kommodore seiner Reederei und für die Rettung vielfach geehrt." },
     emil: { name: "Kapitän Emil", title: "Der Glücksbringer", img: "ev_emil", fx: "Glücksschiff: nur halb so viele Havarien, bessere Aussichten in Seenot.", pay: 1, bound: "emil" },
+    julia: { name: "Flottenadmiralin Julia", title: "Die Admiralin", img: "ev_julia", fx: "Unter ihr arbeitet das Personal an Bord eine Lohnstufe besser, ohne mehr zu kosten. Läuft ihr Schiff Fuerteventura an, ist es 10 % schneller.", pay: 1, bound: "julia" },
   };
   const OFFER_CAPS = ["eis", "rekord", "retter", "spar", "gent", "watt"];
   function capLevel(c) { if (c.sp) return 5; let l = 1; for (let i = 1; i < CAP_XP.length; i++) if (c.xp >= CAP_XP[i]) l = i + 1; return l; }
@@ -224,7 +225,7 @@
     newCaptain(s, lvl).ship = sh.id;
   }
   function capFx(s, sh) {
-    const c = capOf(s, sh), f = { spd: 1, risk: 1, com: 0, coal: 1, seenot: 0, crew: 1, first: 0, winter: 1, noHit: false, rescue: 1 };
+    const c = capOf(s, sh), f = { spd: 1, risk: 1, com: 0, coal: 1, seenot: 0, crew: 1, first: 0, winter: 1, noHit: false, rescue: 1, brk: 1 };
     if (!c) return f;
     const L = capLevel(c) - 1; f.seenot += .02 * L;
     if (c.spec === "nav") f.spd *= 1 + .01 * L; if (c.spec === "sich") f.risk *= 1 - .06 * L; if (c.spec === "gast") f.com += .12 * L; if (c.spec === "oeko") f.coal *= 1 - .03 * L;
@@ -236,9 +237,18 @@
       case "gent": f.com += .6; break;
       case "watt": { const i = infoOf(s, sh); if (i && (i.kind.cat === "Fähre" || i.kind.cat === "Küste")) { f.spd *= 1.1; f.risk *= .5; } break; }
       case "smith": f.com += .5; f.first = .35; break;
+      case "julia": { // eine Lohnstufe besser in Deck, Maschine und Service (über „sehr gut“ hinaus noch ein halber Schritt), vor Fuerteventura 10 % schneller
+        const st = staff(s), up1 = k => Math.min(3.5, st[k] + 1);
+        f.spd *= lvv(SPD_LV, up1("maschine")) / SPD_LV[st.maschine]; f.coal *= lvv(COAL_LV, up1("maschine")) / COAL_LV[st.maschine]; f.brk = lvv(BRK_LV, up1("maschine")) / BRK_LV[st.maschine];
+        f.risk *= lvv(RISK_LV, up1("deck")) / RISK_LV[st.deck]; f.seenot += lvv(SEENOT_LV, up1("deck")) - SEENOT_LV[st.deck]; f.com += lvv(SVC_LV, up1("service")) - SVC_LV[st.service];
+        const r = routeOf(s, sh); if (r && (r.a === "fue" || r.b === "fue" || (r.stops || []).includes("fue"))) f.spd *= 1.1;
+        break;
+      }
     }
     return f;
   }
+  // Wert einer Lohnstufe, auch zwischen den Stufen und über „sehr gut“ hinaus (v5.1.3)
+  function lvv(A, x) { if (x <= A.length - 1) { const i = Math.floor(x), u = x - i; return u ? A[i] + (A[i + 1] - A[i]) * u : A[i]; } const n = A.length - 1; return A[n] + (A[n] - A[n - 1]) * (x - n); }
   function assignCaptain(s, shipId, capId) {
     const sh = s.ships.find(x => x.id === shipId); if (!sh) return;
     const cur = capOf(s, sh);
@@ -461,6 +471,7 @@
     s.loans.push({ id: uid(s), label: "Gründungskredit " + HOMES[s.home].bank, out: loan, rate: 3.5, pay: Math.round(loan * .035 / 12), left: 240, grace: 36, founder: true });
     s.flags.hadFounder = true;
     if (isEmil(s.name)) s.flags.emilFirm = true;
+    if (isJulia(s.name)) s.flags.juliaFirm = true;
     addListing(s, "moewe", 14 * 12); addListing(s, "seebad", 9 * 12); addListing(s, "kurier", 19 * 12);
     const first = opt.start ? startFleet(s, opt.start === true ? null : opt.start, opt.start2) : null;
     s.log.unshift({ m: 0, head: "Eine neue Reederei in " + homeName(s), text: first ? s.name + " eröffnet ihr Kontor am Hafen. " + (first.ships.length > 1 ? "Die ersten Fähren „" + first.ships.map(x => x.name).join("“ und „") + "“ fahren" : "Die erste Fähre „" + first.ships[0].name + "“ fährt") + " ab sofort auf " + first.name + "." : s.name + " eröffnet ihr Kontor am Hafen. Noch fährt kein einziges Schiff unter ihrer Flagge.", kind: "news" });
@@ -537,7 +548,7 @@
     applyCountry(s); registerDesigns(s); staff(s); caps(s);
     if (yearOf(s) >= 1925) PORTS.osl.name = "Oslo"; else PORTS.osl.name = "Kristiania";
     if (PORTS.fue) PORTS.fue.name = yearOf(s) >= 1956 ? "Puerto del Rosario (Fuerteventura)" : "Puerto de Cabras (Fuerteventura)";
-    for (const sh of s.ships) { if (sh.emil && !caps(s).some(c => c.sp === "emil")) specialCaptain(s, "emil").ship = sh.id; if (!capOf(s, sh)) captainFor(s, sh, 1 + Math.min(4, Math.floor((sh.age || 0) / 36))); }
+    for (const sh of s.ships) { if (sh.emil && !caps(s).some(c => c.sp === "emil")) specialCaptain(s, "emil").ship = sh.id; if (sh.julia && !caps(s).some(c => c.sp === "julia")) specialCaptain(s, "julia").ship = sh.id; if (!capOf(s, sh)) captainFor(s, sh, 1 + Math.min(4, Math.floor((sh.age || 0) / 36))); }
     if (!s.exp) s.exp = { k: 50, s: 50, si: 50 }; if (!s.expHit) s.expHit = { si: 0, k: 0 }; if (!s.years) s.years = {};
     if (s.exp.ku == null) s.exp.ku = 50; if (s.expHit.ku == null) s.expHit.ku = 0;
     if (!FAHRT[s.fahrt]) s.fahrt = "normal"; kueche(s); staff(s); boState(s); boUnlock(s); s.coalK = s.coalK || []; s.coalHist = s.coalHist || []; s.coalUse = s.coalUse || [];
@@ -796,7 +807,9 @@
     return null;
   }
   const isEmil = n => /(^|[^a-zäöüß])emil([^a-zäöüß]|$)/i.test(String(n || ""));
+  const isJulia = n => /(^|[^a-zäöüß])julia([^a-zäöüß]|$)/i.test(String(n || ""));
   function emilCheck(s, sh) {
+    juliaCheck(s, sh);
     if (s.flags.emil || !sh || !isEmil(sh.name)) return;
     if (sh.ready > s.m) { s.flags.emilWait = sh.id; return; }
     offerEmil(s, sh);
@@ -806,7 +819,35 @@
     s.pending.unshift({ id: "emil", ship: sh.id, day: s.day, head: "Kapitän Emil meldet sich", img: "ev_emil",
       text: "Am Kai steht ein alter Seebär mit weißem Bart und Pfeife und zwinkert: „Moin! Man erzählt sich, hier gibt’s ein Schiff mit meinem Namen. Fünfzig Jahre fahr ich zur See und hab noch nie eins verloren. Na, wie wär’s?“" });
   }
+  // Flottenadmiralin Julia (v5.1.3): taucht auf wie Kapitän Emil, wenn ein Schiff oder die Reederei „Julia“ heißt
+  function juliaCheck(s, sh) {
+    if (s.flags.julia || !sh || !isJulia(sh.name)) return;
+    if (sh.ready > s.m) { s.flags.juliaWait = sh.id; return; }
+    offerJulia(s, sh);
+  }
+  function offerJulia(s, sh) {
+    s.flags.julia = "offered"; s.flags.juliaWait = null;
+    s.pending.unshift({ id: "julia", ship: sh.id, day: s.day, head: "Flottenadmiralin Julia kommt an Bord", img: "ev_julia",
+      text: "Am Kai wird es still. Die Hafenarbeiter nehmen die Mützen ab, der Hafenmeister grüßt als Erster: Flottenadmiralin Julia von der Deutsch-Spanischen Marine schreitet die Gangway der „" + sh.name + "“ hinauf. „Ein Schiff mit meinem Namen“, sagt sie, „verdient eine ordentliche Führung. Ich übernehme das Kommando – wenn Sie einverstanden sind.“" });
+  }
+  function juliaMonthly(s) {
+    if (s.flags.julia) return;
+    if (s.flags.juliaWait) { const sh = s.ships.find(x => x.id === s.flags.juliaWait); if (sh && sh.ready <= s.m) offerJulia(s, sh); return; }
+    if (s.flags.juliaFirm) { const sh = s.ships.find(x => x.ready <= s.m && !x.emil); if (sh) offerJulia(s, sh); }
+  }
+  // Emil oder Julia übernimmt das Schiff; wer dort schon als Gebundener fuhr, geht von Bord (v5.1.3)
+  function takeHelm(s, sh, key) {
+    const old = capOf(s, sh);
+    if (old && old.bound) { s.caps = caps(s).filter(x => x !== old); for (const k of ["emil", "julia"]) if (k !== key && sh[k]) { sh[k] = false; s.flags[k] = "retired"; } }
+    else if (old) old.ship = null;
+    specialCaptain(s, key).ship = sh.id;
+  }
+  function juliaLeaves(s, sh, how) {
+    if (!sh.julia) return ""; s.flags.julia = "retired";
+    return how === "sink" ? " Flottenadmiralin Julia ging als Letzte von Bord und kehrt zur Marine zurück." : "";
+  }
   function emilMonthly(s) {
+    juliaMonthly(s);
     if (s.flags.emil) return;
     if (s.flags.emilWait) { const sh = s.ships.find(x => x.id === s.flags.emilWait); if (sh && sh.ready <= s.m) offerEmil(s, sh); return; }
     if (s.flags.emilFirm) { const sh = s.ships.find(x => x.ready <= s.m); if (sh) offerEmil(s, sh); }
@@ -826,6 +867,7 @@
     for (const l of s.loans.filter(l => l.ship === id)) cash -= l.out;
     s.loans = s.loans.filter(l => l.ship !== id); s.cash += cash; s.ships = s.ships.filter(x => x.id !== id);
     { const c = caps(s).find(x => x.ship === id); if (c) { if (c.bound) s.caps = caps(s).filter(x => x !== c); else c.ship = null; } }
+    if (sh.julia) { juliaLeaves(s, sh); s.log.unshift({ m: s.m, head: "Flottenadmiralin Julia kehrt zur Marine zurück", text: "Ohne „ihr“ Schiff zieht es die Admiralin zurück zur Flotte. Die Mannschaft steht ein letztes Mal stramm.", kind: "own", img: "ev_julia" }); }
     if (sh.emil) { s.flags.emil = "retired"; s.log.unshift({ m: s.m, head: "Kapitän Emil geht in den Ruhestand", text: "Ohne „sein“ Schiff will der alte Seebär nicht mehr fahren. Zum Abschied gibt es eine Buddel Rum und ein Zwinkern.", kind: "own", img: "ev_emil" }); }
     s.log.unshift({ m: s.m, head: "„" + sh.name + "“ verkauft", text: "Erlös " + fmt(val) + " Mark" + (cash !== val ? ", nach Tilgung des Kredits bleiben " + fmt(cash) + " Mark." : "."), kind: "own" });
     return null;
@@ -1304,7 +1346,7 @@
     let fog = 0, pf = 0;
     for (const a in areas) if (FOG[a]) pf = Math.max(pf, FOG[a][(a === "channel" ? FOGCH_MO : STORM_MO).includes(mo) ? 0 : 1] * f);
     fog = det ? pf * 5 / 24 : (rnd(s) < pf ? (2 + rnd(s) * 6) / 24 : 0);
-    const st = staff(s), q = Math.min(.5, BRK * (1 + 3 * Math.pow(1 - sh.cond / 100, 2)) * BRK_LV[st.maschine] * BRK_MAINT[sh.maint] * (sh.majLate && sh.majLate.kessel ? 1.5 : 1) * diffOf(s).delay);
+    const st = staff(s), q = Math.min(.5, BRK * (1 + 3 * Math.pow(1 - sh.cond / 100, 2)) * BRK_LV[st.maschine] * capFx(s, sh).brk * BRK_MAINT[sh.maint] * (sh.majLate && sh.majLate.kessel ? 1.5 : 1) * diffOf(s).delay);
     const brk = det ? q * 1.25 : (rnd(s) < q ? .5 + rnd(s) * 1.5 : 0);
     return { extra, storm, coalX, fog, brk, ice };
   }
@@ -1726,7 +1768,7 @@
     const dwS = (l, c) => { dwA("sturm", l * (1 - iceSh), c * (1 - iceSh)); dwA("eis", l * iceSh, c * iceSh); };
     if (det) { late += pf * .55 + ps * .35; cancel += pf * .12 + ps * .25 + riv * .08 * f; dwA("nebel", pf * .55, pf * .12); dwS(ps * .35, ps * .25); dwA("eis", 0, riv * .08 * f); }
     else { if (rnd(s) < pf) { const l = .3 + rnd(s) * .5, c = rnd(s) * .25; late += l; cancel += c; dwA("nebel", l, c); } if (rnd(s) < ps) { const l = .2 + rnd(s) * .3, c = .1 + rnd(s) * .3; late += l; cancel += c; dwS(l, c); } if (riv && rnd(s) < .25 * f) { const c = (.2 + rnd(s) * .4) * riv; cancel += c; dwA("eis", 0, c); } }
-    const st = staff(s); let qb = 0; for (const sh of ships) qb += Math.min(.5, BRK * (1 + 3 * Math.pow(1 - sh.cond / 100, 2)) * BRK_LV[st.maschine] * BRK_MAINT[sh.maint] * f); qb /= ships.length;
+    const st = staff(s); let qb = 0; for (const sh of ships) qb += Math.min(.5, BRK * (1 + 3 * Math.pow(1 - sh.cond / 100, 2)) * BRK_LV[st.maschine] * capFx(s, sh).brk * BRK_MAINT[sh.maint] * f); qb /= ships.length;
     { const l = det ? qb : qb * (.5 + rnd(s)); late += l; dwA("panne", l, 0); }
     const rs = r.res && s.ships.find(x => x.id === r.res); if (rs && usable(s, rs)) { late *= .3; cancel *= .3; for (const k in dw) { dw[k].late *= .3; dw[k].cancel *= .3; } }
     { const bp = G.ports.find(p => s.blk && s.blk[p] > ctx.T0); if (bp || (s.blkAll || 0) > ctx.T0) { cancel = 1; dw = {}; dwA(bp ? blockWhy(s, bp) : "streik", 0, 1); } }
@@ -2125,33 +2167,67 @@
     sh.distress = true;
     const info = infoOf(s, sh), where = info ? (info.ocean ? "auf hoher See" : "vor der Küste") : "auf See";
     const causes = ["ist leckgeschlagen", "hat Wassereinbruch im Maschinenraum", "hat nach einer Grundberührung schwere Schlagseite", "brennt im Laderaum"];
-    s.pending.unshift({ id: "seenot", day: s.day, ship: sh.id, head: "Seenot! Die „" + sh.name + "“ " + pick(s, causes),
+    const ci = Math.floor(rnd(s) * causes.length), storm = STORM_MO.includes(cal(s.m).mo) && !!info && info.areas.some(a => a !== "river" && a !== "canal" && a !== "coast");
+    sh.distressCause = (storm && ci < 2 ? "Sturm – " : "") + SINK_CAUSE[ci];
+    s.pending.unshift({ id: "seenot", day: s.day, ship: sh.id, head: "Seenot! Die „" + sh.name + "“ " + causes[ci],
       text: "Linie " + lineOf(s, sh) + ". Das Schiff ist " + where + " in Not, " + fmt(Math.max(20, Math.round((sh.lastPax || TYPES[sh.type].seats) / 6))) + " Menschen an Bord. Der Kapitän erwartet Ihre Anweisung.", img: "ev_seenot" });
+  }
+  // Untergang (seit v5.1.3 mit eigenem Fenster): Ort, Ursache und alle Folgen mit Zahlen
+  const SINK_CAUSE = ["Leck", "Wassereinbruch im Maschinenraum", "Grundberührung", "Feuer im Laderaum"];
+  const AREA_AT = { river: "auf dem Fluss", coast: "vor der Küste", north: "in der Nordsee", baltic: "in der Ostsee", balticn: "in der nördlichen Ostsee", channel: "im Ärmelkanal", atlantic: "auf dem Atlantik", tropic: "in tropischen Gewässern", med: "im Mittelmeer", canal: "im Kanal" };
+  function sinkPlace(s, sh) {
+    const r = routeOf(s, sh), G = r && lineGeo(s, r); if (!G) return { sea: "auf See", leg: null };
+    const v = sh.v, k = v && v.st === "see" && v.k != null && G.legAreas[v.k] ? v.k : null;
+    const list = k != null ? Object.keys(G.legAreas[k]) : (G.info.areas || []), worst = list.slice().sort((a, b) => (AREA_RISK[b] ? AREA_RISK[b][1] : 0) - (AREA_RISK[a] ? AREA_RISK[a][1] : 0))[0];
+    return { sea: AREA_AT[worst] || "auf See", leg: k != null && v.to != null ? [PORTS[G.ports[v.i]].name, PORTS[G.ports[v.to]].name] : null };
+  }
+  // Was der Verlust für die Linie bedeutet: Schiffe, Takt vorher und nachher, gefährdete Verträge
+  function lineLoss(s, sh) {
+    const r = routeOf(s, sh); if (!r) return null;
+    const info = rInfo(s, r), on = s.ships.filter(x => x.line === r.id && x.ready <= s.m && !x.laid), rest = on.filter(x => x !== sh);
+    const trips = x => info ? tripsOf(s, x, info).trips : 1, sum = L => L.reduce((a, x) => a + trips(x), 0), all = sum(on);
+    const dep0 = r.last && r.last.dep ? r.last.dep : 2 * all, depOf = L => all > 0 ? dep0 * sum(L) / all : 0, dep1 = depOf(rest), risk = [];
+    for (const k of Object.keys(s.contracts || {})) {
+      const c = s.contracts[k]; if (pairKey(c.a, c.b) !== pairKey(r.a, r.b)) continue;
+      const ok = rest.filter(x => TYPES[x.type].speed * fahrtF(s, x) >= (c.minSpeed || 0));
+      if (depOf(ok) < (c.minDeps || 1)) risk.push({ name: c.name, min: c.minDeps || 0, speed: c.minSpeed || 0, pen: c.pen });
+    }
+    if (r.konz && r.konz.until > s.m && dep1 < r.konz.takt) risk.push({ name: "Fährkonzession", min: r.konz.takt, pen: r.konz.pacht });
+    if (zkOn(r) && !rest.length) risk.push({ name: "Zeitkarten", zk: true });
+    return { id: r.id, name: info ? info.name : lineOf(s, sh), n0: on.length, n1: rest.length, dep0: Math.round(dep0), dep1: Math.round(dep1), risk };
   }
   function sink(s, sh, how, opt) {
     const lineName = lineOf(s, sh);
     opt = opt || {};
     const val = shipValue(s, sh), neglect = sh.cond < 45 || sh.maint === 0;
     const saved = opt.saved != null ? opt.saved : (sh.eq.boote || TYPES[sh.type].seats <= 300);
+    const am = sh.type === "american", X = { ship: sh.name, type: sh.type, line: lineLoss(s, sh), place: am ? { sea: "an einer fernen Vulkanküste", leg: null } : sinkPlace(s, sh),
+      cause: am ? "Sturm – gestrandet" : opt.sudden ? "Kesselexplosion" : sh.distressCause || "Seenot", gaveUp: !!opt.gaveUp, rep0: s.rep, brand0: s.mk.brand };
     let text = "Ein Seeamt untersucht den Fall.";
     let payout = 0;
-    if (sh.insured && detained(s, sh)) text += " Die Frist war abgelaufen – die Versicherung zahlt nichts.";
-    else if (sh.insured) { payout = Math.round(val * (neglect ? .7 : 1)); text += neglect ? " Es stellt Wartungsmängel fest – die Versicherung kürzt die Zahlung um 30 %." : " Die Versicherung zahlt den Zeitwert."; }
-    else text += " Das Schiff war nicht versichert.";
-    { const n = aboard(s, sh);
-      if (saved) { text += " Alle Menschen an Bord wurden gerettet."; text += compensate(s, sh, 0, Math.round(n * (.05 + rnd(s) * .1))); }
-      else { const dead = Math.max(1, Math.round(n * (.15 + rnd(s) * .25) * (sh.eq.boote ? .3 : 1) * (sh.eq.funk ? .7 : 1) * (sh.eq.schotten ? .8 : 1))); s.stats.lost += 1; text += " Nicht alle konnten gerettet werden."; text += compensate(s, sh, dead, Math.round(n * .1)); } }
+    if (sh.insured && detained(s, sh)) { text += " Die Frist war abgelaufen – die Versicherung zahlt nichts."; X.ins = "frist"; }
+    else if (sh.insured) { payout = Math.round(val * (neglect ? .7 : 1)); text += neglect ? " Es stellt Wartungsmängel fest – die Versicherung kürzt die Zahlung um 30 %." : " Die Versicherung zahlt den Zeitwert."; X.ins = neglect ? "cut" : "full"; }
+    else { text += " Das Schiff war nicht versichert."; X.ins = "none"; }
+    X.pay = payout;
+    { const n = aboard(s, sh); X.n = n;
+      if (saved) { const hurt = Math.round(n * (.05 + rnd(s) * .1)); text += " Alle Menschen an Bord wurden gerettet."; text += compensate(s, sh, 0, hurt); Object.assign(X, { dead: 0, hurt, comp: compLast }); }
+      else { const dead = Math.max(1, Math.round(n * (.15 + rnd(s) * .25) * (sh.eq.boote ? .3 : 1) * (sh.eq.funk ? .7 : 1) * (sh.eq.schotten ? .8 : 1))), hurt = Math.round(n * .1); s.stats.lost += 1; text += " Nicht alle konnten gerettet werden."; text += compensate(s, sh, dead, hurt); Object.assign(X, { dead: Math.min(n, dead), hurt, comp: compLast }); } }
+    X.bank = 0; X.debt = 0;
     for (const l of s.loans.filter(l => l.ship === sh.id)) {
-      const use = Math.min(payout, l.out); payout -= use; l.out -= use;
-      if (l.out > 1) { l.ship = null; l.label = "Restschuld ohne Schiff („" + sh.name + "“)"; text += " Die Restschuld von " + fmt(l.out) + " Mark läuft weiter."; }
+      const use = Math.min(payout, l.out); payout -= use; l.out -= use; X.bank += use;
+      if (l.out > 1) { l.ship = null; l.label = "Restschuld ohne Schiff („" + sh.name + "“)"; text += " Die Restschuld von " + fmt(l.out) + " Mark läuft weiter."; X.debt += l.out; }
     }
     s.loans = s.loans.filter(l => l.out > 1);
     s.cash += payout; s.ships = s.ships.filter(x => x !== sh);
     up(s, "rep", saved ? -8 : -25); s.mk.brand = clamp(s.mk.brand - (saved ? 3 : 10), 0, 100); s.stats.sunk += 1;
+    X.rep = s.rep - X.rep0; X.brand = s.mk.brand - X.brand0; delete X.rep0; delete X.brand0;
     if (s.expHit) s.expHit.si += saved ? 12 : 25;
-    if (sh.emil) { s.flags.emil = "retired"; text += " Kapitän Emil ging als Letzter von Bord und setzt sich nun zur Ruhe."; }
-    { const c = caps(s).find(x => x.ship === sh.id); if (c) { if (c.bound || (!saved && rnd(s) < .5)) { s.caps = caps(s).filter(x => x !== c); if (!sh.emil) text += " " + c.name + (saved ? " setzt sich zur Ruhe." : " ist beim Untergang ums Leben gekommen."); } else { c.ship = null; text += " " + c.name + " hat überlebt und wartet in der Reserve auf ein neues Kommando."; } } }
-    if (sh.type === "american") { s.log.unshift({ m: s.m, head: "Die „American Star“ ist gestrandet", text: "Im Sturm wurde sie gegen eine ferne Vulkanküste getrieben und brach in der Brandung auseinander. " + text + " Ihr Wrack wird noch lange aus dem Meer ragen.", kind: "bad", img: "ev_wrack" }); return; }
+    if (sh.emil) { s.flags.emil = "retired"; text += " Kapitän Emil ging als Letzter von Bord und setzt sich nun zur Ruhe."; X.cap = { name: "Kapitän Emil", fate: "ging als Letzter von Bord und setzt sich zur Ruhe" }; }
+    text += juliaLeaves(s, sh, "sink"); if (sh.julia) X.cap = { name: "Flottenadmiralin Julia", fate: "ging als Letzte von Bord und kehrt zur Marine zurück" };
+    { const c = caps(s).find(x => x.ship === sh.id); if (c) { if (c.bound || (!saved && rnd(s) < .5)) { s.caps = caps(s).filter(x => x !== c); if (!sh.emil && !sh.julia) { text += " " + c.name + (saved ? " setzt sich zur Ruhe." : " ist beim Untergang ums Leben gekommen."); X.cap = { name: c.name, fate: saved ? "setzt sich zur Ruhe" : "ist beim Untergang ums Leben gekommen" }; } } else { c.ship = null; text += " " + c.name + " hat überlebt und wartet in der Reserve auf ein neues Kommando."; X.cap = { name: c.name, fate: "hat überlebt und wartet in der Reserve auf ein neues Kommando" }; } } }
+    X.saved = Math.max(0, X.n - X.dead);
+    if (!s.sim) s.pending.unshift({ id: "untergang", day: s.day, head: am ? "Die „American Star“ ist gestrandet" : "Dampfer „" + sh.name + "“ " + how, img: am ? "ev_wrack" : "ev_meeresgrund", text: "", sink: X });
+    if (am) { s.log.unshift({ m: s.m, head: "Die „American Star“ ist gestrandet", text: "Im Sturm wurde sie gegen eine ferne Vulkanküste getrieben und brach in der Brandung auseinander. " + text + " Ihr Wrack wird noch lange aus dem Meer ragen.", kind: "bad", img: "ev_wrack" }); return; }
     s.log.unshift({ m: s.m, head: "Dampfer „" + sh.name + "“ " + how, text: "Linie " + lineName + ". " + text, kind: "bad", img: saved ? "ev_seenot" : "ev_seeamt" });
   }
   function repairAfter(s, sh, pay) {
@@ -2518,9 +2594,11 @@
 
   /* ---------- Entschädigungen ---------- */
   function aboard(s, sh) { const v = sh.v, t = TYPES[sh.type]; if (v && v.st === "see" && v.pax && v.pax.length) { let n = 0; for (const g of v.pax) n += g.n[0] + g.n[1] + g.n[2]; return clamp(Math.round(n), 1, t.seats); } return clamp(Math.round(t.seats * clamp(sh.lastLoad || .5, .05, 1)), 1, t.seats); }
+  let compLast = 0; // zuletzt gezahlte Entschädigung, für das Untergangsfenster
   function compensate(s, sh, dead, hurt) {
+    compLast = 0;
     if (!dead && !hurt) return "";
-    const f = (s.pidx || 1) * Math.sqrt(s.sizeM || 1), sum = Math.round((dead * 3000 + hurt * 300) * f / 100) * 100;
+    const f = (s.pidx || 1) * Math.sqrt(s.sizeM || 1), sum = Math.round((dead * 3000 + hurt * 300) * f / 100) * 100; compLast = sum;
     expense(s, "Entschädigungen", sum); s.stats.deaths = (s.stats.deaths || 0) + dead;
     if (s.expHit) s.expHit.si += dead ? 10 : 2;
     return " " + (dead ? dead + (dead === 1 ? " Toter" : " Tote") + (hurt ? " und " : "") : "") + (hurt ? hurt + (hurt === 1 ? " Verletzter" : " Verletzte") : "") + " – die Reederei zahlt " + fmt(sum) + " Mark Entschädigung.";
@@ -2552,6 +2630,7 @@
     { id: "koenig", name: "Hoher Besuch", desc: "Einen Monarchen festlich an Bord empfangen.", f: s => !!s.flags.koenigFest },
     { id: "regatta", name: "Schnellstes Schiff im Hafen", desc: "Eine Wettfahrt gewinnen.", f: s => !!s.flags.regattaWin },
     { id: "emil", name: "Glücksbringer", desc: "Einen ganz besonderen Kapitän anheuern.", f: s => !!s.flags.emilEver },
+    { id: "julia", name: "Respekt!", desc: "Eine ganz besondere Admiralin an Bord begrüßen.", f: s => !!s.flags.juliaEver },
     { id: "bekannt", name: "Stadtgespräch", desc: "Eine Bekanntheit von 80 erreichen.", f: s => s.mk.brand >= 80 },
     { id: "ruf", name: "Ehrbarer Kaufmann", desc: "Einen Ruf von 80 erreichen.", f: s => s.rep >= 80 },
     { id: "zehn", name: "Zehn Jahre am Kai", desc: "Zehn Jahre Reederei.", f: s => s.m >= 120 },
@@ -3002,6 +3081,7 @@
     bergelohn: { when: s => seaShips(s).length > 0, w: .5, img: "ev_bergung", f: s => { const sh = pick(s, seaShips(s)), c = Math.round((4000 + rnd(s) * 11000) * s.pidx / 100) * 100; income(s, "Bergelohn", c); up(s, "rep", 2); return ["Bergelohn für die „" + sh.name + "“", "Die Mannschaft hat ein treibendes, verlassenes Frachtschiff in den Hafen geschleppt. Das Seeamt spricht Ihnen " + fmt(c) + " Mark Bergelohn zu."]; } },
     messe: { when: s => s.routes.length > 0, w: .7, img: "ev_expo", f: s => { s.mods.push({ line: "*", key: "demand", seg: "biz", f: 1.3, until: s.m + 4 }); return ["Große Handelsmesse in Hamburg", "Kaufleute aus ganz Europa reisen an. Für einige Monate buchen deutlich mehr Geschäftsreisende."]; } },
     flaschenpost: { when: s => s.flags.emil === "aboard" && s.ships.some(x => x.emil), w: .7, img: "ev_emil", f: s => { const c = Math.round((2000 + rnd(s) * 6000) * s.pidx / 100) * 100; income(s, "Fundsachen", c); return ["Kapitän Emil fischt eine Flaschenpost aus dem Wasser", "Darin: die Schatzkarte eines längst vergessenen Kaperfahrers. Emil schwört, er kenne die Stelle – und tatsächlich: " + fmt(c) + " Mark für die Reedereikasse."]; } },
+    inspektion: { when: s => s.flags.julia === "aboard" && s.ships.some(x => x.julia), w: .5, img: "ev_julia", f: s => { const sh = s.ships.find(x => x.julia); up(s, "rep", 2); sh.cond = Math.min(100, sh.cond + 2); return ["Inspektion durch die Flottenadmiralin", "Flottenadmiralin Julia geht mit weißen Handschuhen über die „" + sh.name + "“. Kein Stäubchen, kein loses Tau. Die Zeitungen schreiben vom saubersten Schiff im Hafen."]; } },
     seemannsgarn: { when: s => s.flags.emil === "aboard" && s.ships.some(x => x.emil && x.line), w: .6, img: "ev_emil", f: s => { const sh = s.ships.find(x => x.emil); s.mk.brand = clamp(s.mk.brand + 3, 0, 100); if (sh.line) s.mods.push({ route: sh.line, key: "demand", f: 1.1, until: s.m + 2 }); return ["Kapitän Emils Seemannsgarn", "Von Seeschlangen, Klabautermännern und dem Sturm von ’48 – die Fahrgäste lieben seine Geschichten und buchen extra seine Fahrten auf der „" + sh.name + "“."]; } },
     ausflug: { when: s => monthIn(s, [4, 5, 6, 7]), w: .8, img: "line_insel", f: s => { s.mods.push({ line: "*", key: "demand", seg: "bath", f: 1.25, until: s.m + 3 }); return ["Ein Rekordsommer kündigt sich an", "Hitze in den Städten – wer kann, fährt an die See. Die Bäderlinien erwarten Hochbetrieb."]; } },
   });
@@ -3106,6 +3186,8 @@
     if (ev.id === "kapitan") return [{ t: "Anheuern", h: fmt(ev.fee) + " Mark Handgeld, danach in der Flotte einem Schiff zuweisen", ok: s.cash >= ev.fee }, { t: "Ablehnen", h: "vielleicht fragt er später noch einmal" }];
     if (ev.id === "traum") return [{ t: "Willkommen an Bord!", h: "ein Geschenk aus einer anderen Zeit" }];
     if (ev.id === "emil") return [{ t: "Anheuern – willkommen an Bord!", h: "sein Schiff wird zum Glücksschiff" }, { t: "Danke, wir sind gut besetzt", h: "er zieht weiter" }];
+    if (ev.id === "untergang") return [{ t: "Schließen", h: "zurück ins Kontor" }].concat(ev.sink && ev.sink.line && s.routes.some(r => r.id === ev.sink.line.id) ? [{ t: "Zur Linie", h: "Schiffe umsetzen oder nachkaufen" }] : []);
+    if (ev.id === "julia") return [{ t: "Zu Befehl, Frau Admiralin!", h: "die Mannschaft arbeitet unter ihr besser" }, { t: "Danke, wir sind gut besetzt", h: "sie kehrt zur Marine zurück" }];
     if (ev.id === "berater") return ev.tip ? [{ t: "Rat befolgen", h: ev.tip.label }, { t: "Danke, ich kümmere mich selbst", h: "" }] : [{ t: "Verstanden", h: "" }];
     if (ev.id === "sonder") {
       const qb = quote(s, ev.price, "bar"), qc = quote(s, ev.price, "used");
@@ -3161,9 +3243,16 @@
       s.log.unshift({ m: s.m, head: "Das Traumschiff fährt jetzt unter Ihrer Flagge", text: "Niemand weiß, woher es kam. Es fährt nur Vergnügungsreisen – dort will jeder mit. Eröffnen Sie eine Vergnügungsreise und weisen Sie es in der Flotte zu.", kind: "own", img: "ship_traum" });
       return;
     }
+    if (ev.id === "untergang") return;
+    if (ev.id === "julia") {
+      const sh = shipById(s, ev.ship);
+      if (idx === 0 && sh) { sh.julia = true; s.flags.julia = "aboard"; s.flags.juliaEver = true; takeHelm(s, sh, "julia"); up(s, "rep", 2); s.mk.brand = clamp(s.mk.brand + 3, 0, 100); s.log.unshift({ m: s.m, head: "Flottenadmiralin Julia übernimmt die „" + sh.name + "“", text: "Wo sie an Deck erscheint, stehen alle stramm. Unter ihrem Kommando arbeitet die Mannschaft so gut wie eine Lohnstufe höher – zum selben Lohn.", kind: "own", img: "ev_julia" }); }
+      else { s.flags.julia = "declined"; s.log.unshift({ m: s.m, head: "Flottenadmiralin Julia kehrt zur Marine zurück", text: "Sie nickt knapp, grüßt und geht von Bord. Die Hafenarbeiter sehen ihr noch lange nach.", kind: "own", img: "ev_julia" }); }
+      return;
+    }
     if (ev.id === "emil") {
       const sh = shipById(s, ev.ship);
-      if (idx === 0 && sh) { sh.emil = true; s.flags.emil = "aboard"; s.flags.emilEver = true; { const old = capOf(s, sh); if (old) old.ship = null; specialCaptain(s, "emil").ship = sh.id; } up(s, "rep", 2); s.mk.brand = clamp(s.mk.brand + 3, 0, 100); s.log.unshift({ m: s.m, head: "Kapitän Emil übernimmt die „" + sh.name + "“", text: "Ab sofort gilt sie als Glücksschiff: nur halb so oft Havarien, und in Seenot weiß der Alte immer noch einen Ausweg.", kind: "own", img: "ev_emil" }); }
+      if (idx === 0 && sh) { sh.emil = true; s.flags.emil = "aboard"; s.flags.emilEver = true; takeHelm(s, sh, "emil"); up(s, "rep", 2); s.mk.brand = clamp(s.mk.brand + 3, 0, 100); s.log.unshift({ m: s.m, head: "Kapitän Emil übernimmt die „" + sh.name + "“", text: "Ab sofort gilt sie als Glücksschiff: nur halb so oft Havarien, und in Seenot weiß der Alte immer noch einen Ausweg.", kind: "own", img: "ev_emil" }); }
       else { s.flags.emil = "declined"; s.log.unshift({ m: s.m, head: "Kapitän Emil zieht weiter", text: "„Man sieht sich immer zweimal im Hafen“, brummt er und schlendert pfeifend davon.", kind: "own", img: "ev_emil" }); }
       return;
     }
@@ -3198,7 +3287,7 @@
     if (ev.id === "seenot") {
       const sh = shipById(s, ev.ship); if (!sh) return;
       const o = distressOdds(s, sh);
-      if (idx === 0) { sink(s, sh, "aufgegeben und gesunken", {}); return; }
+      if (idx === 0) { sink(s, sh, "aufgegeben und gesunken", { gaveUp: true }); return; }
       if (idx === 1) {
         if (rnd(s) < o.pump) { msg = repairAfter(s, sh, 0); up(s, "rep", 2); s.stats.saved = (s.stats.saved || 0) + 1; s.log.unshift({ m: s.m, head: "Gerettet: die „" + sh.name + "“ erreicht den Nothafen", text: "Die Mannschaft hat das Schiff gehalten. " + msg, kind: "own", img: "ev_bergung" }); }
         else sink(s, sh, "gesunken", { saved: false });
@@ -3452,6 +3541,7 @@
     s.loans = s.loans.filter(l => l.ship !== sh.id); s.ships = s.ships.filter(x => x !== sh);
     { const c = caps(s).find(x => x.ship === sh.id); if (c) { if (c.bound) s.caps = caps(s).filter(x => x !== c); else c.ship = null; } }
     if (sh.emil) s.flags.emil = "retired";
+    juliaLeaves(s, sh);
     return cash;
   }
   function scrapShip(s, id, parts) {

@@ -30,7 +30,12 @@ function altEngine(rev) {
 }
 
 const saves = {};
-{ const E = engine(ROOT); saves.ham = spielen(E, "ham", 30); saves.lon = spielen(E, "lon", 30); }
+{ const E = engine(ROOT); saves.ham = spielen(E, "ham", 30); saves.lon = spielen(E, "lon", 30);
+  // v5.1.3: Flottenadmiralin Julia an Bord, dazu ein Spielstand mit dem Untergangsfenster
+  { const s = saves.ham, sh = s.ships.find(x => x.line); E.rename(s, sh.id, "Julia"); while (E.duePending(s)) E.resolve(s, 0); if (!sh.julia) throw new Error("Julia kommt nicht an Bord"); }
+  { const s = saves.sink = spielen(E, "ham", 30), sh = s.ships.find(x => x.line); s.pending = []; sh.distress = true; sh.distressCause = "Sturm – Leck";
+    s.pending.unshift({ id: "seenot", day: s.day, ship: sh.id, head: "Seenot", text: "", img: "ev_seenot" }); E.resolve(s, 0);
+    if (!s.pending[0] || s.pending[0].id !== "untergang") throw new Error("kein Untergangsfenster"); } }
 { const dir = altEngine(ALT); const E = engine(dir); saves.alt = spielen(E, "ham", 30); delete saves.alt.lager; fs.rmSync(dir, { recursive: true, force: true }); }
 
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".webp": "image/webp", ".png": "image/png", ".json": "application/json", ".m4a": "audio/mp4", ".svg": "image/svg+xml", ".webmanifest": "application/manifest+json" };
@@ -49,7 +54,7 @@ const DE_WORDS = /\b(Kohlelager|Einstandspreis|Lagergeld|Bekohlung|Betrieb|Sonst
   const br = await chromium.launch();
   let fehler = 0, reste = 0; const MISS = new Set();
   for (const [vw, vh] of [[390, 844], [1440, 900]]) for (const lang of ["de", "en", "es"]) for (const key of Object.keys(saves)) {
-    if (key !== "ham" && lang !== "de" && !(key === "lon" && lang === "en")) continue;
+    if (key !== "ham" && key !== "sink" && lang !== "de" && !(key === "lon" && lang === "en")) continue;
     const ctx = await br.newContext({ viewport: { width: vw, height: vh }, serviceWorkers: "block" });
     const pg = await ctx.newPage(), errs = [];
     pg.on("pageerror", e => errs.push(e.message)); pg.on("console", m => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errs.push(m.text()); });
@@ -57,6 +62,19 @@ const DE_WORDS = /\b(Kohlelager|Einstandspreis|Lagergeld|Bekohlung|Betrieb|Sonst
     await pg.goto(url); await pg.waitForTimeout(600);
     // Weiter-Knopf auf dem Startbildschirm, falls vorhanden
     for (const sel of ['[data-act="continue"]', '[data-act="load"]', '[data-act="cont"]']) { const b = await pg.$(sel); if (b) { await b.click().catch(() => {}); await pg.waitForTimeout(300); break; } }
+    if (key === "sink") { // Untergangsfenster: Inhalt prüfen, dann „Zur Linie“
+      const txt = await pg.evaluate(() => { const m = document.querySelector("#modal .sinksheet"); return m ? m.innerText : ""; });
+      if (!txt) errs.push("Untergangsfenster fehlt");
+      else { if (!/Hamburg|Hamburgo/.test(txt)) errs.push("Untergangsfenster ohne Linie");
+        if (lang !== "de") { const m = txt.split("\n").filter(l => DE_WORDS.test(l) || /\b(Gerettet|Opfer|Versicherung|Entschädigungen|Restschuld|Ursache|Linie)\b/.test(l)); if (m.length) { reste += m.length; console.log("  DE-Rest", lang, vw, "Untergang →", m.slice(0, 4).join(" | ")); } } }
+      if (BILDER) { fs.mkdirSync(BILDER, { recursive: true }); await pg.screenshot({ path: path.join(BILDER, [key, lang, vw, "fenster"].join("_") + ".png"), fullPage: false }); }
+      await pg.waitForTimeout(1600); const b = await pg.$('#modal [data-act="choose"][data-i="1"]'); if (b) await b.click().catch(() => {}); await pg.waitForTimeout(300);
+      const ok = await pg.evaluate(() => !document.querySelector("#modal .sinksheet") && !!document.querySelector('main details.lined[open]'));
+      if (!ok) errs.push("„Zur Linie“ öffnet die Linie nicht");
+      if (lang !== "de") for (const k of await pg.evaluate(() => [...window.I18_MISS])) MISS.add(k);
+      console.log((errs.length ? "FEHLER " : "ok     ") + vw + " " + lang + " " + key + (errs.length ? ": " + [...new Set(errs)].slice(0, 5).join(" / ") : ""));
+      fehler += errs.length; await ctx.close(); continue;
+    }
     for (const [t, sub, sv] of VIEWS) {
       const tb = await pg.$('#tabs [data-tab="' + t + '"], [data-tab="' + t + '"]'); if (tb) await tb.click().catch(() => {}); await pg.waitForTimeout(150);
       if (sub) { const b = await pg.$('[data-act="ksub"][data-v="' + sub + '"], [data-act="msub"][data-v="' + sub + '"]'); if (b) await b.click().catch(() => {}); await pg.waitForTimeout(150); }
@@ -67,6 +85,16 @@ const DE_WORDS = /\b(Kohlelager|Einstandspreis|Lagergeld|Bekohlung|Betrieb|Sonst
       const over = await pg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       if (over > 2) console.log("  waagrecht scrollbar:", vw, lang, key, t, sub || "", over + " px");
       if (BILDER) { fs.mkdirSync(BILDER, { recursive: true }); await pg.screenshot({ path: path.join(BILDER, [key, lang, vw, t, sub, sv].filter(Boolean).join("_") + ".png"), fullPage: true }); }
+    }
+    if (key === "ham") { // v5.1.3: Hauptmenü mit Flaggen, Einstellungen mit zwei Reglern
+      const mb = await pg.$('[data-act="menu"]'); if (mb) { await mb.click().catch(() => {}); await pg.waitForTimeout(300); }
+      const fl = await pg.evaluate(() => [...document.querySelectorAll(".flagopt")].map(b => b.getAttribute("aria-label")));
+      if (fl.join() !== "Deutsch,English,Español") errs.push("Flaggen im Hauptmenü: " + fl.join());
+      const sb = await pg.$('[data-act="menuSettings"]'); if (sb) { await sb.click().catch(() => {}); await pg.waitForTimeout(300); }
+      const vol = await pg.evaluate(() => document.querySelectorAll('[data-act="vol"]').length), lng = await pg.evaluate(() => document.querySelectorAll(".flagopt").length);
+      if (vol !== 2) errs.push("Lautstärkeregler in den Einstellungen: " + vol); if (lng) errs.push("Sprachwahl noch in den Einstellungen");
+      if (lang !== "de") { const txt = await pg.evaluate(() => document.body.innerText), m = txt.split("\n").filter(l => /\b(Lautstärke|Musik|Einstellungen)\b/.test(l)); if (m.length) { reste += m.length; console.log("  DE-Rest", lang, vw, "Einstellungen →", m.slice(0, 4).join(" | ")); } }
+      if (BILDER) await pg.screenshot({ path: path.join(BILDER, [key, lang, vw, "einstellungen"].join("_") + ".png"), fullPage: true });
     }
     if (lang !== "de") for (const k of await pg.evaluate(() => [...window.I18_MISS])) MISS.add(k);
     if (key === "alt") { const ok = await pg.evaluate(() => { const s = JSON.parse(localStorage.getItem("flaggschiff-proto-1880") || "null"); return !!(s && s.lager); }); if (!ok) errs.push("alter Spielstand: kein Kohlelager nach dem Laden"); }
