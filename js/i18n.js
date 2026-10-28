@@ -2028,7 +2028,23 @@ window.I18N_TYPES_ES={"Hafenfähre": "transbordador portuario", "Küstendampfer"
     "{nA} Tote und {nB} Verletzter – die Reederei zahlt {nC} Mark Entschädigung.": "{nA} dead and {nB} injured – the company pays {nC} marks in compensation.",
     "Ruf sinkt, Gefahr von Sabotage, langsameres Laden": "reputation drops, risk of sabotage, slower loading",
     "Dagegen hilft: ein Kohleneinkäufer, der das Lager voll hält.": "Remedy: a coal buyer who keeps the store full.",
-    "Dagegen hilft: ein größeres Kohlelager.": "Remedy: a larger coal store."
+    "Dagegen hilft: ein größeres Kohlelager.": "Remedy: a larger coal store.",
+    "Lager, Einstellungen und Julia": "Store, settings and Julia",
+    "Kohle nur noch aus dem Lager.": "Coal from the store only.",
+    "Im Heimathafen nehmen die Schiffe so viel aus dem eigenen Lager, wie der Bunker fasst, mindestens für die Rundreise.": "In the home port the ships take as much from your own store as their bunkers hold, at least enough for the round trip.",
+    "Das Lager lässt sich in drei Stufen ausbauen, bis zur Bunkerstation mit eigenen Schuten.": "The store can be expanded in three stages, up to a bunkering station with own lighters.",
+    "Die Lieferverträge fallen weg, der Kohleneinkäufer hält das Lager voll.": "Supply contracts are gone; the coal buyer keeps the store full.",
+    "Linien zum Einklappen": "Collapsible lines",
+    "wie die Schiffe in der Flotte, mit Ergebnis, Auslastung, Pünktlichkeit und Warnzeichen.": "like the ships in the fleet, with result, load factor, punctuality and warning signs.",
+    "Aufgeklappte Texte bleiben offen, und die Ansicht springt nicht mehr nach oben.": "Expanded texts stay open, and the view no longer jumps to the top.",
+    "Untergang im eigenen Fenster:": "Sinking in its own window:",
+    "Linie, Ort, Ursache und alle Folgen auf einen Blick.": "line, place, cause and all consequences at a glance.",
+    "Sprache über Flaggen": "Language by flags",
+    "im Hauptmenü, in den Einstellungen zwei Regler für Sound und Musik.": "in the main menu, and two sliders for sound and music in the settings.",
+    "Eine neue Überraschung": "A new surprise",
+    "und ein neues Bild für einen alten Bekannten.": "and a new picture of an old friend.",
+    "Alte Spielstände laden wie gewohnt.": "Old saves load as usual.",
+    "Laufende Kohle-Lieferverträge enden ohne Kosten, und einen Monat lang hilft noch der Kai aus.": "Running coal supply contracts end at no cost, and for one month the quay still helps out."
     }, es: {
     "Kohlenschuppen": "Cobertizo de carbón",
     "Kohlenschuppen in {xA}": "Cobertizo de carbón en {xA}",
@@ -2285,7 +2301,23 @@ window.I18N_TYPES_ES={"Hafenfähre": "transbordador portuario", "Küstendampfer"
     "{nA} Tote und {nB} Verletzter – die Reederei zahlt {nC} Mark Entschädigung.": "{nA} muertos y {nB} herido: la naviera paga {nC} marcos de indemnización.",
     "Ruf sinkt, Gefahr von Sabotage, langsameres Laden": "la reputación baja, riesgo de sabotaje, carga más lenta",
     "Dagegen hilft: ein Kohleneinkäufer, der das Lager voll hält.": "Remedio: un comprador de carbón que mantenga lleno el depósito.",
-    "Dagegen hilft: ein größeres Kohlelager.": "Remedio: un depósito de carbón mayor."
+    "Dagegen hilft: ein größeres Kohlelager.": "Remedio: un depósito de carbón mayor.",
+    "Lager, Einstellungen und Julia": "Depósito, ajustes y Julia",
+    "Kohle nur noch aus dem Lager.": "Carbón solo del depósito.",
+    "Im Heimathafen nehmen die Schiffe so viel aus dem eigenen Lager, wie der Bunker fasst, mindestens für die Rundreise.": "En el puerto base los barcos toman de su propio depósito tanto como cabe en sus carboneras, como mínimo para el viaje de ida y vuelta.",
+    "Das Lager lässt sich in drei Stufen ausbauen, bis zur Bunkerstation mit eigenen Schuten.": "El depósito se puede ampliar en tres fases, hasta una estación de carboneo con gabarras propias.",
+    "Die Lieferverträge fallen weg, der Kohleneinkäufer hält das Lager voll.": "Desaparecen los contratos de suministro; el comprador de carbón mantiene lleno el depósito.",
+    "Linien zum Einklappen": "Líneas plegables",
+    "wie die Schiffe in der Flotte, mit Ergebnis, Auslastung, Pünktlichkeit und Warnzeichen.": "como los barcos de la flota, con resultado, ocupación, puntualidad y señales de aviso.",
+    "Aufgeklappte Texte bleiben offen, und die Ansicht springt nicht mehr nach oben.": "Los textos desplegados siguen abiertos y la vista ya no salta arriba.",
+    "Untergang im eigenen Fenster:": "Naufragio en su propia ventana:",
+    "Linie, Ort, Ursache und alle Folgen auf einen Blick.": "línea, lugar, causa y todas las consecuencias de un vistazo.",
+    "Sprache über Flaggen": "Idioma con banderas",
+    "im Hauptmenü, in den Einstellungen zwei Regler für Sound und Musik.": "en el menú principal y, en los ajustes, dos controles para sonido y música.",
+    "Eine neue Überraschung": "Una nueva sorpresa",
+    "und ein neues Bild für einen alten Bekannten.": "y una nueva imagen de un viejo conocido.",
+    "Alte Spielstände laden wie gewohnt.": "Las partidas antiguas cargan como siempre.",
+    "Laufende Kohle-Lieferverträge enden ohne Kosten, und einen Monat lang hilft noch der Kai aus.": "Los contratos de suministro de carbón en curso terminan sin coste y durante un mes aún ayuda el muelle."
     } };
   var DIC = { en: window.I18N_EN, es: window.I18N_ES };
   for (var L in V) { var T = DIC[L]; if (!T) continue; for (k in V[L]) T[k] = V[L][k]; }
