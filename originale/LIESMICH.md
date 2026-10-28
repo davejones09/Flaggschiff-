@@ -187,7 +187,7 @@ Ganzes Bild in voller Breite; bis v4.4.1 war das Spielbild seitlich erweitert, s
 - `ship_paris` – Mitte, ganze Breite
 
 ### bogen_926403F0.webp
-- `ev_emil` – unten rechts
+Das Feld unten rechts war bis v5.1.2 `ev_emil`; seit v5.1.3 kommt Kapitän Emil aus `bogen_emil.webp`.
 - `ship_nordsee` – unten links
 - `ship_ostsee` – oben rechts
 - `ship_seebad` – oben links
@@ -399,3 +399,22 @@ Seit v4.6 sind `mus0` und `mus1` Remaster (Suno-Instrumentals) und ersetzen die 
 ### bogen_titel_breit.webp
 Seit v5.1 (Hauptmenü). Titelbild für das Hauptmenü am PC, 16 : 9; das Handy behält `title` im Hochformat. Breiter als die übliche Grenze, daher in `tools/zuschnitt.json` mit `"max": 1672`.
 - `title_wide` – ganzes Bild
+
+### bogen_kohlelager.webp
+Seit v5.1.3 (Ausbau des Kohlelagers), vier Felder 2 × 2 in Leserichtung.
+- `geb_kohlenschuppen` – oben links
+- `geb_kohlenhof` – oben rechts
+- `geb_kohlenlager` – unten links
+- `geb_bunkerstation` – unten rechts
+
+### bogen_emil.webp
+Seit v5.1.3. Kapitän Emil mit Flaschenpost, 16 : 9; für das Spielbild links und rechts beschnitten auf das bisherige Format (etwa 3 : 2), Gesicht und Flaschenpost im Bild. In `tools/zuschnitt.json` mit `"max": 1000`.
+- `ev_emil` – Mitte, Ereignis und Porträt
+
+### bogen_julia.webp
+Seit v5.1.3, 3 : 2, mit `"max": 1000`.
+- `ev_julia` – ganzes Bild, Ereignis und Porträt
+
+### bogen_meeresgrund.webp
+Seit v5.1.3 (Fenster beim Untergang), 3 : 2, mit `"max": 1000`.
+- `ev_meeresgrund` – ganzes Bild
