@@ -405,7 +405,7 @@
   function shipValue(s, sh) { return Math.round(PS(s, sh) * Math.pow(0.95, sh.age / 12) * (0.75 + 0.25 * sh.cond / 100) * s.shipIdx); }
   function fleetValue(s) { return s.ships.reduce((a, sh) => a + (sh.ready <= s.m ? shipValue(s, sh) : sh.paid || 0), 0); }
   function debt(s) { return s.loans.reduce((a, l) => a + l.out, 0); }
-  function equity(s) { return s.cash + fleetValue(s) + boValue(s) + bunkerValue(s) + lagerValue(s) - debt(s); }
+  function equity(s) { return s.cash + fleetValue(s) + boValue(s) + bunkerValue(s) + lagerValue(s) + lagerAnlage(s) - debt(s); }
   function rating(s) {
     const assets = Math.max(1, Math.max(0, s.cash) + fleetValue(s));
     const q = (s.cash + fleetValue(s) - s.loans.filter(l => !l.founder).reduce((a, l) => a + l.out, 0)) / assets;
@@ -570,11 +570,25 @@
     // v5.1.2: In v5.1.1 kostete Kohle aus dem Lager beim Bunkern ein zweites Mal Geld; das bekommen alte Spielstände zurück
     if (!s.lagerFix) { s.lagerFix = true; if (s.lager) { let back = 0; for (const y in s.years || {}) back += (s.years[y].costs && s.years[y].costs["Kohle aus dem Lager"]) || 0; if (s.cur && s.cur.cost) back += s.cur.cost["Kohle aus dem Lager"] || 0;
       if (back >= 1) { s.cash += back; s.log.unshift({ m: s.m, head: "Kohlelager: Geld zurück", text: "Kohle aus dem Lager wurde beim Bunkern versehentlich ein zweites Mal bezahlt. Die Reederei bekommt " + fmt(back) + " Mark zurück.", kind: "good", img: "ev_bunkern" }); } } }
+    const old = (s.hist && s.hist.length > 0) || s.ships.some(sh => sh.v);
     if (!s.lager) {
-      const old = (s.hist && s.hist.length > 0) || s.ships.some(sh => sh.v);
       s.lager = { t: 0, v: 0, cap: Math.max(LAGER_CAP, Math.ceil(2 * coalBase(s, s.home || "ham") / 100) * 100), use: [] };
-      for (const k of s.coalK || []) k.port = s.home || "ham";
-      if (old) s.log.unshift({ m: s.m, head: "Ihr Kohlelager ist eingerichtet", text: "Im Heimathafen haben Sie jetzt ein Kohlelager für " + fmt(s.lager.cap) + " Tonnen. Kaufen Sie unter Kontor → Einkauf Kohle, sonst bunkern Ihre Schiffe zu Hause am Kai, 15 % teurer. Die Bekohlungsregeln gibt es nicht mehr: Auswärts nehmen die Schiffe so viel, wie sie bis nach Hause brauchen.", kind: "own", img: "ev_bunkern" });
+      // neue Reederei: der Kohlenhändler liefert die erste Füllung für den Schuppen
+      if (!old) { s.lager.t = LAGER_START; s.lager.v = LAGER_START * coalPortPrice(s, s.home || "ham"); }
+    }
+    // v5.1.3: Kohle nur noch über das Lager. Das bisherige Lager wird zur Stufe, die mindestens so viel fasst; Lieferverträge enden ohne Kosten;
+    // 30 Tage lang bunkern die Schiffe noch am Kai, wenn das Lager leer ist
+    if (!s.v513) {
+      s.v513 = 1; const L = s.lager;
+      let lv = LAGER_LV.findIndex(x => x.cap >= (L.cap || 0) - .5); if (lv < 0) lv = LAGER_LV.length - 1;
+      L.lv = lv; L.cap = LAGER_LV[lv].cap; L.ow = L.ow || { t: 0, v: 0 }; L.inv = L.inv || 0; L.bau = L.bau || null;
+      const st = staff(s); delete st.keRenew;
+      if (old) {
+        const n = (s.coalK || []).length;
+        s.kaiUntil = s.t + KAI_TAGE;
+        s.log.unshift({ m: s.m, head: "Kohle nur noch aus dem Lager", text: "Ab dem " + dateAfter(s, KAI_TAGE) + " bunkern Ihre Schiffe im Heimathafen nur noch aus Ihrem " + LAGER_LV[lv].name + " (" + fmt(L.cap) + " Tonnen). Ist es leer, bleiben sie liegen. Bis dahin hilft noch der Kai aus. Ein Kohleneinkäufer hält das Lager voll; ausbauen können Sie es unter Kontor → Einkauf." + (n ? " Ihr Kohle-Liefervertrag ist aufgehoben: Ab jetzt läuft alle Kohle über Ihr Lager. Es entstehen keine Kosten." : ""), kind: "own", img: LAGER_LV[lv].img });
+      }
+      s.coalK = [];
     }
     s.v = 3;
     return s;
@@ -1116,50 +1130,121 @@
     if ((s.country || "de") === "gb") return reg === "Britische Inseln" || ["lon", "grv", "til", "dov", "por", "ryd", "ply", "har", "hul", "lei", "sou"].includes(p);
     return reg === "Deutsche Nordsee" || reg === "Deutsche Ostsee" || ["rot", "ams", "hoe", "ant"].includes(p);
   }
-  // Kohlelager (v5.1.1): im Heimathafen bunkern die Schiffe aus dem Lager zum Einstandspreis, ist es leer, am Kai mit Aufschlag; auswärts zum Hafenpreis
-  const LAGER_CAP = 3000, KAI = 1.15, LAGERGELD = .1, RUECKNAHME = .8;
-  const lagerValue = s => (s.lager && s.lager.v > 0 ? s.lager.v : 0);
-  const lagerPrice = s => coalPortPrice(s, s.home || "ham");
-  function buyCoal(s, sh, p, tons, emergency) {
-    const cur = s.cur, home = p === (s.home || "ham"), mkt = coalPortPrice(s, p) * (emergency ? NOTKOHLE : home ? KAI : 1);
-    let left = tons, cost = 0;
-    if (home && !emergency && s.lager && s.lager.t > 0) {
-      const L = s.lager, take = Math.min(left, L.t), val = L.v * take / L.t;
-      L.t -= take; L.v -= val; if (L.t < 1e-6) { L.t = 0; L.v = 0; } left -= take;
-      cur.lagT = (cur.lagT || 0) + take; cur.cost["Kohle aus dem Lager"] = (cur.cost["Kohle aus dem Lager"] || 0) + val; cost += val; // schon beim Kauf bezahlt: nur als Kosten buchen
-    }
-    if (left > 0) { const c = left * mkt; expense(s, "Bekohlung " + PORTS[p].name + (home && !emergency ? " (Kai)" : ""), c); cost += c; if (home && !emergency) cur.kaiT = (cur.kaiT || 0) + left; }
-    cur.cbT = (cur.cbT || 0) + tons; cur.cbM = (cur.cbM || 0) + cost;
+  // Kohlelager (v5.1.3): Kohle kommt nur noch aus dem Lager im Heimathafen. Linien ohne Heimathafen bekommen sie an ihren Bunkerhafen gebracht (Fracht),
+  // auswärts kaufen die Schiffe nur, was der Bunker für die Rundreise nicht fasst. Das Lager wächst in vier Stufen; was gekauft ist, kommt mit dem Zulauf der Stufe an.
+  const LAGER_LV = [
+    { k: "schuppen", name: "Kohlenschuppen", img: "geb_kohlenschuppen", cap: 3000, cost: 0, months: 0, fee: 150, zu: 500, out: 1200, rabatt: 0 },
+    { k: "hof", name: "Kohlenhof", img: "geb_kohlenhof", cap: 10000, cost: 25000, months: 2, fee: 400, zu: 1500, out: 2000, rabatt: 0 },
+    { k: "kran", name: "Lager mit Kran und Bahnanschluss", img: "geb_kohlenlager", cap: 30000, cost: 80000, months: 4, fee: 1000, zu: 5000, out: 3000, rabatt: .05 },
+    { k: "bunker", name: "Bunkerstation mit eigenen Schuten", img: "geb_bunkerstation", cap: 80000, cost: 220000, months: 6, fee: 2500, zu: 12000, out: 6000, rabatt: .05, schute: true },
+  ];
+  const LAGER_CAP = LAGER_LV[0].cap, KAI = 1.15, FRACHT = .1, LAGER_START = 1000, LAGER_AFA = .02, KAI_TAGE = 30;
+  const lagerLv = s => LAGER_LV[clamp((s.lager && s.lager.lv) | 0, 0, LAGER_LV.length - 1)];
+  const lagerOw = s => (s.lager && s.lager.ow) || { t: 0, v: 0 };
+  const lagerValue = s => (s.lager ? Math.max(0, s.lager.v || 0) + Math.max(0, lagerOw(s).v || 0) : 0);
+  const lagerAnlage = s => (s.lager && s.lager.inv > 0 ? s.lager.inv : 0);
+  const lagerPrice = s => coalPortPrice(s, s.home || "ham") * (1 - lagerLv(s).rabatt);
+  const kaiOk = s => s.kaiUntil != null && s.t < s.kaiUntil; // Übergang für alte Spielstände (v5.1.3): 30 Tage noch am Kai, wenn das Lager leer ist
+  // Kohle buchen: Bunker, Monatszahlen, Schiff und Linie
+  function coalBook(s, sh, p, tons, cost) {
+    const cur = s.cur; cur.cbT = (cur.cbT || 0) + tons; cur.cbM = (cur.cbM || 0) + cost;
     const cp = cur.cp || (cur.cp = {}); cp[p] = (cp[p] || 0) + tons;
     const sc = sh.cur || (sh.cur = { pax: 0, cap: 0, rev: 0, cost: 0 }); sc.coal = (sc.coal || 0) + cost; sc.cost = (sc.cost || 0) + cost;
     const r = routeOf(s, sh); if (r && r.cur) { r.cur.coal = (r.cur.coal || 0) + cost; r.cur.cost = (r.cur.cost || 0) + cost; }
-    return cost;
   }
-  // Kohle ins Lager kaufen: Heimathafenpreis mal Kohlepreis, die Hauszeche liefert ihren Anteil 20 % billiger. Zählt nicht als Kosten, erst beim Bunkern.
+  // Kohle am Hafen kaufen (auswärts, Notkohle, Überführung): zum Hafenpreis, Notkohle teurer
+  function buyCoal(s, sh, p, tons, emergency) {
+    const c = tons * coalPortPrice(s, p) * (emergency ? NOTKOHLE : 1);
+    expense(s, "Bekohlung " + PORTS[p].name, c); coalBook(s, sh, p, tons, c);
+    return c;
+  }
+  // Kohle aus dem Lager nehmen: zum Einstandspreis (schon beim Kauf bezahlt, hier nur Kosten), an einen anderen Hafen mit Fracht.
+  // Gibt zurück, wie viel genommen wurde, und was es kostet. Im Übergang alter Spielstände kommt der Rest vom Kai.
+  function takeLager(s, sh, p, tons) {
+    const L = s.lager, cur = s.cur, home = p === (s.home || "ham"); if (!L || !(tons > 0)) return { t: 0, cost: 0 };
+    const take = Math.min(tons, Math.max(0, L.t)); let cost = 0;
+    if (take > 0) {
+      const val = L.t > 0 ? L.v * take / L.t : 0; L.t -= take; L.v -= val; if (L.t < 1e-6) { L.t = 0; L.v = 0; }
+      cur.lagT = (cur.lagT || 0) + take; cur.cost["Kohle aus dem Lager"] = (cur.cost["Kohle aus dem Lager"] || 0) + val; cost += val;
+      if (!home) { const fr = val * FRACHT; expense(s, "Kohlefracht", fr); cost += fr; }
+    }
+    let got = take;
+    if (got < tons - .05 && kaiOk(s)) { const left = tons - got, c = left * coalPortPrice(s, p) * (home ? KAI : 1 + FRACHT); expense(s, "Bekohlung " + PORTS[p].name + " (Kai)", c); cost += c; cur.kaiT = (cur.kaiT || 0) + left; got = tons; }
+    if (got > 0) coalBook(s, sh, p, got, cost);
+    return { t: got, cost };
+  }
+  // Kohle ins Lager kaufen: Heimathafenpreis mal Kohlepreis (ab dem Kranlager 5 % billiger), die Hauszeche liefert ihren Anteil 20 % billiger.
+  // Bezahlt wird beim Kauf; Kosten entstehen erst beim Bunkern. Platz ist, was weder liegt noch unterwegs ist.
   function lagerQuote(s, tons) {
-    const L = s.lager, room = Math.max(0, L.cap - L.t), t = Math.max(0, Math.min(tons, room)), mkt = lagerPrice(s);
+    const L = s.lager, ow = lagerOw(s), room = Math.max(0, lagerLv(s).cap - L.t - ow.t), t = Math.max(0, Math.min(tons, room)), mkt = lagerPrice(s);
     let hz = 0; if (s.bo && s.bo.hz && !(s.bo.hzStop >= s.m)) { const capT = BO_HZ_CAP * BO[s.bo.hz].g / 12 * boGrow(s) / COAL_T; hz = Math.min(t, Math.max(0, capT - ((s.cur && s.cur.hzUsed) || 0))); }
     return { t, room, hz, mkt, cost: hz * mkt * (1 - BO_HZ) + (t - hz) * mkt };
   }
-  function lagerBuy(s, tons) {
+  function lagerBuy(s, tons, auto) {
     if (!s.lager) return "Kein Kohlelager.";
     const q = lagerQuote(s, tons); if (q.t < 1) return q.room < 1 ? "Das Lager ist voll." : "Bitte eine Menge angeben.";
     if (q.cost > Math.max(0, s.cash)) return "Dafür reicht das Geld in der Kasse nicht.";
-    const L = s.lager, cur = s.cur; s.cash -= q.cost; L.t += q.t; L.v += q.cost;
+    const L = s.lager, cur = s.cur, ow = L.ow || (L.ow = { t: 0, v: 0 }); s.cash -= q.cost; ow.t += q.t; ow.v += q.cost;
     if (q.hz) { cur.hzUsed = (cur.hzUsed || 0) + q.hz; cur.hzSave = (cur.hzSave || 0) + q.hz * q.mkt * BO_HZ; }
-    cur.lagKauf = (cur.lagKauf || 0) + q.cost; cur.lagKaufT = (cur.lagKaufT || 0) + q.t;
+    cur.lagKauf = (cur.lagKauf || 0) + q.cost; cur.lagKaufT = (cur.lagKaufT || 0) + q.t; if (auto) cur.keKaufT = (cur.keKaufT || 0) + q.t;
+    lagerFlow(s);
     return null;
   }
-  // Lieferung ins Lager (Verträge); was nicht passt, nimmt der Händler zu 80 % zurück
-  function lagerDeliver(s, k, add) {
-    const L = s.lager, fit = Math.min(k.qty, Math.max(0, L.cap - L.t)), over = Math.max(0, k.qty - fit);
-    s.cash -= fit * k.pt; L.t += fit; L.v += fit * k.pt;
-    if (s.cur) { s.cur.lagKauf = (s.cur.lagKauf || 0) + fit * k.pt; s.cur.lagKaufT = (s.cur.lagKaufT || 0) + fit; }
-    if (over > .5) { const loss = over * k.pt * (1 - RUECKNAHME); if (add) { add("Rücknahme Kohle", loss); s.cash -= loss; } else expense(s, "Rücknahme Kohle", loss); }
-    return over;
+  // Zulauf: von der gekauften Kohle kommt je Tag höchstens so viel ins Lager, wie die Stufe annimmt
+  function lagerFlow(s) {
+    const L = s.lager; if (!L || !L.ow || !(L.ow.t > 0)) return;
+    const lv = lagerLv(s), amt = Math.min(L.ow.t, Math.max(0, lv.zu - (L.zuT || 0)), Math.max(0, lv.cap - L.t)); if (!(amt > 0)) return;
+    const val = L.ow.v * amt / L.ow.t; L.ow.t -= amt; L.ow.v -= val; if (L.ow.t < 1e-6) { L.ow.t = 0; L.ow.v = 0; }
+    L.t += amt; L.v += val; L.zuT = (L.zuT || 0) + amt;
   }
-  // für wie viele Tage reicht der Vorrat (nach dem Verbrauch aus Lager und Kai im Heimathafen der letzten drei Monate)
-  function lagerDays(s) { const u = (s.lager.use || []).slice(-3), cur = s.cur ? (s.cur.lagT || 0) + (s.cur.kaiT || 0) : 0, days = (s.cur && s.cur.days) || 0; const tot = u.reduce((a, b) => a + b, 0) + cur, d = u.length * 30.4 + days; return tot > 0 && d > 0 ? s.lager.t / (tot / d) : null; }
+  // für wie viele Tage reicht der Vorrat (Bestand und unterwegs, nach dem Verbrauch aus dem Lager der letzten drei Monate)
+  function lagerRate(s) { const u = (s.lager.use || []).slice(-3), cur = s.cur ? (s.cur.lagT || 0) + (s.cur.kaiT || 0) : 0, days = (s.cur && s.cur.days) || 0; const tot = u.reduce((a, b) => a + b, 0) + cur, d = u.length * 30.4 + days; return tot > 0 && d > 0 ? tot / d : 0; }
+  function lagerDays(s) { const r = lagerRate(s); return r > 0 ? (s.lager.t + lagerOw(s).t) / r : null; }
+  // Ausbau: Stufe für Stufe, bezahlt beim Auftrag; während des Baus bleibt das alte Lager nutzbar
+  function lagerNext(s) {
+    const L = s.lager; if (!L) return null; const i = (L.bau ? L.bau.lv : L.lv | 0) + 1; if (i >= LAGER_LV.length) return null;
+    const x = LAGER_LV[i]; return Object.assign({}, x, { lv: i, price: Math.round(x.cost * (s.pidx || 1) / 1000) * 1000, feeNow: Math.round(x.fee * (s.pidx || 1)) });
+  }
+  function lagerBuild(s) {
+    const L = s.lager; if (!L) return "Kein Kohlelager."; if (L.bau) return "Der Ausbau läuft schon.";
+    const n = lagerNext(s); if (!n) return "Das Lager ist voll ausgebaut.";
+    if (n.price > s.cash) return "Dafür reicht das Geld in der Kasse nicht.";
+    s.cash -= n.price; L.inv = (L.inv || 0) + n.price; L.bau = { lv: n.lv, until: s.m + n.months, cost: n.price, from: s.m };
+    s.log.unshift({ m: s.m, head: "Ausbau des Kohlelagers beauftragt", text: "Bis " + dateStr(L.bau.until) + " entsteht " + (n.k === "hof" ? "ein Kohlenhof" : n.k === "kran" ? "ein Lager mit Kran und Bahnanschluss" : "eine Bunkerstation mit eigenen Schuten") + " für " + fmt(n.cap) + " Tonnen. Kosten " + fmt(n.price) + " Mark. Bis dahin bleibt das bisherige Lager nutzbar.", kind: "own", img: n.img });
+    return null;
+  }
+  function lagerBauCheck(s) {
+    const L = s.lager; if (!L || !L.bau || s.m < L.bau.until) return;
+    L.lv = L.bau.lv; L.cap = LAGER_LV[L.lv].cap; L.bau = null; const x = LAGER_LV[L.lv];
+    if (!s.sim) s.log.unshift({ m: s.m, head: x.name + " fertig", text: "Ihr Kohlelager fasst jetzt " + fmt(x.cap) + " Tonnen und nimmt am Tag bis zu " + fmt(x.zu) + " Tonnen an." + (x.rabatt ? " Die Kohle kommt direkt vom Zechenzug und kostet 5 % weniger." : "") + (x.schute ? " Die Schuten bekohlen Ihre Schiffe im Heimathafen, während die Fahrgäste ein- und aussteigen." : ""), kind: "good", img: x.img });
+  }
+  // Kohleneinkäufer (v5.1.3): hält das Lager voll. Er kauft nach, sobald Platz ist, und lässt einen halben Monat Kosten in der Kasse; knapp bezahlt vergisst er manchmal einen Tag
+  function keBuy(s) {
+    const st = staff(s), L = s.lager; if (!L || st.ke < 0) return;
+    if (st.ke === 0 && rnd(s) < .35) return;
+    const q = lagerQuote(s, Infinity); if (q.t < 1) return;
+    const h = (s.hist || [])[s.hist.length - 1], free = s.cash - .5 * ((h && h.cost) || 0); if (free <= 0) return;
+    const t = q.cost > free ? Math.floor(q.t * free / q.cost) : q.t; if (t >= 1) lagerBuy(s, t, true);
+  }
+  // täglich: Bau, Zulauf, Einkäufer, Warnung bei knappem Vorrat
+  function lagerDay(s) {
+    const L = s.lager; if (!L) return;
+    lagerBauCheck(s); L.zuT = 0; lagerFlow(s); keBuy(s);
+    if (L.dry && !(L.dryT >= s.t - 1)) L.dry = false;
+    if (s.sim) return;
+    const d = lagerDays(s);
+    if (d != null && d < 14 && !L.warn) { L.warn = true; const txt = "Das Kohlelager reicht nur noch für etwa " + Math.max(1, Math.round(d)) + (Math.round(d) === 1 ? " Tag." : " Tage.");
+      pauseReq(s, "coal", txt); s.log.unshift({ m: s.m, head: "Kohle wird knapp im Lager", text: txt + " Ist es leer, bleiben Ihre Schiffe im Hafen liegen. Kaufen Sie unter Kontor → Einkauf nach" + (staff(s).ke < 0 ? " oder stellen Sie einen Kohleneinkäufer ein." : "."), kind: "bad", img: "ev_kohle_knapp" }); }
+    else if (L.warn && (d == null || d > 21)) L.warn = false;
+  }
+  // ein Schiff liegt im Bunkerhafen fest, weil das Lager nicht reicht
+  function coalDry(s, sh) {
+    const L = s.lager; s.cur.dryD = (s.cur.dryD || 0) + 1;
+    if (L) L.dryT = s.t;
+    if (s.sim || !L || L.dry) return; L.dry = true;
+    pauseReq(s, "coal", "Die „" + sh.name + "“ liegt ohne Kohle im Hafen.", sh.id);
+    s.log.unshift({ m: s.m, head: "Kohlelager leer: die „" + sh.name + "“ liegt fest", text: "Ohne Kohle aus dem Lager kann sie nicht auslaufen. Ihre Abfahrten fallen aus und zählen als unpünktlich, bis wieder Kohle da ist.", kind: "bad", img: "ev_kohle_knapp" });
+  }
   // Reserve beim Bunkern (v5.1.1): deckt einen Sturmtag im rauesten Seegebiet der Linie (Nordsee rund 25 %, Atlantik 35 %, Küste 15 %)
   function bunkRes(G) { if (G.bRes != null) return G.bRes; let m = 0; for (const A of G.legAreas) for (const a in A) if (WX[a]) m = Math.max(m, WX[a].coal); return (G.bRes = .1 + m); }
   // Kohle bis zum Hafen „target“ entlang des Umlaufs (mit Wenden an den Enden)
@@ -1170,20 +1255,32 @@
   }
   // Kohlestreik (v5.1.1): wer in einem betroffenen Land am Kai bunkert, wartet ein bis zwei Tage
   function coalStrikeAt(s, p) { const k = s.coalStrike; if (!k || k.until < s.m) return false; const reg = PORTS[p] && PORTS[p].reg; return k.c === "gb" ? reg === "Britische Inseln" || ["lon", "grv", "til", "dov", "por", "ryd", "ply", "har", "hul", "lei", "sou"].includes(p) : reg === "Deutsche Nordsee" || reg === "Deutsche Ostsee"; }
-  // Bekohlen im Hafen: im Heimathafen der Linie voll, sonst bis dorthin mit Reserve; Kosten, Dauer in Tagen
+  // Kohle, die ein Schiff im Bunkerhafen der Linie (Heimathafen, sonst der erste Hafen) mindestens braucht: die ganze Rundreise mit Reserve,
+  // höchstens einen vollen Bunker (v5.1.3)
+  function coalNeed(s, sh, G, X, d) {
+    const res = bunkRes(G), r = routeOf(s, sh), cap = coalCap(sh);
+    const next = legCoal(s, sh, G, legOf(X, d), r && r.auf ? Math.max(fahrtF(s, sh), FAHRT.voll.f) : 0) * (1 + res);
+    return Math.min(cap, Math.max(next, coalUntil(s, sh, G, X, d, X) * (1 + res)));
+  }
+  // Abgabe beim Bunkern (Tonnen am Tag): im Heimathafen nach der Stufe des Lagers, sonst nach dem Hafen
+  const lagerOut = (s, p) => p === (s.home || "ham") && s.lager ? lagerLv(s).out : bunkRate(p);
+  // Bekohlen im Hafen: im Bunkerhafen der Linie aus dem Lager bis zum vollen Bunker, sonst nur, was bis dorthin fehlt (mit Reserve); Dauer in Tagen
   function bunkerAt(s, sh, G, X, d) {
-    const v = sh.v, cap = coalCap(sh), r = routeOf(s, sh), res = bunkRes(G);
+    const v = sh.v, cap = coalCap(sh), r = routeOf(s, sh), res = bunkRes(G), atL = X === G.homeIdx;
     // mit „Volldampf zum Aufholen“ reicht die Kohle für die nächste Strecke auch bei Volldampf
     const next = legCoal(s, sh, G, legOf(X, d), r && r.auf ? Math.max(fahrtF(s, sh), FAHRT.voll.f) : 0) * (1 + res);
-    let target = X === G.homeIdx ? cap : coalUntil(s, sh, G, X, d, G.homeIdx) * (1 + res);
+    let target = atL ? cap : coalUntil(s, sh, G, X, d, G.homeIdx) * (1 + res);
     target = Math.min(cap, Math.max(target, next));
-    const buy = target - v.b;
-    if (buy < .05) return 0;
-    const p = G.ports[X], fromLager = p === (s.home || "ham") && s.lager ? Math.min(buy, s.lager.t) : 0;
-    const cost = buyCoal(s, sh, p, buy, false);
+    const want = target - v.b;
+    if (want < .05) return 0;
+    const p = G.ports[X];
+    let buy = want, cost;
+    if (atL) { const g = takeLager(s, sh, p, want); buy = g.t; cost = g.cost; if (buy < .05) return 0; }
+    else cost = buyCoal(s, sh, p, want, false);
     v.b += buy; v.bv += cost;
-    let wait = 0; if (buy - fromLager > .5 && coalStrikeAt(s, p)) { wait = s.sim ? 1.5 : 1 + rnd(s); addWhy(v.wyP || (v.wyP = {}), "streik", wait); }
-    return Math.max(1 / 12, buy / bunkRate(p)) + wait;
+    let wait = 0; if (!atL && coalStrikeAt(s, p)) { wait = s.sim ? 1.5 : 1 + rnd(s); addWhy(v.wyP || (v.wyP = {}), "streik", wait); }
+    if (atL && p === (s.home || "ham") && lagerLv(s).schute) return 1 / 24 + wait; // die Schute bekohlt neben dem Ein- und Aussteigen
+    return Math.max(1 / 12, buy / (atL ? lagerOut(s, p) : bunkRate(p))) + wait;
   }
   // Wert des Bunkervorrats (zum Einkaufspreis) – zählt zum Eigenkapital
   function bunkerValue(s) { let v = 0; for (const sh of s.ships) if (sh.v && sh.v.bv > 0) v += sh.v.bv; return v; }
@@ -1457,8 +1554,8 @@
   const seaF = t => (t.rough || 1) * (t.sturdy ? .6 : 1);
 
   // Gründe für Verspätungen (v5.1.1): jede Fahrt merkt sich, woher ihre Verspätung kommt
-  const WHY = { nebel: "Nebel", sturm: "Sturm", eis: "Eis", panne: "Panne", streik: "Streik", bekohlen: "Bekohlen", kohle: "Kohle knapp", folge: "Folgeverspätung", rettung: "Seenotrettung" };
-  const WHY_TIP = { folge: "Pufferzeit", panne: "Maschinenpersonal und Wartung", bekohlen: "Kohle im Lager", kohle: "Kohle im Lager", sturm: "seefeste Schiffe und Pufferzeit", nebel: "Pufferzeit", eis: "Pufferzeit im Winter", streik: "gut bezahltes Personal" };
+  const WHY = { nebel: "Nebel", sturm: "Sturm", eis: "Eis", panne: "Panne", streik: "Streik", bekohlen: "Bekohlen", kohle: "Kohle knapp", lager: "Kohlelager leer", folge: "Folgeverspätung", rettung: "Seenotrettung" };
+  const WHY_TIP = { folge: "Pufferzeit", panne: "Maschinenpersonal und Wartung", bekohlen: "ein größeres Kohlelager", kohle: "seefeste Schiffe und Pufferzeit", lager: "ein Kohleneinkäufer, der das Lager voll hält", sturm: "seefeste Schiffe und Pufferzeit", nebel: "Pufferzeit", eis: "Pufferzeit im Winter", streik: "gut bezahltes Personal" };
   function addWhy(o, k, d) { if (d > 0 && k) o[k] = (o[k] || 0) + d; return o; }
   function scaleWhy(o, late) { const sum = Object.values(o || {}).reduce((a, b) => a + b, 0), out = {}; if (!(late > .01)) return out; if (sum <= 1e-9) { out.folge = late; return out; } const f = late / sum; for (const k in o) if (o[k] > 0) out[k] = o[k] * f; if (sum < late * .999 && !(sum > 0)) out.folge = late; return out; }
   const blockEnd = (s, p) => Math.max((s.blk && s.blk[p]) || 0, s.blkAll || 0);
@@ -1610,10 +1707,12 @@
     }
   }
 
+  // Kohle einer Fähre im Tagespaket für den Tag (nd Umläufe)
+  function dayTons(s, sh, G, nd) { let t = 0; for (let k = 0; k < G.legDist.length; k++) t += G.legDist[k] * coalSm(s, sh, fahrtF(s, sh)) * (1 + LADUNG / 2) * 2 * nd; return t; }
   // Tagespaket für kurze Linien (Umlauf unter einem Tag): alle Fahrten des Tages in einem Schritt
   function shortDay(s, r, G, tt, ctx) {
     const acc = r.cur, mo = ctx.mo, f = diffOf(s).delay, det = !!s.sim;
-    const ships = tt.ships.filter(sh => usable(s, sh) && sh.v && sh.v.r === r.id), q0 = r.q || (r.q = {});
+    let ships = tt.ships.filter(sh => usable(s, sh) && sh.v && sh.v.r === r.id); const q0 = r.q || (r.q = {});
     if (!ships.length) { for (const k in q0) { lostToRival(s, r, G, q0[k][0] + q0[k][1] + q0[k][2]); q0[k] = [0, 0, 0]; } return; }
     // Wetter, Nebel und Pannen des Tages
     let late = 0, cancel = 0;
@@ -1632,8 +1731,23 @@
     const rs = r.res && s.ships.find(x => x.id === r.res); if (rs && usable(s, rs)) { late *= .3; cancel *= .3; for (const k in dw) { dw[k].late *= .3; dw[k].cancel *= .3; } }
     { const bp = G.ports.find(p => s.blk && s.blk[p] > ctx.T0); if (bp || (s.blkAll || 0) > ctx.T0) { cancel = 1; dw = {}; dwA(bp ? blockWhy(s, bp) : "streik", 0, 1); } }
     { const c0 = cancel, l0 = late; cancel = clamp(cancel, 0, 1); late = clamp(late, 0, 1 - cancel); for (const k in dw) { if (c0 > 0) dw[k].cancel *= cancel / c0; if (l0 > 0) dw[k].late *= late / l0; } }
-    r.dayW = dw; { const per = 2 * G.legDist.length / tt.P * ships.length, wf = acc.whyF || (acc.whyF = {}); for (const k in dw) addWhy(wf, k, (dw[k].late + dw[k].cancel) * per); }
-    pkUpdate(s, r, 1 - late - cancel, 1);
+    // v5.1.3: die Kohle für den Tag kommt aus dem Lager; eine Fähre, die keine bekommt, bleibt im Hafen (alle ihre Fahrten fallen aus)
+    const nAll = ships.length; let dryF = 0;
+    { const nd0 = 1 / tt.P * (1 - cancel), dry = [];
+      for (const sh of ships) {
+        const v = sh.v, tons = dayTons(s, sh, G, nd0); if (!(tons > 0) || v.b >= tons - .05) continue;
+        const g = takeLager(s, sh, G.ports[G.homeIdx], tons - v.b); v.b += g.t; v.bv += g.cost;
+        if (v.b < tons - .05) { dry.push(sh); v.cw = ctx.T0; coalDry(s, sh); }
+      }
+      if (dry.length) {
+        dryF = dry.length / nAll; for (const k in dw) { dw[k].late *= 1 - dryF; dw[k].cancel *= 1 - dryF; } dwA("lager", 0, dryF);
+        acc.cancel += 2 * G.legDist.length / tt.P * dry.length;
+        ships = ships.filter(sh => !dry.includes(sh));
+      }
+    }
+    r.dayW = dw; { const per = 2 * G.legDist.length / tt.P * nAll, wf = acc.whyF || (acc.whyF = {}); for (const k in dw) addWhy(wf, k, (dw[k].late + dw[k].cancel) * per); }
+    if (!ships.length) { pkUpdate(s, r, 0, 1); for (const k in q0) { lostToRival(s, r, G, q0[k][0] + q0[k][1] + q0[k][2]); q0[k] = [0, 0, 0]; } return; }
+    pkUpdate(s, r, (1 - late - cancel) * (1 - dryF), 1);
     // Fahrten: jedes Schiff fährt den Takt der Linie; Platz je Teilstrecke und Richtung begrenzt
     const nd = 1 / tt.P * (1 - cancel), capS = ships.map(sh => TYPES[sh.type].sb.map(x => x * nd)), cap = [0, 1, 2].map(c => capS.reduce((a, x) => a + x[c], 0));
     const pen = [0, 1, 2].map(o => SEA_REV * (ships.reduce((a, sh) => a + Math.max(0, 1 / fahrtF(s, sh) - 1), 0) / ships.length) * (o === 0 ? 2 : 1));
@@ -1670,8 +1784,8 @@
     for (let i = 0; i < ships.length; i++) {
       const sh = ships[i], v = sh.v, sc = shipCur(sh), share = (capS[i][0] + capS[i][1] + capS[i][2]) / capSum;
       sc.rev = (sc.rev || 0) + (rev + wRev) * share; sc.pax += n * share; sc.cap += TYPES[sh.type].seats * legsDay; sc.cater = (sc.cater || 0) + cater * share; sc.cost = (sc.cost || 0) + cater * share;
-      let tons = 0, fee = 0, fr = 0; for (let k = 0; k < G.legDist.length; k++) { tons += G.legDist[k] * coalSm(s, sh, fahrtF(s, sh)) * (1 + LADUNG / 2) * 2 * nd; fee += legFee(s, sh, G, k) * 2 * nd; fr += legFreight(s, sh, G, k) * 2 * nd; }
-      if (tons > 0) { const p = G.ports[G.homeIdx]; const cost = buyCoal(s, sh, p, tons, false); v.b += tons; v.bv += cost; burnCoal(s, sh, tons); }
+      const tons = dayTons(s, sh, G, nd); let fee = 0, fr = 0; for (let k = 0; k < G.legDist.length; k++) { fee += legFee(s, sh, G, k) * 2 * nd; fr += legFreight(s, sh, G, k) * 2 * nd; }
+      if (tons > 0) burnCoal(s, sh, tons); // die Kohle kam am Morgen aus dem Lager
       expense(s, "Hafengebühren", fee); acc.cost += fee; sc.cost = (sc.cost || 0) + fee;
       if (fr) { s.cash += fr; s.cur.rev += fr; s.cur.freight = (s.cur.freight || 0) + fr; acc.rev += fr; sc.rev = (sc.rev || 0) + fr; }
       sc.dep = (sc.dep || 0) + legsDay; if (legsDay > 0) postServed(s, r, sh, legsDay);
@@ -1707,7 +1821,7 @@
   // Zustand eines Schiffs für Flotte und Karte
   function shipStatus(s, sh) {
     const v = sh.v; if (!v) return null;
-    const r = routeOf(s, sh), G = r ? lineGeo(s, r) : null, o = { st: v.st, port: v.p, b: v.b, cap: coalCap(sh), bv: v.bv, res: !!(r && r.res === sh.id), mark: !!sh.mark };
+    const r = routeOf(s, sh), G = r ? lineGeo(s, r) : null, o = { st: v.st, port: v.p, b: v.b, cap: coalCap(sh), bv: v.bv, res: !!(r && r.res === sh.id), mark: !!sh.mark, dry: v.cw != null && v.cw >= s.t - 1 };
     if (v.st === "see") { o.to = v.toP; o.eta = v.eta; o.late = Math.max(0, v.eta - v.pa); let n = 0; for (const g of v.pax) n += g.n[0] + g.n[1] + g.n[2]; o.pax = Math.round(n); }
     if (G && v.r === (r && r.id) && (v.st === "hafen" || v.st === "see") && !v.res) { const np = nextPlan(G, v); o.next = { plan: np.t, from: G.ports[np.i], to: G.ports[np.i + np.d] }; if (v.st === "hafen") o.next.exp = Math.max(np.t, v.rdy || 0, (s.blk && s.blk[v.p]) || 0, s.blkAll || 0); }
     return o;
@@ -1768,7 +1882,12 @@
       else { let best = Infinity; for (const x of [0, G.n - 1]) { const p = G.ports[x] === here ? { dist: 0 } : seaPath(here, G.ports[x], yearOf(s)); const dd = p ? p.dist : 1e9; if (dd < best) { best = dd; e = x; } } dist = best < 1e9 ? best : 0; }
     }
     let ready = T0;
-    if (dist > 0) { const days = Math.ceil(dist / (TYPES[sh.type].speed * 24)); const tons = dist * coalSm(s, sh, 1); if (v.b < tons) { const c = buyCoal(s, sh, here, tons - v.b, false); v.bv += c; v.b = tons; } burnCoal(s, sh, tons); sh.offUntil = Math.max(sh.offUntil || 0, Math.ceil(T0) + days); ready = T0 + days; }
+    if (dist > 0) {
+      const days = Math.ceil(dist / (TYPES[sh.type].speed * 24)), tons = dist * coalSm(s, sh, 1);
+      // v5.1.3: im Heimathafen kommt die Kohle für die Überführung aus dem Lager; reicht es nicht, wartet das Schiff
+      if (v.b < tons) { if (here === (s.home || "ham") && s.lager) { const g = takeLager(s, sh, here, tons - v.b); v.b += g.t; v.bv += g.cost; if (v.b < tons - .05) { v.cw = T0; coalDry(s, sh); return; } } else { const c = buyCoal(s, sh, here, tons - v.b, false); v.bv += c; v.b = tons; } }
+      burnCoal(s, sh, tons); sh.offUntil = Math.max(sh.offUntil || 0, Math.ceil(T0) + days); ready = T0 + days;
+    }
     v.pax = []; v.st = "hafen"; v.i = e; v.d = e === 0 ? 1 : -1; v.p = G.ports[e];
     if (r.res !== sh.id && !noBunker) ready += bunkerAt(s, sh, G, e, v.d); // vor der ersten Abfahrt bekohlen – das plant der Fahrplan mit ein
     joinLine(s, sh, r, G, ready, e);
@@ -1785,7 +1904,17 @@
       const td = Math.max(v.pl, v.rdy || 0, (s.blk && s.blk[v.p]) || 0, s.blkAll || 0);
       if (blockEnd(s, v.p) > Math.max(v.pl, v.rdy || 0) && v.pl < T1) { v.blkT = Math.max(v.blkT || 0, Math.min(td, blockEnd(s, v.p))); v.blkW = blockWhy(s, v.p); }
       if (td >= T1) return;
-      if (v.b < legCoal(s, sh, G, legOf(v.i, v.d)) * (1 + bunkRes(G)) - .01 && !v.bunkT) { const bt = bunkerAt(s, sh, G, v.i, v.d); v.bunkT = 1; v.rdy = Math.max(v.rdy || 0, td) + bt; v.bkT = (v.bkT || 0) + bt; continue; }
+      // im Bunkerhafen der Linie fährt ein Schiff erst mit Kohle für die Rundreise ab; reicht das Lager nicht, wartet es (v5.1.3)
+      const atL = v.i === G.homeIdx, need = atL ? coalNeed(s, sh, G, v.i, v.d) : legCoal(s, sh, G, legOf(v.i, v.d)) * (1 + bunkRes(G));
+      const tol = atL ? Math.max(.5, need * .01) : .01;
+      if (v.b < need - tol) {
+        if (atL) {
+          const bt = bunkerAt(s, sh, G, v.i, v.d); if (bt > 0) { v.rdy = Math.max(v.rdy || 0, td) + bt; v.bkT = (v.bkT || 0) + bt; }
+          if (v.b < need - tol) { const w = T1 - Math.max(T0, td); if (w > 0) addWhy(v.wyP || (v.wyP = {}), "lager", w); v.rdy = Math.max(v.rdy || 0, T1); v.cw = T0; coalDry(s, sh); return; }
+          continue;
+        }
+        if (!v.bunkT) { const bt = bunkerAt(s, sh, G, v.i, v.d); v.bunkT = 1; v.rdy = Math.max(v.rdy || 0, td) + bt; v.bkT = (v.bkT || 0) + bt; continue; }
+      }
       v.bunkT = 0;
       depart(s, sh, r, G, tt, Math.max(T0, td), ctx);
     }
@@ -1799,6 +1928,7 @@
     let dCost = 0;
     const add = (k, v) => { cur.cost[k] = (cur.cost[k] || 0) + v; dCost += v; };
     cur.days += 1;
+    lagerDay(s);
     const odCount = {}, lines = [];
     for (const r of s.routes) { const G = lineGeo(s, r); if (!G) continue; for (const od of G.ods) { const k = pairKey(G.ports[od.i], G.ports[od.j]) + (G.cruise ? "c" : ""); odCount[k] = (odCount[k] || 0) + 1; } }
     const ctx = { mo, fd, pid, st, myEx, kuX, odCount, T0, T1 };
@@ -1831,6 +1961,8 @@
       // v5.1.1: ein Tag, an dem eine fällige Abfahrt wegen Streik oder Sperre ausfällt, zählt wie im Tagespaket als unpünktlich
       r.dayW = null;
       if (tt.ships.some(sh => { const v = sh.v; return v && v.r === r.id && v.st === "hafen" && !v.res && usable(s, sh) && v.pl < T1 && blockEnd(s, v.p) >= T1; })) { pkUpdate(s, r, 0, 1); r.cur.blkD = (r.cur.blkD || 0) + 1; }
+      // v5.1.3: ebenso ein Tag, an dem ein Schiff ohne Kohle aus dem Lager im Hafen liegt
+      else if (tt.ships.some(sh => sh.v && sh.v.r === r.id && sh.v.cw === T0 && sh.v.pl < T1)) { pkUpdate(s, r, 0, 1); r.cur.dryD = (r.cur.dryD || 0) + 1; }
       // nächste geplante Abfahrt je Hafen und Richtung; liegt sie im Umlauf eines Schiffs erst später, zählt der Fahrplan (sonst gälte sie als überfällig)
       r.nx = {};
       const off = tt.P > 0 ? lineOffsets(s, G, tt.P, tt.ref) : null;
@@ -1901,7 +2033,7 @@
       r.last = { pax: Math.round(a.pax), cap: Math.round(a.cap), share: a.D ? a.pax / a.D : 0, load: a.cap ? (a.legPax || a.pax) / a.cap : 0, rev: Math.round(a.rev), cost: Math.round(a.cost), ships: a.ships, D: Math.round(a.D), m: s.m, coal: Math.round(a.coal || 0),
         cls: [0, 1, 2].map(o => ({ pax: Math.round(a.cp[o]), cap: Math.round(a.cc[o]), dem: Math.round(a.dem[o]), no: Math.round((a.cx || [0, 0, 0])[o]) })), fixed: Math.round(a.fixed || 0), riv: Object.fromEntries(Object.entries(a.rp || {}).map(([k, v]) => [k, Math.round(v)])),
         dep: Math.round((a.dep || 0) * 10) / 10, late: Math.round((a.late || 0) * 10) / 10, arr: Math.round((a.arr || 0) * 10) / 10, lateA: Math.round((a.lateA || 0) * 10) / 10, avgLate: a.arr ? Math.round(a.lateSum / a.arr * 100) / 100 : 0, pk: r.pk == null ? null : Math.round(r.pk * 1000) / 1000, comp: Math.round(a.comp || 0), cancel: Math.round((a.cancel || 0) * 10) / 10,
-        wag: Math.round(a.wag || 0), wagD: Math.round(a.wagD || 0), wagRev: Math.round(a.wagRev || 0), zk: zkOn(r) ? Math.round(r.zk.n) : 0, blkD: a.blkD || 0 };
+        wag: Math.round(a.wag || 0), wagD: Math.round(a.wagD || 0), wagRev: Math.round(a.wagRev || 0), zk: zkOn(r) ? Math.round(r.zk.n) : 0, blkD: a.blkD || 0, dryD: a.dryD || 0 };
       { const w = r.tt && r.tt.short ? a.whyF : a.why, o = {}; for (const k in w || {}) if (w[k] >= .01) o[k] = Math.round(w[k] * 100) / 100; r.whyH = [o].concat(r.whyH || []).slice(0, 3); }
       rep.lines[r.id] = r.last; r.cur = null;
     }
@@ -2039,7 +2171,7 @@
   const INSP_PAY = 450, MARKT_PAY = 600;
   function staff(s) {
     const st = s.staff || (s.staff = { deck: 1, maschine: 1, service: 1, insp: false, inspMin: 60, markt: false });
-    if (st.mi == null) Object.assign(st, { mi: -1, miAuto: true, miSpar: 125, miVoll: 90, miPlan: null, ke: -1, keRenew: 95, pm: -1 });
+    if (st.mi == null) Object.assign(st, { mi: -1, miAuto: true, miSpar: 125, miVoll: 90, miPlan: null, ke: -1, pm: -1 });
     if (st.pk == null) st.pk = -1;
     return st;
   }
@@ -2152,64 +2284,25 @@
   }
   function coalIdx(s) { return Math.round(s.coal * 100); }
   function coalTrend(s) { const h = s.coalHist || [], p = h.length ? h[h.length - 1].c : s.coal; return s.coal > p + .004 ? 1 : s.coal < p - .004 ? -1 : 0; }
-  function coalActive(s) { return (s.coalK || []).filter(k => k.start <= s.m && k.until >= s.m); }
+  // Kohle-Lieferverträge gibt es seit v5.1.3 nicht mehr: alle Kohle läuft über das Lager
+  function coalActive() { return []; }
   // Ø Tonnen, die Ihre Schiffe in den letzten drei Monaten in einem Hafen gebunkert haben (ohne Hafen: insgesamt verbraucht)
   function coalBase(s, port) { const u = (port ? (s.coalPort || {})[port] || [] : s.coalUse || []).slice(-3); return u.length ? u.reduce((a, b) => a + b, 0) / u.length : 0; }
-  function coalOffer(s, years, share, port) {
-    years = COAL_SURCH[years] != null ? +years : 1; share = share >= 1 ? 1 : .5; port = s.home || "ham"; // v5.1.1: Verträge liefern ins Lager im Heimathafen
-    const st = staff(s), red = st.ke >= 0 ? (st.ke + 1) / 100 : 0, act = coalActive(s), used = act.filter(k => (k.port || s.home) === port).reduce((a, k) => a + k.share, 0);
-    const base = coalBase(s, port), qty = Math.round(base * share), surch = COAL_SURCH[years] - red, mkt = coalPortPrice(s, port);
-    const pt = Math.round(mkt * (1 + surch) * 100) / 100, price = Math.round(s.coal * (1 + surch) * 1000) / 1000;
-    const why = act.length >= 2 ? "Höchstens zwei Verträge gleichzeitig." : used + share > 1.001 ? "Zusammen höchstens 100 % der Kohle, die Ihre Schiffe im Heimathafen bunkern." : qty < 10 ? "Im Heimathafen haben Ihre Schiffe in den letzten drei Monaten kaum Kohle gebunkert." : "";
-    return { years, share, port, qty, pt, price, surch, months: years * 12, monthly: Math.round(qty * pt), total: Math.round(qty * pt * years * 12), now: Math.round(qty * (pt - mkt)), ok: !why, why };
-  }
   // Häfen, in denen Ihre Schiffe zuletzt gebunkert haben (für die Wahl des Vertragshafens)
   function coalPorts(s) { const P = s.coalPort || {}; const list = Object.keys(P).filter(p => PORTS[p] && P[p].slice(-3).some(x => x > 0)).sort((a, b) => coalBase(s, b) - coalBase(s, a)); if (!list.includes(s.home || "ham")) list.unshift(s.home || "ham"); return list; }
-  function signCoal(s, years, share, renew, port) {
-    const o = coalOffer(s, years, share, port); if (!o.ok) return o.why;
-    s.coalK = s.coalK || [];
-    const k = { id: uid(s), port: o.port, start: renew ? s.m + 1 : s.m, until: s.m + o.months - (renew ? 0 : 1), years: o.years, share: o.share, qty: o.qty, pt: o.pt, price: o.price, stop: -1, warned: false };
-    s.coalK.push(k);
-    if (!renew && s.lager) { k.dlv = s.m; lagerDeliver(s, k, null); }
-    s.log.unshift({ m: s.m, head: renew ? "Kohle-Liefervertrag verlängert" : "Kohle-Liefervertrag geschlossen", text: (o.years === 1 ? "Ein Jahr" : o.years + " Jahre") + ", " + fmt(o.qty) + " Tonnen im Monat ins Kohlelager zu " + Math.round(o.price * 100) + " % des Normalpreises.", kind: "own", img: "ev_kohlevertrag" });
-    return null;
-  }
-  function coalCancelFee(s, k) { return Math.round(Math.max(0, k.until - s.m + 1) * k.qty * (k.pt || COAL_T * k.price) * .25); }
-  function cancelCoal(s, id) {
-    const k = (s.coalK || []).find(x => x.id === id); if (!k) return "Vertrag nicht gefunden.";
-    const fee = coalCancelFee(s, k); expense(s, "Sonderausgaben", fee); s.coalK = s.coalK.filter(x => x !== k);
-    s.log.unshift({ m: s.m, head: "Kohle-Liefervertrag gekündigt", text: "Die Kündigung kostet " + fmt(fee) + " Mark – ein Viertel der Restsumme.", kind: "own", img: "ev_kohlevertrag" });
-    return null;
-  }
   function coalShock(s, de, gb, months) {
     s.coal = clamp(s.coal * ((s.country || "de") === "gb" ? gb : de), .75, 1.8);
     if (months) s.coalFloor = { until: s.m + months - 1, min: Math.round(s.coal * .95 * 1000) / 1000 };
   }
   function coalMonthEnd(s, add) {
-    const cur = s.cur, st = staff(s);
+    const cur = s.cur;
     s.coalUse = (s.coalUse || []).concat([Math.round(cur.cuT || 0)]).slice(-6);
     s.coalHist = (s.coalHist || []).concat([{ m: s.m, c: Math.round(s.coal * 1000) / 1000 }]).slice(-120);
     const cp = s.coalPort || (s.coalPort = {});
     for (const p of new Set(Object.keys(cp).concat(Object.keys(cur.cp || {})))) { cp[p] = (cp[p] || []).concat([Math.round((cur.cp && cur.cp[p]) || 0)]).slice(-6); if (cp[p].every(x => !x)) delete cp[p]; }
-    // Kohlelager (v5.1.1): Lagergeld, Verbrauch im Heimathafen merken
-    if (s.lager) { const L = s.lager; L.use = (L.use || []).concat([Math.round((cur.lagT || 0) + (cur.kaiT || 0))]).slice(-6); const fee = L.t * LAGERGELD * (s.pidx || 1); if (fee >= 1) { add("Lagergeld", fee); s.cash -= fee; } }
-    for (const k of (s.coalK || []).slice()) {
-      if (k.until === s.m + 3 && st.ke >= 0 && !k.warned) {
-        k.warned = true;
-        if (st.ke > 0 || rnd(s) > .35) s.log.unshift({ m: s.m, head: "Kohlevertrag läuft in drei Monaten aus", text: "Ihr Kohleneinkäufer erinnert Sie: Der Vertrag über " + Math.round(k.share * 100) + " % der Kohle in " + PORTS[k.port || s.home].name + " endet im " + dateStr(k.until) + ". " + (s.coal * 100 < st.keRenew ? "Bei heutigem Preis würde er verlängern." : "Bei heutigem Preis würde er nicht verlängern."), kind: "own", img: "pers_einkaeufer" });
-      }
-      if (k.until <= s.m) {
-        s.coalK = s.coalK.filter(x => x !== k);
-        if (st.ke >= 0 && s.coal * 100 < st.keRenew && !signCoal(s, k.years, k.share, true, k.port)) continue;
-        s.log.unshift({ m: s.m, head: "Kohle-Liefervertrag ausgelaufen", text: "Ab jetzt kaufen Sie die Kohle für Ihr Lager wieder selbst, zum Tagespreis.", kind: "own", img: "ev_bunkern" });
-      }
-    }
-    // Lieferverträge liefern die Menge des nächsten Monats ins Lager; Lieferausfall und Zechenstreik setzen aus
-    if (s.lager) for (const k of s.coalK || []) {
-      if (k.start > s.m + 1 || k.until < s.m + 1 || k.stop >= s.m + 1 || k.dlv >= s.m + 1) continue;
-      k.dlv = s.m + 1; const over = lagerDeliver(s, k, add);
-      if (over > .5 && !s.sim && !(s.lagerFull > s.m - 3)) { s.lagerFull = s.m; s.log.unshift({ m: s.m, head: "Kohlelager voll", text: "Vom Liefervertrag passten " + fmt(over) + " Tonnen nicht mehr ins Lager. Der Händler hat sie zu 80 % des Preises zurückgenommen.", kind: "bad", img: "ev_bunkern" }); }
-    }
+    // Kohlelager: Verbrauch merken, fester Unterhalt je Stufe (v5.1.3, statt Lagergeld je Tonne), Ausbau verliert 2 % im Jahr an Wert
+    if (s.lager) { const L = s.lager; L.use = (L.use || []).concat([Math.round((cur.lagT || 0) + (cur.kaiT || 0))]).slice(-6); L.dryM = (L.dryM || []).concat([cur.dryD || 0]).slice(-3);
+      const fee = lagerLv(s).fee * (s.pidx || 1); if (fee >= 1) { add("Kohlelager", fee); s.cash -= fee; } if (L.inv > 0) L.inv *= 1 - LAGER_AFA / 12; }
   }
   function kitchenMonthEnd(s, add) {
     const cur = s.cur, K = kueche(s);
@@ -2288,7 +2381,7 @@
     else if (k === "insp") st.insp = !!v; else if (k === "inspMin") st.inspMin = clamp(v | 0, 40, 80); else if (k === "markt") st.markt = !!v;
     else if (k === "pk") { st.pk = clamp(v | 0, -1, 3); if (st.pk < 0) pkFire(s); }
     else if (k === "mi" || k === "ke" || k === "pm") { st[k] = clamp(v | 0, -1, 3); if (k === "pm" && st.pm < 0) kueche(s).eigen = false; if (k === "mi") { st.miPlan = null; if (st.mi >= 0) st.miAuto = true; } }
-    else if (k === "miAuto") { st.miAuto = !!v; st.miPlan = null; } else if (k === "miSpar") st.miSpar = clamp(v | 0, 100, 150); else if (k === "miVoll") st.miVoll = clamp(v | 0, 60, 100); else if (k === "keRenew") st.keRenew = clamp(v | 0, 70, 150);
+    else if (k === "miAuto") { st.miAuto = !!v; st.miPlan = null; } else if (k === "miSpar") st.miSpar = clamp(v | 0, 100, 150); else if (k === "miVoll") st.miVoll = clamp(v | 0, 60, 100);
   }
   function staffMonthly(s) {
     const st = staff(s), lv = (k, pay) => st[k] >= 0 ? pay * STAFF_PAY[st[k]] : 0;
@@ -2570,6 +2663,19 @@
       (s.cash < 0 ? " Die Kasse steht im Minus. Nach vier Monaten im Minus ist die Reederei zahlungsunfähig – Ihnen bleiben höchstens noch " + left + " Monat" + (left === 1 ? "" : "e") + "." : " So reicht das Geld nur noch wenige Monate.") + " Die größten Posten:";
     s.pending.push({ id: "berater", day: 2, head: s.cash < 0 ? "Ihr Berater schlägt Alarm" : "Ihr Berater bittet um ein Gespräch", text, list: items.length ? items : ["Die laufenden Kosten sind höher als die Einnahmen."], tipText, tip, img: "ev_berater" });
     s.flags.advM = s.m;
+  }
+
+  // Berater beim Kohlelager (v5.1.3): Schiffe lagen ohne Kohle fest oder warteten, weil das Lager zu klein ist
+  function coalAdvice(s) {
+    const L = s.lager; if (!L || s.sim || s.over) return;
+    const dry = (L.dryM || [])[(L.dryM || []).length - 1] || 0; if (dry < 1 || (s.flags.coalAdvM != null && s.flags.coalAdvM > s.m - 4)) return;
+    if (s.pending.some(p => p.id === "berater")) return;
+    const st = staff(s), lv = lagerLv(s), nx = lagerNext(s), d = lagerRate(s), small = d > 0 && d * 7 > lv.cap; let tip = null, tipText;
+    if (st.ke < 0) { tip = { kind: "ke", label: "Kohleneinkäufer einstellen (Tarif)" }; tipText = "Stellen Sie einen Kohleneinkäufer ein. Er kauft nach, sobald im Lager Platz ist."; }
+    else if ((small || L.t + lagerOw(s).t >= lv.cap * .9) && nx && !L.bau) { tip = nx.price <= s.cash ? { kind: "lagerBau", label: nx.name + " bauen (" + fmt(nx.price) + " Mark)" } : null; tipText = "Ihr " + lv.name + " ist zu klein für die Flotte: Es nimmt am Tag nur " + fmt(lv.zu) + " Tonnen an. Bauen Sie es aus" + (tip ? "." : ", sobald das Geld reicht (" + fmt(nx.price) + " Mark)."); }
+    else tipText = "Ihr Kohleneinkäufer findet nicht genug Geld in der Kasse. Ohne Kohle fahren die Schiffe nicht und verdienen nichts.";
+    s.pending.push({ id: "berater", day: 2, head: "Ihr Berater bittet um ein Gespräch", text: "Im letzten Monat lagen Ihre Schiffe " + (dry === 1 ? "einen Tag" : dry + " Schiffstage") + " ohne Kohle im Heimathafen. Ihre Abfahrten fielen aus, und die Fahrgäste gingen zur Konkurrenz.", list: ["Lager: " + fmt(Math.round(L.t)) + " von " + fmt(lv.cap) + " Tonnen", "Verbrauch zu Hause: rund " + fmt(Math.round(d * 30)) + " Tonnen im Monat"], tipText, tip, img: "ev_kohle_knapp" });
+    s.flags.coalAdvM = s.m;
   }
 
   /* ---------- Ereignisse ---------- */
@@ -3068,6 +3174,8 @@
         else if (tp.kind === "sell") { sellShip(s, tp.ship); msg = "Das Schiff ist verkauft."; }
         else if (tp.kind === "mk") { s.mk.budget = 0; s.mk.ag = {}; msg = "Werbung und Agenturen sind gekündigt."; }
         else if (tp.kind === "prices") { for (const r of s.routes) alignPrices(s, r.id); msg = "Alle Preise liegen jetzt auf dem üblichen Niveau."; }
+        else if (tp.kind === "ke") { setStaff(s, "ke", 1); keBuy(s); msg = "Ein Kohleneinkäufer ist eingestellt. Er hält ab sofort das Lager voll."; }
+        else if (tp.kind === "lagerBau") { msg = lagerBuild(s) || "Der Ausbau des Kohlelagers ist beauftragt."; }
         s.log.unshift({ m: s.m, head: "Rat des Beraters befolgt", text: msg, kind: "own", img: "ev_berater" });
       }
       return;
@@ -3150,6 +3258,7 @@
       s.over = "konkurs"; s.log.unshift({ m: s.m, head: s.name + " ist zahlungsunfähig", text: "Das Konkursgericht übernimmt die Geschäfte.", kind: "bad" }); return rep;
     }
     guard(s, "Berater", () => advisorCheck(s, rep));
+    guard(s, "Kohlelager", () => coalAdvice(s));
     s.m += 1; s.day = 1; s.cur = newCur(s);
     if (s.musDue) { s.musDue = false; guard(s, "Museum", () => museumMonthly(s)); }
     guard(s, "Welt", () => world(s));
@@ -3609,7 +3718,7 @@
           c.hit = { f: .3, until: s.m + n - 1 }; boHit(s, k, f);
           if (hz) b.hzStop = s.m + n - 1;
           const head = boName(s, k) + (strike ? ": Die Bergleute streiken" : ": Grubenunglück");
-          const text = (strike ? "Die Bergleute legen die Arbeit nieder. " : "Schlagende Wetter in der Tiefe – die Grube steht still, die Rettungsmannschaften sind unterwegs. ") + "Der Kurs fällt um " + Math.round(-f * 100) + " %." + (hz ? " Ihre Hauszeche liefert " + (n === 1 ? "einen Monat" : n + " Monate") + " keine Kohle – Ihre Schiffe bunkern so lange zum Marktpreis." : "");
+          const text = (strike ? "Die Bergleute legen die Arbeit nieder. " : "Schlagende Wetter in der Tiefe – die Grube steht still, die Rettungsmannschaften sind unterwegs. ") + "Der Kurs fällt um " + Math.round(-f * 100) + " %." + (hz ? " Ihre Hauszeche liefert " + (n === 1 ? "einen Monat" : n + " Monate") + " keine Kohle – Ihr Lager kauft so lange zum Marktpreis." : "");
           if (hz) boLog(s, head, text, strike ? "ev_streik" : "ev_grube", "eigen"); else if (vis) boLog(s, head, text, strike ? "ev_streik" : "ev_grube");
         }
       }
@@ -3789,17 +3898,16 @@
     const b = s.bo; if (!b) return;
     const k = ["zeche1", "zeche2"].find(z => boOwn(s, z) > b.co[z].n / 2) || null;
     if (k === b.hz) return;
-    if (k) s.log.unshift({ m: s.m, head: "Eine eigene Zeche", text: "Sie halten jetzt die Mehrheit an " + boName(s, k) + ". Ihre Kohleschiffe bunkern ab sofort 20 % unter dem Marktpreis. Laufende Lieferverträge bleiben bestehen.", kind: "own", cat: "eigen", img: "bo_hauszeche" });
-    else s.log.unshift({ m: s.m, head: "Die Hauszeche ist abgegeben", text: "Sie halten nicht mehr die Mehrheit an " + boName(s, b.hz) + ". Ihre Schiffe bunkern wieder zum Marktpreis.", kind: "own", cat: "eigen", img: "ev_bunkern" });
+    if (k) s.log.unshift({ m: s.m, head: "Eine eigene Zeche", text: "Sie halten jetzt die Mehrheit an " + boName(s, k) + ". Kohle für Ihr Lager kostet ab sofort 20 % unter dem Marktpreis, bis zur Förderung der Zeche.", kind: "own", cat: "eigen", img: "bo_hauszeche" });
+    else s.log.unshift({ m: s.m, head: "Die Hauszeche ist abgegeben", text: "Sie halten nicht mehr die Mehrheit an " + boName(s, b.hz) + ". Ihr Lager kauft wieder zum Marktpreis.", kind: "own", cat: "eigen", img: "ev_bunkern" });
     b.hz = k;
   }
   const coalShip = t => !t.motor && !t.oil && (!!t.design || t.from < 1920);
-  // Vorschau: was eine Hauszeche im Vormonat gespart hätte (ohne Lieferverträge gerechnet)
+  // Vorschau: was eine Hauszeche im Vormonat gespart hätte (v5.1.3: alle Kohle fürs Lager, nach dem Verbrauch aus dem Lager)
   function hzPreview(s, k) {
-    const ports = (s.last && s.last.coal && s.last.coal.ports) || {}; let tons = 0;
-    for (const p in ports) if (hzRegion(s, p)) tons += ports[p];
+    const u = (s.lager && s.lager.use) || [], tons = u.length ? u[u.length - 1] : 0;
     const coalShare = s.ships.some(sh => coalShip(TYPES[sh.type])) ? 1 : 0, capT = BO_HZ_CAP * BO[k].g / 12 * boGrow(s) / COAL_T;
-    return Math.round(Math.min(tons * coalShare, capT) * COAL_T * s.coal * BO_HZ);
+    return Math.round(Math.min(tons * coalShare, capT) * lagerPrice(s) * BO_HZ);
   }
   // Prokurist: verwaltet ein eigenes Depot
   function pkTarget(s) {
@@ -3857,7 +3965,7 @@
   // Börse unter Kontor geöffnet
   function boSeen(s) { const b = boState(s); if (b.on) b.seen = true; }
 
-  const api = { taktInfo, lagerBuy, lagerQuote, lagerDays, lagerPrice, lagerValue, LAGER_CAP, KAI, LAGERGELD, zkRef, canStepPrice, lateWhy, whyQuarter, WHY, WHY_TIP, creditInfo, CREDIT, OCEAN_CREW, startOptions, STARTS, FERRY_TYPES, setZk, zkPossible, zkOn, zkPrice, wagDemand, wagCap, wagFare, WAGON, ipKind, ISLANDS, konzOn, rivalTypes, fareF, ZK_PK,
+  const api = { taktInfo, lagerBuy, lagerQuote, lagerDays, lagerPrice, lagerValue, lagerAnlage, lagerLv, lagerOw, lagerNext, lagerBuild, lagerRate, LAGER_LV, LAGER_CAP, KAI, FRACHT, kaiOk, zkRef, canStepPrice, lateWhy, whyQuarter, WHY, WHY_TIP, creditInfo, CREDIT, OCEAN_CREW, startOptions, STARTS, FERRY_TYPES, setZk, zkPossible, zkOn, zkPrice, wagDemand, wagCap, wagFare, WAGON, ipKind, ISLANDS, konzOn, rivalTypes, fareF, ZK_PK,
     setStrict, takeErrors, tDate, departures, shipStatus, shipPos, lineGeo, coalCap, portTier, coalPortPrice, coalPorts, bunkerValue, rivalPk, pkStart, RIV_PK, TIER, TIER_NAME, BUNK, BUNK_ORDER, BUF, BUF_NAME, DIFF, DIFF_ORDER, PAUSE_DEF, COAL_T, diffOf,
     setBunkRule, setShipBunk, setBuffer, setReserve, setCatchUp, markShip, setPause, setDifficulty, orderInfo, cancelInfo, cancelOrder, yardGap, MONTHS, TYPES, TYPE_ORDER, SPECIAL_ORDER, TYPE_NOTE, MAINT, EQUIP, MK_BUDGET, MK_AGENCY, FIN, PORTS, REGIONS, HOME, SEG, World: W,
     cal, dateStr, fmt, newGame, migrate, nextMonth, resolve, eventOptions, buyNew, buyUsed, rename, randomName, openRoute, closeRoute, routeInfo, canServe, routePrice,
@@ -3866,7 +3974,7 @@
     FAHRT, FAHRT_ORDER, KQ, CATERERS, CAT_ORDER, KU_CLS, MI_PAY, KE_PAY, PM_PAY, CHEF_PAY, COAL_SURCH, fahrtOf, setFahrt, setShipFahrt, postNeed, postSlow,
     kueche, kqOf, kqEff, kScore, setKq, setShipKq, setEigen, catOffers, catName, signCaterer, cancelCaterer, catCancelFee, catOn,
     BO, BO_ORDER, BO_GRP, BO_FEE, BO_HZ, PK_PAY, PK_RISK, boState, boName, boImg, boListed, boValue, boOwn, boQuote, boFor, boBuy, boSell, boCanTrade, boSeen, boVisible, boHeld, pkSet, coalShip, hzPreview,
-    coalIdx, coalTrend, coalActive, coalBase, coalOffer, signCoal, cancelCoal, coalCancelFee, prevFahrt, prevKq, prevCat, prevEigen, mealShips, duePending, dim, dayStr, clsName, CLS_K, inDock, offDuty, detained, dateAfter, dockDays, dockInfo, majorRepair, majorCost, MAJOR, shipFixed, simulateMonth, typeOpen, setBudget, setAgency, campaign, campaignCost, buildHallen, pressTrip, riskOf, suggest, distressOdds, routeOf, infoOf, yearOf };
+    coalIdx, coalTrend, coalActive, coalBase, prevFahrt, prevKq, prevCat, prevEigen, mealShips, duePending, dim, dayStr, clsName, CLS_K, inDock, offDuty, detained, dateAfter, dockDays, dockInfo, majorRepair, majorCost, MAJOR, shipFixed, simulateMonth, typeOpen, setBudget, setAgency, campaign, campaignCost, buildHallen, pressTrip, riskOf, suggest, distressOdds, routeOf, infoOf, yearOf };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Engine = api;
 })(this);
 

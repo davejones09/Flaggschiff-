@@ -552,3 +552,11 @@ details.lgrp > summary { display: block; min-height: 0; list-style: none; cursor
 .vlab { display: flex; justify-content: space-between; font: 11px var(--sans); color: var(--muted); }
 table.stat td.rev { color: var(--good); } table.stat td.cst { color: var(--red); }
 table.stat tr.fg td { font-weight: 700; cursor: pointer; } table.stat tr.ind td:first-child { padding-left: 18px; }
+
+/* v5.1.3: Kohlelager mit Ausbau */
+.coalbar .cr.bad { color: var(--red); font-weight: 600; }
+.tag.bad { border-color: var(--red); color: var(--red); }
+.tag.warn { border-color: var(--brass-2); color: var(--brass-2); }
+.lagerbau { display: flex; gap: 12px; align-items: flex-start; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--rule); }
+.lagerbau > div { flex: 1; min-width: 0; }
+.lagerbau .mini { flex: none; width: 96px; height: 64px; object-fit: cover; border-radius: 4px; }

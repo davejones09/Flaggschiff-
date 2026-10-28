@@ -230,7 +230,7 @@ function spielen(E, li, key, seed, jahre, mitSchwelle) {
   let offen = 0; if (s.bo && s.bo.co) for (const D of [s.bo.dep, s.bo.pk.dep]) for (const k in D) offen += D[k].n * s.bo.co[k].px - D[k].cost;
   const pkKosten = s.bo && s.bo.pk ? (s.bo.pk.lohn || 0) + (s.bo.pk.paid || 0) : 0;
   return { li, key, seed, jahre: ys.length, offen, pkKosten, kapital, flotte: kohleN ? flotteSum / kohleN : 0, profit: sum("profit"), rev: sum("rev"), pax: sum("pax"),
-    kohle: cost(k => k === "Kohle" || k.startsWith("Bekohlung") || k === "Kohle-Mindestabnahme" || k === "Kohle aus dem Lager" || k === "Lagergeld" || k === "Rücknahme Kohle"), verpf: cost(k => k === "Verpflegung"), entsch: cost(k => k === "Entschädigungen"), over: !!s.over,
+    kohle: cost(k => k === "Kohle" || k.startsWith("Bekohlung") || k === "Kohle-Mindestabnahme" || k === "Kohle aus dem Lager" || k === "Lagergeld" || k === "Rücknahme Kohle" || k === "Kohlelager" || k === "Kohlefracht"), verpf: cost(k => k === "Verpflegung"), entsch: cost(k => k === "Entschädigungen"), over: !!s.over,
     jahrGewinn: ys.map(y => s.years[y].profit), mon, monN, monL, tief, pk: pk.n ? pk.s / pk.n : null, fahrten, einn, preisEnde: s.routes.map(r => [0, 1, 2].map(c => E.pricePct(s, r, c))),
     costs: ys.reduce((a, y) => { const c = s.years[y].costs || {}; for (const k in c) a[k] = (a[k] || 0) + c[k]; return a; }, {}),
     kohleIdx: kohleN ? kohleSum / kohleN : null, sw: mitSchwelle ? sw : null };
