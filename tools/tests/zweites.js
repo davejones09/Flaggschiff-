@@ -33,6 +33,7 @@ function spielen(L, n, seed) {
   Math.random = rng(seed * 7919 + 13);
   const s = E.newGame(seed, "Test", { home: L.home, diff: "normal" });
   s.cash = 1e6 + n * 1.2 * E.newPrice(s, L.type);
+  if (E.lagerBuy) E.setStaff(s, "ke", 1); // seit v5.1.3 kommt Kohle nur aus dem Lager: der Kohleneinkäufer hält es voll
   if (E.openRoute(s, L.a, L.b, false, [])) throw new Error("Linie geht nicht: " + L.a + "-" + L.b);
   const r = s.routes[s.routes.length - 1];
   for (let i = 0; i < n; i++) { const e = E.buyNew(s, L.type, "bar", null, false, { n: 1, line: r.id }); if (e) throw new Error(e); }
