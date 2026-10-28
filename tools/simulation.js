@@ -68,8 +68,8 @@ const STRAT = {
   // Führung
   gut: { gruppe: ["fuehrung"], name: "gut geführt: Puffer 10 %, Maschine gut", start: (E, s) => { E.setStaff(s, "maschine", 2); for (const r of s.routes) E.setBuffer(s, r.id, 2); } },
   gut1: { gruppe: ["fuehrung"], name: "gut geführt mit einem Schiff je Linie", per: 1, start: (E, s) => { E.setStaff(s, "maschine", 2); for (const r of s.routes) E.setBuffer(s, r.id, 2); } },
-  schlecht: { gruppe: ["fuehrung"], name: "schlecht getaktet: gemischt schnelle Schiffe, kein Puffer, Lager nie ausgebaut, Maschine knapp, Wartung sparsam", mix: true, wartung: 0,
-    ausbau: false, start: (E, s) => { E.setStaff(s, "maschine", 0); } },
+  schlecht: { gruppe: ["fuehrung"], name: "schlecht getaktet: gemischt schnelle Schiffe, kein Puffer, Einkäufer knapp bezahlt, Lager nie ausgebaut, Maschine knapp, Wartung sparsam", mix: true, wartung: 0,
+    lager: "einkauf", ausbau: false, start: (E, s) => { E.setStaff(s, "maschine", 0); E.setStaff(s, "ke", 0); } },
   // Gegenmittel gegen Verspätungen
   puffer1: { gruppe: ["gegen"], name: "Pufferzeit klein (5 % des Umlaufs)", start: linien((E, s, r) => E.setBuffer(s, r.id, 1)) },
   puffer2: { gruppe: ["gegen"], name: "Pufferzeit mittel (10 %)", start: linien((E, s, r) => E.setBuffer(s, r.id, 2)) },

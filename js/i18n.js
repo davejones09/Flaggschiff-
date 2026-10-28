@@ -1766,8 +1766,8 @@ window.I18N_TYPES_ES={"Hafenfähre": "transbordador portuario", "Küstendampfer"
 (function () {
   var C = window.I18N_CORE;
   var NAMES = {
-    en: { "Flottenadmiralin Julia": "Fleet Admiral Julia", "Kapitän Emil": "Captain Emil" },
-    es: { "Flottenadmiralin Julia": "Almirante de la Flota Julia", "Kapitän Emil": "Capitán Emil" }
+    en: { "Flottenadmiralin Julia": "Fleet Admiral Julia", "Kapitän Emil": "Captain Emil", "Julia": "Julia" },
+    es: { "Flottenadmiralin Julia": "Almirante de la Flota Julia", "Kapitän Emil": "Capitán Emil", "Julia": "Julia" }
   };
   var k;
   for (k in NAMES.en) C.NAME_EN[k] = NAMES.en[k];
@@ -2029,7 +2029,7 @@ window.I18N_TYPES_ES={"Hafenfähre": "transbordador portuario", "Küstendampfer"
     "Ruf sinkt, Gefahr von Sabotage, langsameres Laden": "reputation drops, risk of sabotage, slower loading",
     "Dagegen hilft: ein Kohleneinkäufer, der das Lager voll hält.": "Remedy: a coal buyer who keeps the store full.",
     "Dagegen hilft: ein größeres Kohlelager.": "Remedy: a larger coal store.",
-    "Lager, Einstellungen und Julia": "Store, settings and Julia",
+    "Lager, Einstellungen und {xA}": "Store, settings and {xA}",
     "Kohle nur noch aus dem Lager.": "Coal from the store only.",
     "Im Heimathafen nehmen die Schiffe so viel aus dem eigenen Lager, wie der Bunker fasst, mindestens für die Rundreise.": "In the home port the ships take as much from your own store as their bunkers hold, at least enough for the round trip.",
     "Das Lager lässt sich in drei Stufen ausbauen, bis zur Bunkerstation mit eigenen Schuten.": "The store can be expanded in three stages, up to a bunkering station with own lighters.",
@@ -2302,7 +2302,7 @@ window.I18N_TYPES_ES={"Hafenfähre": "transbordador portuario", "Küstendampfer"
     "Ruf sinkt, Gefahr von Sabotage, langsameres Laden": "la reputación baja, riesgo de sabotaje, carga más lenta",
     "Dagegen hilft: ein Kohleneinkäufer, der das Lager voll hält.": "Remedio: un comprador de carbón que mantenga lleno el depósito.",
     "Dagegen hilft: ein größeres Kohlelager.": "Remedio: un depósito de carbón mayor.",
-    "Lager, Einstellungen und Julia": "Depósito, ajustes y Julia",
+    "Lager, Einstellungen und {xA}": "Depósito, ajustes y {xA}",
     "Kohle nur noch aus dem Lager.": "Carbón solo del depósito.",
     "Im Heimathafen nehmen die Schiffe so viel aus dem eigenen Lager, wie der Bunker fasst, mindestens für die Rundreise.": "En el puerto base los barcos toman de su propio depósito tanto como cabe en sus carboneras, como mínimo para el viaje de ida y vuelta.",
     "Das Lager lässt sich in drei Stufen ausbauen, bis zur Bunkerstation mit eigenen Schuten.": "El depósito se puede ampliar en tres fases, hasta una estación de carboneo con gabarras propias.",

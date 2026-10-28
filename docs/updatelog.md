@@ -1,6 +1,6 @@
 # Updatelog
 
-*Alle Versionen des spielbaren Prototyps · Stand 24. Oktober 2026*
+*Alle Versionen des spielbaren Prototyps · Stand 28. Oktober 2026*
 
 Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spielstände werden beim Update automatisch übernommen.
 
@@ -542,7 +542,7 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Streiktage fehlten in der Pünktlichkeit, ausgefallene Fahrten im Tagespaket zählten nicht mit.
 - Museum: Für betriebsfähige Museumsschiffe ließ sich keine Frist erneuern. Jetzt zeigt das Museum die Frist mit dem Knopf „Frist erneuern“, warnt 30 Tage vorher, und Nostalgiefahrten brauchen eine gültige Frist. Eine Restaurierung bringt eine neue Frist mit, alte Spielstände bekommen für abgelaufene Fristen drei Monate Aufschub.
 
-## v5.1.2 · Kohlelager korrigiert · aktuell
+## v5.1.2 · Kohlelager korrigiert
 
 *Kohle aus dem Lager kostet jetzt nur noch einmal Geld. Wer in v5.1.1 doppelt bezahlt hat, bekommt den Betrag zurück.*
 
@@ -552,9 +552,37 @@ Die neueste Version steht am Ende. Jede Version baut auf der vorherigen auf; Spi
 - Spielstände aus v5.1.1 bekommen beim Laden den doppelt bezahlten Betrag zurück, mit der Meldung „Kohlelager: Geld zurück“.
 - Das Konzept zu v5.1.1 mit allen Simulationsergebnissen liegt jetzt bei (docs/konzept-v5.1.1.md).
 
+## v5.1.3 · Lager, Einstellungen und Julia · aktuell
+
+*Kohle kommt jetzt nur noch aus Ihrem Lager, und das Lager wächst mit der Flotte. Dazu Linien zum Einklappen, aufgeklappte Texte, die offen bleiben, Flaggen im Hauptmenü, zwei Lautstärkeregler, ein eigenes Fenster für Untergänge und eine neue Überraschung.*
+
+**NEU**
+
+- Ausbau des Kohlelagers in drei Stufen (Kontor → Einkauf): Kohlenhof für 10.000 Tonnen, Lager mit Kran und Bahnanschluss für 30.000 Tonnen (Kohle 5 % billiger) und Bunkerstation mit eigenen Schuten für 80.000 Tonnen (Bekohlen neben dem Ein- und Aussteigen). Jede Stufe nimmt mehr Kohle am Tag an und gibt sie beim Bunkern schneller ab. Gebaut wird in zwei bis sechs Monaten, das alte Lager bleibt so lange nutzbar.
+- Gekaufte Kohle kommt mit dem Zulauf der Stufe ins Lager. Was noch nicht da ist, steht im Einkauf als „unterwegs“.
+- Linien zum Einklappen wie die Schiffe in der Flotte: eingeklappt eine Zeile mit Schiffen, Ergebnis des Vormonats, Auslastung und Pünktlichkeit, dazu Warnzeichen für Verlust, viele Verspätungen, Kohle knapp und Linien ohne Schiff. Darüber „Alle auf“ und „Alle zu“.
+- Untergang im eigenen Fenster: Linie, Ort und Ursache, Gerettete und Opfer, Versicherung, Entschädigungen, Restschuld, Ruf, was aus dem Kapitän wird und was der Verlust für die Linie bedeutet (Takt, Verträge in Gefahr). „Zur Linie“ öffnet die Linie.
+- Die Sprache wählen Sie im Hauptmenü über drei Flaggen. In den Einstellungen gibt es zwei Regler für Sound und Musik, auch auf dem iPhone.
+- Kapitän Emil hat ein neues Bild.
+- Eine neue Überraschung.
+
+**GEÄNDERT**
+
+- Kohle kommt nur noch aus dem Lager. Die Schiffe nehmen im Heimathafen so viel, wie der Bunker fasst, mindestens für die Rundreise. Ist das Lager leer, bleiben sie liegen, ihre Abfahrten fallen aus und zählen als unpünktlich. Reicht der Vorrat nur noch für etwa zwei Wochen, hält die Zeit mit einer Warnung an.
+- Linien, die den Heimathafen nicht anlaufen, bekommen die Kohle aus dem Lager gebracht, mit 10 % Fracht. Auswärts kaufen die Schiffe nur noch, was der Bunker für die Rundreise nicht fasst.
+- Lieferverträge und der Kauf am Kai fallen weg, ebenso das Lagergeld je Tonne; jede Stufe hat stattdessen einen festen Unterhalt. Die Hauszeche liefert weiter 20 % billiger.
+- Der Kohleneinkäufer hält das Lager voll und lässt dabei Geld in der Kasse. Knapp bezahlt vergisst er manchmal einen Tag.
+- Eine neue Reederei bekommt die erste Füllung für den Schuppen mit (1.000 Tonnen).
+- Alte Spielstände laden wie gewohnt: Das Lager wird zur passenden Stufe, laufende Lieferverträge enden ohne Kosten, und einen Monat lang hilft noch der Kai aus.
+- Die Simulation prüft Einkäufer, Einkauf von Hand, ein Lager ohne Ausbau und eines, das nie nachgefüllt wird. Ein neuer Test prüft, dass jede Tonne Lagerkohle genau einmal Geld kostet. Alles Nähere im Konzept (docs/konzept-v5.1.3.md).
+
+**BEHOBEN**
+
+- Aufgeklappte Texte (Geschichten der Sonderschiffe, ältere Bauarten, Verpflegung an Bord, „Die wahre Geschichte“, „So funktioniert das Spiel“) klappten bei jeder Meldung wieder zu, und die Ansicht sprang nach oben. Jetzt bleiben sie offen, und die Ansicht bleibt, wo sie war.
+
 ## Als Nächstes geplant
 
-- v5.2 „Entwicklung und Gebäude“.
+- v5.2 „Entwicklung und Gebäude“, mit eigenen Kohlestationen.
 - Danach: Börsengang der eigenen Reederei.
 - Restliche Musik (Ostsee-Winter, Seenot, Salon, Nordlandfahrt, Mittelmeer, Schiffstaufe-Fanfare), sobald Suno Premium da ist.
 - Später: echte App-Version für App Store bzw. Desktop mit Claude Code am PC, wie im Konzept vorgesehen.
