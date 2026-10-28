@@ -597,7 +597,7 @@
       if (old) {
         const n = (s.coalK || []).length;
         s.kaiUntil = s.t + KAI_TAGE;
-        s.log.unshift({ m: s.m, head: "Kohle nur noch aus dem Lager", text: "Ab dem " + dateAfter(s, KAI_TAGE) + " bunkern Ihre Schiffe im Heimathafen nur noch aus Ihrem " + LAGER_LV[lv].name + " (" + fmt(L.cap) + " Tonnen). Ist es leer, bleiben sie liegen. Bis dahin hilft noch der Kai aus. Ein Kohleneinkäufer hält das Lager voll; ausbauen können Sie es unter Kontor → Einkauf." + (n ? " Ihr Kohle-Liefervertrag ist aufgehoben: Ab jetzt läuft alle Kohle über Ihr Lager. Es entstehen keine Kosten." : ""), kind: "own", img: LAGER_LV[lv].img });
+        s.log.unshift({ m: s.m, head: "Kohle nur noch aus dem Lager", text: "Ab dem " + dateAfter(s, KAI_TAGE) + " bunkern Ihre Schiffe im Heimathafen nur noch aus Ihrem Kohlelager (" + LAGER_LV[lv].name + ", " + fmt(L.cap) + " Tonnen). Ist es leer, bleiben sie liegen. Bis dahin hilft noch der Kai aus. Ein Kohleneinkäufer hält das Lager voll; ausbauen können Sie es unter Kontor → Einkauf." + (n ? " Ihr Kohle-Liefervertrag ist aufgehoben: Ab jetzt läuft alle Kohle über Ihr Lager. Es entstehen keine Kosten." : ""), kind: "own", img: LAGER_LV[lv].img });
       }
       s.coalK = [];
     }
@@ -828,7 +828,7 @@
   function offerJulia(s, sh) {
     s.flags.julia = "offered"; s.flags.juliaWait = null;
     s.pending.unshift({ id: "julia", ship: sh.id, day: s.day, head: "Flottenadmiralin Julia kommt an Bord", img: "ev_julia",
-      text: "Am Kai wird es still. Die Hafenarbeiter nehmen die Mützen ab, der Hafenmeister grüßt als Erster: Flottenadmiralin Julia von der Deutsch-Spanischen Marine schreitet die Gangway der „" + sh.name + "“ hinauf. „Ein Schiff mit meinem Namen“, sagt sie, „verdient eine ordentliche Führung. Ich übernehme das Kommando – wenn Sie einverstanden sind.“" });
+      text: "Am Kai wird es still. Die Hafenarbeiter nehmen die Mützen ab, der Hafenmeister grüßt als Erster: Flottenadmiralin Julia von der Deutsch-Spanischen Marine schreitet die Gangway der „" + sh.name + "“ hinauf. „Ein Schiff mit meinem Namen verdient eine ordentliche Führung. Ich übernehme das Kommando – wenn Sie einverstanden sind“, sagt sie." });
   }
   function juliaMonthly(s) {
     if (s.flags.julia) return;
@@ -867,7 +867,7 @@
     for (const l of s.loans.filter(l => l.ship === id)) cash -= l.out;
     s.loans = s.loans.filter(l => l.ship !== id); s.cash += cash; s.ships = s.ships.filter(x => x.id !== id);
     { const c = caps(s).find(x => x.ship === id); if (c) { if (c.bound) s.caps = caps(s).filter(x => x !== c); else c.ship = null; } }
-    if (sh.julia) { juliaLeaves(s, sh); s.log.unshift({ m: s.m, head: "Flottenadmiralin Julia kehrt zur Marine zurück", text: "Ohne „ihr“ Schiff zieht es die Admiralin zurück zur Flotte. Die Mannschaft steht ein letztes Mal stramm.", kind: "own", img: "ev_julia" }); }
+    if (sh.julia) { juliaLeaves(s, sh); s.log.unshift({ m: s.m, head: "Flottenadmiralin Julia kehrt zur Marine zurück", text: "Ohne ihr Schiff zieht es die Admiralin zurück zur Flotte. Die Mannschaft steht ein letztes Mal stramm.", kind: "own", img: "ev_julia" }); }
     if (sh.emil) { s.flags.emil = "retired"; s.log.unshift({ m: s.m, head: "Kapitän Emil geht in den Ruhestand", text: "Ohne „sein“ Schiff will der alte Seebär nicht mehr fahren. Zum Abschied gibt es eine Buddel Rum und ein Zwinkern.", kind: "own", img: "ev_emil" }); }
     s.log.unshift({ m: s.m, head: "„" + sh.name + "“ verkauft", text: "Erlös " + fmt(val) + " Mark" + (cash !== val ? ", nach Tilgung des Kredits bleiben " + fmt(cash) + " Mark." : "."), kind: "own" });
     return null;
@@ -3081,7 +3081,7 @@
     bergelohn: { when: s => seaShips(s).length > 0, w: .5, img: "ev_bergung", f: s => { const sh = pick(s, seaShips(s)), c = Math.round((4000 + rnd(s) * 11000) * s.pidx / 100) * 100; income(s, "Bergelohn", c); up(s, "rep", 2); return ["Bergelohn für die „" + sh.name + "“", "Die Mannschaft hat ein treibendes, verlassenes Frachtschiff in den Hafen geschleppt. Das Seeamt spricht Ihnen " + fmt(c) + " Mark Bergelohn zu."]; } },
     messe: { when: s => s.routes.length > 0, w: .7, img: "ev_expo", f: s => { s.mods.push({ line: "*", key: "demand", seg: "biz", f: 1.3, until: s.m + 4 }); return ["Große Handelsmesse in Hamburg", "Kaufleute aus ganz Europa reisen an. Für einige Monate buchen deutlich mehr Geschäftsreisende."]; } },
     flaschenpost: { when: s => s.flags.emil === "aboard" && s.ships.some(x => x.emil), w: .7, img: "ev_emil", f: s => { const c = Math.round((2000 + rnd(s) * 6000) * s.pidx / 100) * 100; income(s, "Fundsachen", c); return ["Kapitän Emil fischt eine Flaschenpost aus dem Wasser", "Darin: die Schatzkarte eines längst vergessenen Kaperfahrers. Emil schwört, er kenne die Stelle – und tatsächlich: " + fmt(c) + " Mark für die Reedereikasse."]; } },
-    inspektion: { when: s => s.flags.julia === "aboard" && s.ships.some(x => x.julia), w: .5, img: "ev_julia", f: s => { const sh = s.ships.find(x => x.julia); up(s, "rep", 2); sh.cond = Math.min(100, sh.cond + 2); return ["Inspektion durch die Flottenadmiralin", "Flottenadmiralin Julia geht mit weißen Handschuhen über die „" + sh.name + "“. Kein Stäubchen, kein loses Tau. Die Zeitungen schreiben vom saubersten Schiff im Hafen."]; } },
+    inspektion: { when: s => s.flags.julia === "aboard" && s.ships.some(x => x.julia), w: 1.2, img: "ev_julia", f: s => { const sh = s.ships.find(x => x.julia); up(s, "rep", 2); sh.cond = Math.min(100, sh.cond + 2); return ["Inspektion durch die Flottenadmiralin", "Flottenadmiralin Julia geht mit weißen Handschuhen über die „" + sh.name + "“. Kein Stäubchen, kein loses Tau. Die Zeitungen schreiben vom saubersten Schiff im Hafen."]; } },
     seemannsgarn: { when: s => s.flags.emil === "aboard" && s.ships.some(x => x.emil && x.line), w: .6, img: "ev_emil", f: s => { const sh = s.ships.find(x => x.emil); s.mk.brand = clamp(s.mk.brand + 3, 0, 100); if (sh.line) s.mods.push({ route: sh.line, key: "demand", f: 1.1, until: s.m + 2 }); return ["Kapitän Emils Seemannsgarn", "Von Seeschlangen, Klabautermännern und dem Sturm von ’48 – die Fahrgäste lieben seine Geschichten und buchen extra seine Fahrten auf der „" + sh.name + "“."]; } },
     ausflug: { when: s => monthIn(s, [4, 5, 6, 7]), w: .8, img: "line_insel", f: s => { s.mods.push({ line: "*", key: "demand", seg: "bath", f: 1.25, until: s.m + 3 }); return ["Ein Rekordsommer kündigt sich an", "Hitze in den Städten – wer kann, fährt an die See. Die Bäderlinien erwarten Hochbetrieb."]; } },
   });

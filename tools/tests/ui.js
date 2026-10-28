@@ -32,7 +32,11 @@ function altEngine(rev) {
 const saves = {};
 { const E = engine(ROOT); saves.ham = spielen(E, "ham", 30); saves.lon = spielen(E, "lon", 30);
   // v5.1.3: Flottenadmiralin Julia an Bord, dazu ein Spielstand mit dem Untergangsfenster
-  { const s = saves.ham, sh = s.ships.find(x => x.line); E.rename(s, sh.id, "Julia"); while (E.duePending(s)) E.resolve(s, 0); if (!sh.julia) throw new Error("Julia kommt nicht an Bord"); }
+  { const s = saves.ham, sh = s.ships.find(x => x.line); E.rename(s, sh.id, "Julia"); while (E.duePending(s)) E.resolve(s, 0); if (!sh.julia) throw new Error("Julia kommt nicht an Bord");
+    s.cash += 1e6; const w = E.lagerBuild(s); if (w) throw new Error("Lagerausbau: " + w); }
+  { const s = saves.lon; s.lager.t = 0; s.lager.v = 0; if (s.lager.ow) s.lager.ow = { t: 0, v: 0 }; s.staff.ke = -1; // Lager leer: Schiffe liegen ohne Kohle
+    for (let g = 0; g < 6; g++) { E.advanceDay(s); while (E.duePending(s)) E.resolve(s, 0); } s.pauseQ = [];
+    if (!s.ships.some(x => x.v && x.v.cw != null)) throw new Error("kein Schiff liegt ohne Kohle"); }
   { const s = saves.sink = spielen(E, "ham", 30), sh = s.ships.find(x => x.line); s.pending = []; sh.distress = true; sh.distressCause = "Sturm – Leck";
     s.pending.unshift({ id: "seenot", day: s.day, ship: sh.id, head: "Seenot", text: "", img: "ev_seenot" }); E.resolve(s, 0);
     if (!s.pending[0] || s.pending[0].id !== "untergang") throw new Error("kein Untergangsfenster"); } }
@@ -47,6 +51,12 @@ const VIEWS = [["kontor", "uebersicht"], ["kontor", "abfahrten"], ["kontor", "st
 // typische deutsche Wörter, die in EN/ES nicht mehr stehen dürfen
 const DE_WORDS = /\b(Kohlelager|Einstandspreis|Lagergeld|Bekohlung|Betrieb|Sonstiges|Monatsergebnis|Kosten nach Gruppen|Grund|Folgeverspätung|Nebel|Sturm|Streik|Panne|Pendler kommen|Vierteljahr|Auffüllen|Liefervertrag|Zeitkarten|Hauptbuch|Kai\))\b/;
 
+// fehlende Übersetzungen; schon übersetzte Texte (etwa beim zweiten Übersetzen nach dem Neuzeichnen) zählen nicht,
+// gemeldet wird nur, was noch nach Deutsch aussieht
+const MISSING = () => { const C = window.I18N_CORE, D = { en: [window.I18N_EN, C.PORT_EN, C.NAME_EN], es: [window.I18N_ES, C.PORT_ES, C.NAME_ES] }, done = {};
+  for (const l in D) done[l] = new Set(D[l].flatMap(x => Object.values(x || {})));
+  const DE = /[äöüßÄÖÜ]|\b(der|die|das|dem|den|und|oder|nicht|ist|sind|mit|für|auf|im|ein|eine|einen|Sie|Ihr|Ihre|noch|nur|bis|vom|zum|zur|wird|werden)\b/;
+  return [...window.I18_MISS].filter(k => { const l = k.slice(0, 2), t = k.slice(3); return !(done[l] && done[l].has(t)) && DE.test(t); }); };
 (async () => {
   await new Promise(r => server.listen(0, r));
   const url = "http://localhost:" + server.address().port + "/index.html";
@@ -71,7 +81,7 @@ const DE_WORDS = /\b(Kohlelager|Einstandspreis|Lagergeld|Bekohlung|Betrieb|Sonst
       await pg.waitForTimeout(1600); const b = await pg.$('#modal [data-act="choose"][data-i="1"]'); if (b) await b.click().catch(() => {}); await pg.waitForTimeout(300);
       const ok = await pg.evaluate(() => !document.querySelector("#modal .sinksheet") && !!document.querySelector('main details.lined[open]'));
       if (!ok) errs.push("„Zur Linie“ öffnet die Linie nicht");
-      if (lang !== "de") for (const k of await pg.evaluate(() => [...window.I18_MISS])) MISS.add(k);
+      if (lang !== "de") for (const k of await pg.evaluate(MISSING)) MISS.add(k);
       console.log((errs.length ? "FEHLER " : "ok     ") + vw + " " + lang + " " + key + (errs.length ? ": " + [...new Set(errs)].slice(0, 5).join(" / ") : ""));
       fehler += errs.length; await ctx.close(); continue;
     }
@@ -96,7 +106,7 @@ const DE_WORDS = /\b(Kohlelager|Einstandspreis|Lagergeld|Bekohlung|Betrieb|Sonst
       if (lang !== "de") { const txt = await pg.evaluate(() => document.body.innerText), m = txt.split("\n").filter(l => /\b(Lautstärke|Musik|Einstellungen)\b/.test(l)); if (m.length) { reste += m.length; console.log("  DE-Rest", lang, vw, "Einstellungen →", m.slice(0, 4).join(" | ")); } }
       if (BILDER) await pg.screenshot({ path: path.join(BILDER, [key, lang, vw, "einstellungen"].join("_") + ".png"), fullPage: true });
     }
-    if (lang !== "de") for (const k of await pg.evaluate(() => [...window.I18_MISS])) MISS.add(k);
+    if (lang !== "de") for (const k of await pg.evaluate(MISSING)) MISS.add(k);
     if (key === "alt") { const ok = await pg.evaluate(() => { const s = JSON.parse(localStorage.getItem("flaggschiff-proto-1880") || "null"); return !!(s && s.lager); }); if (!ok) errs.push("alter Spielstand: kein Kohlelager nach dem Laden"); }
     console.log((errs.length ? "FEHLER " : "ok     ") + vw + " " + lang + " " + key + (errs.length ? ": " + [...new Set(errs)].slice(0, 5).join(" / ") : ""));
     fehler += errs.length; await ctx.close();

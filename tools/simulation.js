@@ -11,11 +11,12 @@
                     Kurzstrecke (Fähre, Küste) und Langstrecke (Atlantik, Südamerika) liegen in der Rendite auf den Flottenwert
                     (gut geführt, im Mittel aus einem und zwei Schiffen je Linie) höchstens ein Viertel auseinander
      gegen          Pufferzeit, Reserveschiff, Volldampf zum Aufholen, Maschine, Wartung: keines ist überall das beste
-     lager          (seit v5.1.1) Kohlelager immer auffüllen, nur bei Kohle unter 95 % auffüllen, kein Lager (immer am Kai): keine ist überall die beste
+     lager          (seit v5.1.3) Kohle nur aus dem Lager: von Hand oder mit Kohleneinkäufer füllen die Bots ihr Lager rechtzeitig (kaum Liegetage),
+                    der Ausbau lohnt sich ab mittlerer Flottengröße (Gewinn nach Ausbaukosten gegen „nie ausbauen“), und eine Reederei
+                    ohne Einkäufer, die nie nachkauft, bleibt liegen (kaum Abfahrten, Verlust)
      serie          Serienbestellung gegen Einzelbestellungen (zur Information)
      fahrt          Sparfahrt, Normal, Volldampf, Regel des Maschineninspektors: keine Stufe ist überall die beste
      kueche         einfach, ordentlich, fein, eigene Küche, Caterer: keine Stufe ist überall die beste
-     vertrag        Kohle-Lieferverträge lohnen sich nicht immer
      boerse         „nur Aktien“ bringt im Schnitt weniger als eine gut geführte Reederei (Rendite auf das eingesetzte Kapital)
      hauszeche      über 50 % einer Zeche lohnt sich nur für große Flotten (verglichen mit demselben Geld in einem breiten Depot)
      prokurist      knapp bezahlt liegt er unter dem Markt, sehr gut leicht darüber (verglichen mit einem breiten Depot ohne Prokurist)
@@ -51,19 +52,15 @@ const caterer = (k, q) => ({
   start: (E, s) => { q(E, s); E.signCaterer(s, k, 3); },
   monat: (E, s) => { const K = E.kueche(s); if (!E.catOn(s, K.cat) && !(K.notUntil >= s.m) && !s.pending.some(p => p.id === "catverl")) E.signCaterer(s, k, 3); },
 });
-// Lieferverträge gelten seit v5.0 für einen Hafen: die Bots nehmen den, in dem ihre Schiffe am meisten bunkern
-const vertragsHafen = (E, s) => E.coalPorts(s).map(p => [p, E.coalOffer(s, 1, 1, p).qty]).sort((a, b) => b[1] - a[1])[0][0];
-const vertragen = (E, s, years, share) => { const p = vertragsHafen(E, s); if (E.coalOffer(s, years, share, p).ok) E.signCoal(s, years, share, false, p); };
-const vertrag = (years, share) => ({ monat: (E, s) => { if (!E.coalActive(s).length) vertragen(E, s, years, share); } });
 const linien = f => (E, s) => { for (const r of s.routes) f(E, s, r); };
 // Börse: Kapital, das die Bots anlegen (Mark von 1880)
 const KAPITAL = 1e6;
 const breit = (E, s, betrag) => { const ks = E.BO_ORDER.filter(k => E.boListed(s, k)); for (const k of ks) E.boBuy(s, k, E.boFor(s, k, betrag / ks.length)); };
 const boStart = f => (E, s) => { s.bo.on = true; s.cash += KAPITAL * 1.3; f(E, s); };
-const ALLE = ["schwierigkeit", "fuehrung", "gegen", "lager", "serie", "fahrt", "kueche", "vertrag", "boerse", "hauszeche", "prokurist", "start", "zweites", "knapp"];
+const ALLE = ["schwierigkeit", "fuehrung", "gegen", "lager", "serie", "fahrt", "kueche", "boerse", "hauszeche", "prokurist", "start", "zweites", "knapp"];
 const EXTERN = { zweites: "zweites.js", knapp: "kohle.js" }; // Prüfungen, die ein eigenes Testskript laufen lassen
 const STRAT = {
-  basis: { gruppe: ALLE.filter(g => g !== "start" && !EXTERN[g]), name: "nichts anfassen (Normal, Kohlelager immer auffüllen)" },
+  basis: { gruppe: ALLE.filter(g => g !== "start" && !EXTERN[g]), name: "nichts anfassen (Normal, Kohlelager von Hand füllen, bei Bedarf ausbauen)" },
   // Schwierigkeitsgrad und Vergleich mit v4.6
   leicht: { gruppe: ["schwierigkeit"], name: "Leicht, sonst nichts anfassen", diff: "leicht" },
   schwer: { gruppe: ["schwierigkeit"], name: "Schwer, sonst nichts anfassen", diff: "schwer" },
@@ -71,8 +68,8 @@ const STRAT = {
   // Führung
   gut: { gruppe: ["fuehrung"], name: "gut geführt: Puffer 10 %, Maschine gut", start: (E, s) => { E.setStaff(s, "maschine", 2); for (const r of s.routes) E.setBuffer(s, r.id, 2); } },
   gut1: { gruppe: ["fuehrung"], name: "gut geführt mit einem Schiff je Linie", per: 1, start: (E, s) => { E.setStaff(s, "maschine", 2); for (const r of s.routes) E.setBuffer(s, r.id, 2); } },
-  schlecht: { gruppe: ["fuehrung"], name: "schlecht getaktet: gemischt schnelle Schiffe, kein Puffer, nur das Nötige, Maschine knapp, Wartung sparsam", mix: true, wartung: 0,
-    lager: "kein", start: (E, s) => { E.setStaff(s, "maschine", 0); if (E.setBunkRule) E.setBunkRule(s, "noetig"); } },
+  schlecht: { gruppe: ["fuehrung"], name: "schlecht getaktet: gemischt schnelle Schiffe, kein Puffer, Lager nie ausgebaut, Maschine knapp, Wartung sparsam", mix: true, wartung: 0,
+    ausbau: false, start: (E, s) => { E.setStaff(s, "maschine", 0); } },
   // Gegenmittel gegen Verspätungen
   puffer1: { gruppe: ["gegen"], name: "Pufferzeit klein (5 % des Umlaufs)", start: linien((E, s, r) => E.setBuffer(s, r.id, 1)) },
   puffer2: { gruppe: ["gegen"], name: "Pufferzeit mittel (10 %)", start: linien((E, s, r) => E.setBuffer(s, r.id, 2)) },
@@ -82,9 +79,11 @@ const STRAT = {
   maschine2: { gruppe: ["gegen"], name: "Maschine gut bezahlt", start: (E, s) => E.setStaff(s, "maschine", 2) },
   maschine3: { gruppe: ["gegen"], name: "Maschine sehr gut bezahlt", start: (E, s) => E.setStaff(s, "maschine", 3) },
   wartung2: { gruppe: ["gegen"], name: "Wartung gründlich", wartung: 2 },
-  // Kohlelager (v5.1.1, Standard: auffüllen, sobald es halb leer ist)
-  lager95: { gruppe: ["lager"], name: "Kohlelager nur bei Kohle unter 95 % auffüllen", lager: "billig" },
-  lagerKein: { gruppe: ["lager"], name: "kein Kohlelager, immer am Kai bunkern", lager: "kein" },
+  // Kohlelager (v5.1.3: Kohle nur noch aus dem Lager; Standard: von Hand auf 60 Tage füllen, ausbauen, wenn es zu klein wird)
+  lagerKE: { gruppe: ["lager"], name: "Kohleneinkäufer (Tarif), bei Bedarf ausbauen", lager: "einkauf", start: (E, s) => E.setStaff(s, "ke", 1) },
+  lagerKE0: { gruppe: ["lager"], name: "Kohleneinkäufer knapp bezahlt, bei Bedarf ausbauen", lager: "einkauf", start: (E, s) => E.setStaff(s, "ke", 0) },
+  lagerFix: { gruppe: ["lager"], name: "von Hand füllen, nie ausbauen", ausbau: false },
+  lagerNie: { gruppe: ["lager"], name: "kein Einkäufer, kauft nie nach (nur die Startkohle)", lager: "kein", ausbau: false },
   // Werft
   serie: { gruppe: ["serie"], name: "Schiffe einer Linie als Serie bestellen", serie: true },
   // Fahrstufe (v4.5)
@@ -100,12 +99,6 @@ const STRAT = {
   eigen: { gruppe: ["kueche"], name: "eigene Küche (Proviantmeister Tarif), ordentlich", start: (E, s) => { E.setStaff(s, "pm", 1); E.setEigen(s, true); } },
   solide: Object.assign({ gruppe: ["kueche"], name: "solider Caterer, 1. Klasse fein, sonst ordentlich" }, caterer("solide", kq(2, 1, 1))),
   billig: Object.assign({ gruppe: ["kueche"], name: "Billig-Caterer, einfach in allen Klassen" }, caterer("billig", kq(0, 0, 0))),
-  // Lieferverträge (v4.5, seit v5.0 je Hafen)
-  v1: Object.assign({ gruppe: ["vertrag"], name: "immer 1 Jahr, 50 % des Verbrauchs" }, vertrag(1, .5)),
-  v5: Object.assign({ gruppe: ["vertrag"], name: "immer 5 Jahre, 100 % des Verbrauchs" }, vertrag(5, 1)),
-  guenstig: { gruppe: ["vertrag"], name: "5 Jahre, 100 %, nur wenn Kohle unter 90 % kostet", monat: (E, s) => { if (!E.coalActive(s).length && s.coal < .9) vertragen(E, s, 5, 1); } },
-  einkauf: { gruppe: ["vertrag"], name: "Kohleneinkäufer (gut): 3 Jahre 100 %, verlängert unter 105 %",
-    start: (E, s) => { E.setStaff(s, "ke", 2); E.setStaff(s, "keRenew", 105); }, monat: (E, s) => { if (!E.coalActive(s).length && s.coal < 1.05) vertragen(E, s, 3, 1); } },
   // Börse (v4.6)
   aktien: { gruppe: ["boerse", "hauszeche", "prokurist"], name: "1 Mio. Mark breit in Aktien, halten", kapital: KAPITAL, start: boStart((E, s) => breit(E, s, KAPITAL)) },
   hz: { gruppe: ["hauszeche"], name: "Hauszeche: 51 % einer Zeche", kapital: KAPITAL, start: boStart((E, s) => { const c = s.bo.co.zeche1; E.boBuy(s, "zeche1", Math.ceil(c.n * .51)); }) },
@@ -115,17 +108,29 @@ const STRAT = {
 };
 
 // ---------- ein Monat, Tag für Tag ----------
-// Kohlelager (v5.1.1): Ein aufmerksamer Spieler hält Kohle für ein bis zwei Monate im Lager: Fällt der Vorrat unter 30 Tage,
-// kauft er auf 60 Tage nach (höchstens bis das Lager voll ist, und nur mit der Hälfte der Kasse). „billig“: nur bei Kohle unter 95 %, „kein“: nie.
+// Kohlelager (seit v5.1.1, v5.1.3 Kohle nur noch aus dem Lager): Ein aufmerksamer Spieler hält Kohle für ein bis zwei Monate:
+// Fällt der Vorrat (mit der Kohle, die schon unterwegs ist) unter 30 Tage, kauft er auf 60 Tage nach, höchstens bis das Lager voll ist
+// und nur mit der Hälfte der Kasse. „einkauf“: das macht der Kohleneinkäufer, „kein“: niemand kauft nach.
+const proTagLager = s => { const L = s.lager, u = (L.use || []).slice(-3), c = s.cur || {}, d = u.length * 30.4 + (c.days || 0); return d > 0 ? (u.reduce((a, b) => a + b, 0) + (c.lagT || 0) + (c.kaiT || 0)) / d : 0; };
 function lagerFuellen(E, s, art) {
-  if (!E.lagerBuy || !s.lager || art === "kein" || (art === "billig" && s.coal >= .95)) return;
-  const L = s.lager, u = (L.use || []).slice(-3), c = s.cur || {}, d = u.length * 30.4 + (c.days || 0);
-  const proTag = d > 0 ? (u.reduce((a, b) => a + b, 0) + (c.lagT || 0) + (c.kaiT || 0)) / d : 0;
-  const ziel = proTag > 0 ? Math.min(L.cap, 60 * proTag) : Math.min(L.cap, 50);
-  if (L.t >= (proTag > 0 ? 30 * proTag : 20)) return;
-  const t = Math.floor(ziel - L.t); if (t >= 10 && E.lagerQuote(s, t).cost < s.cash / 2) E.lagerBuy(s, t);
+  if (!E.lagerBuy || !s.lager || art === "kein" || art === "einkauf") return;
+  const L = s.lager, proTag = proTagLager(s), ow = E.lagerOw ? E.lagerOw(s).t : 0, cap = E.lagerLv ? E.lagerLv(s).cap : L.cap;
+  const ziel = proTag > 0 ? Math.min(cap, 60 * proTag) : Math.min(cap, 50);
+  if (L.t + ow >= (proTag > 0 ? 30 * proTag : 20)) return;
+  const t = Math.floor(ziel - L.t - ow); if (t >= 10 && E.lagerQuote(s, t).cost < s.cash / 2) E.lagerBuy(s, t);
 }
-function monat(E, s, lager, wahl) {
+// Ausbau (v5.1.3): sobald das Lager weniger als 45 Tage fasst, der Zulauf am Tag knapp wird oder eine Bunkerfüllung
+// des größten Schiffs nicht mehr hineinpasst – und nur, wenn der Ausbau höchstens ein Viertel der Kasse kostet.
+function lagerAusbau(E, s) {
+  if (!E.lagerBuild || !s.lager || s.lager.bau) return 0;
+  const n = E.lagerNext(s); if (!n) return 0;
+  const lv = E.lagerLv(s), proTag = proTagLager(s), bunker = Math.max(0, ...s.ships.map(sh => { const t = E.TYPES[sh.type]; return t.coal > 0 && !t.motor && !t.oil ? E.coalCap(sh) : 0; }));
+  if (!(lv.cap < 45 * proTag || lv.zu < 1.5 * proTag || bunker > lv.cap)) return 0;
+  if (n.price > s.cash / 4 || E.lagerBuild(s)) return 0;
+  return n.price;
+}
+function monat(E, s, lager, wahl, ausbau) {
+  if (ausbau && s.lager) ausbau.summe += lagerAusbau(E, s);
   for (let g = 0; g < 400; g++) {
     lagerFuellen(E, s, lager || "voll");
     const d = E.advanceDay(s);
@@ -192,6 +197,7 @@ function spielen(E, li, key, seed, jahre, mitSchwelle) {
   let auf = false, kohleSum = 0, kohleN = 0, flotteSum = 0, kapital = 0, summe = 0, tief = 0;
   const sw = { spar: STUFEN.map(() => 0), voll: STUFEN.map(() => 0), n: 0 };
   const mon = Array(12).fill(0), monN = Array(12).fill(0), monL = Array(12).fill(0), pk = { s: 0, n: 0 }, fahrten = { dep: 0, arr: 0, spaet: 0, verspSum: 0, entsch: 0 }, einn = { Fahrkarten: 0, Fracht: 0 };
+  const lager = { summe: 0, trocken: 0, schiffTage: 0, depSpaet: 0, verbrauch: 0, stufe: 0 }; // Ausbaukosten, Liegetage ohne Kohle, Abfahrten ab dem dritten Jahr
   while (!s.over && E.yearOf(s) < endY) {
     if (s.m >= startM) {
       if (!auf) {
@@ -212,15 +218,16 @@ function spielen(E, li, key, seed, jahre, mitSchwelle) {
       }
       if (st.monat) st.monat(E, s);
     }
-    const rep = monat(E, s, auf ? st.lager : "kein", entscheiden);
+    const rep = monat(E, s, auf ? st.lager : "kein", entscheiden, auf && st.ausbau !== false ? lager : null);
     buchen(); geld(3e5);
+    if (auf && s.lager) { const dm = s.lager.dryM || []; lager.trocken += dm.length ? dm[dm.length - 1] : 0; lager.schiffTage += 30.4 * s.ships.filter(x => x.ready <= s.m && x.line).length; lager.verbrauch += ((s.lager.use || []).slice(-1)[0] || 0); lager.stufe = s.lager.lv | 0; }
     if (s.m > startM && rep) {
       const mo = E.cal(rep.m).mo; mon[mo] += rep.profit; monN[mo]++; if (rep.profit < 0) monL[mo]++; summe += rep.profit; tief = Math.min(tief, summe);
       einn.Fahrkarten += rep.tickets || 0; einn.Fracht += rep.freight || 0; for (const k in rep.extra || {}) einn[k] = (einn[k] || 0) + rep.extra[k];
       kohleSum += s.coal; kohleN++; flotteSum += E.fleetValue(s);
       for (const r of s.routes) { const x = r.last; if (!x || !s.ships.some(sh => sh.line === r.id)) continue;
         if (x.pk != null) { pk.s += x.pk; pk.n++; }
-        fahrten.dep += x.dep || 0; fahrten.arr += x.arr || 0; fahrten.spaet += x.lateA || 0; fahrten.verspSum += (x.avgLate || 0) * (x.arr || 0); fahrten.entsch += x.comp || 0; }
+        fahrten.dep += x.dep || 0; if (s.m - startM >= 24) lager.depSpaet += x.dep || 0; fahrten.arr += x.arr || 0; fahrten.spaet += x.lateA || 0; fahrten.verspSum += (x.avgLate || 0) * (x.arr || 0); fahrten.entsch += x.comp || 0; }
       if (mitSchwelle && (s.m - startM) % 23 === 6) schwelle(E, s, sw);
     }
   }
@@ -233,7 +240,8 @@ function spielen(E, li, key, seed, jahre, mitSchwelle) {
     kohle: cost(k => k === "Kohle" || k.startsWith("Bekohlung") || k === "Kohle-Mindestabnahme" || k === "Kohle aus dem Lager" || k === "Lagergeld" || k === "Rücknahme Kohle" || k === "Kohlelager" || k === "Kohlefracht"), verpf: cost(k => k === "Verpflegung"), entsch: cost(k => k === "Entschädigungen"), over: !!s.over,
     jahrGewinn: ys.map(y => s.years[y].profit), mon, monN, monL, tief, pk: pk.n ? pk.s / pk.n : null, fahrten, einn, preisEnde: s.routes.map(r => [0, 1, 2].map(c => E.pricePct(s, r, c))),
     costs: ys.reduce((a, y) => { const c = s.years[y].costs || {}; for (const k in c) a[k] = (a[k] || 0) + c[k]; return a; }, {}),
-    kohleIdx: kohleN ? kohleSum / kohleN : null, sw: mitSchwelle ? sw : null };
+    kohleIdx: kohleN ? kohleSum / kohleN : null, sw: mitSchwelle ? sw : null,
+    lager: Object.assign(lager, { rest: s.lager ? s.lager.inv || 0 : 0, monate: kohleN }) };
 }
 
 // ---------- Start als Fährreederei (v5.1) ----------
@@ -259,7 +267,7 @@ function spielenStart(E, job) {
   { const R = rng(seed * 7919 + 17); Math.random = R; }
   const s = E.newGame(seed, "Simulation", { home, diff, start: true });
   const opts = E.startOptions(home), stufen = AUFSTIEG[home], ms = {}, endY = 1880 + jahre;
-  let st = 0, flotteSum = 0, flotteN = 0;
+  let st = 0, flotteSum = 0, flotteN = 0; const ausbauStart = { summe: 0 };
   const reserve = () => Math.max(40000 * s.pidx, s.hist.slice(-6).reduce((a, h) => a + (h.cost || 0), 0)); // gut gespielt: ein halbes Jahr Kosten in der Kasse
   const hat = (a, b) => s.routes.find(r => !r.cruise && ((r.a === a && r.b === b) || (r.a === b && r.b === a)));
   // Raten nur, wenn sie aus dem Ergebnis der letzten 12 Monate bezahlt werden können (höchstens 60 % davon für alle Kredite außer dem Gründungskredit)
@@ -296,7 +304,7 @@ function spielenStart(E, job) {
       if (o) neueLinie(o.a, o.b, o.rec, ["bar", "bank"]);
       else if (voll) { const sh = s.ships.find(x => x.line === voll.id); if (sh) kaufen(sh.type, voll.id, ["bar", "bank"]); }
     }
-    const rep = monat(E, s, "voll", entscheidenStart);
+    const rep = monat(E, s, "voll", entscheidenStart, ausbauStart);
     buchen(); flotteSum += E.fleetValue(s); flotteN++;
     const y = E.yearOf(s); if (!schiffe[y]) schiffe[y] = s.ships.length;
   }
@@ -402,9 +410,9 @@ function fertig() {
     console.log("\n  " + (ueberall ? "ACHTUNG: „" + STRAT[s[0]].name + "“ ist überall die beste." : "Ziel erreicht: keine Einstellung ist auf allen Linienarten die beste (" + [...new Set(s)].map(k => STRAT[k].name).join(", ") + ")."));
     return !ueberall;
   };
-  const titel = { schwierigkeit: "1. Schwierigkeitsgrad: Abstand der Stufen und Vergleich mit v5.0.1", fuehrung: "2. Gut geführt und schlecht getaktet", gegen: "3. Gegenmittel gegen Verspätungen", lager: "4. Kohlelager", serie: "5. Serienbestellung",
-    fahrt: "6. Fahrstufe", kueche: "7. Verpflegung", vertrag: "8. Kohle-Lieferverträge", boerse: "9. Börse: nur Aktien gegen eine gut geführte Reederei", hauszeche: "10. Hauszeche gegen breites Depot", prokurist: "11. Prokurist gegen breites Depot",
-    start: "12. Start als Fährreederei: Zeitziele und Fährgeschäft", zweites: "13. Zweites Schiff je Linie", knapp: "14. Kohle knapp auf Hamburg–Amsterdam" };
+  const titel = { schwierigkeit: "1. Schwierigkeitsgrad: Abstand der Stufen und Vergleich mit v5.0.1", fuehrung: "2. Gut geführt und schlecht getaktet", gegen: "3. Gegenmittel gegen Verspätungen", lager: "4. Kohlelager: rechtzeitig füllen, ausbauen, liegen bleiben", serie: "5. Serienbestellung",
+    fahrt: "6. Fahrstufe", kueche: "7. Verpflegung", boerse: "8. Börse: nur Aktien gegen eine gut geführte Reederei", hauszeche: "9. Hauszeche gegen breites Depot", prokurist: "10. Prokurist gegen breites Depot",
+    start: "11. Start als Fährreederei: Zeitziele und Fährgeschäft", zweites: "12. Zweites Schiff je Linie", knapp: "13. Kohle knapp auf Hamburg–Amsterdam" };
   for (const g of ALLE.filter(g => NUR.includes(g))) {
     console.log("=== " + titel[g] + " ===");
     if (["boerse", "hauszeche", "prokurist"].includes(g)) { boAuswertung(g); continue; }
@@ -423,19 +431,46 @@ function fertig() {
     }
     if (g === "fuehrung") fuehrung();
     if (g === "fahrt") schwellen();
-    if (["fahrt", "kueche", "gegen", "lager"].includes(g)) keinerUeberall(g, NUR_L);
-    if (g === "vertrag") {
-      const v = NUR_L.flatMap(li => (out.gruppen[g][li] || []).filter(r => r.k !== "basis"));
-      const plus = v.filter(r => r.delta > 0).length;
-      console.log("\n  " + (plus && plus < v.length ? `Ziel erreicht: Verträge lohnen sich in ${plus} von ${v.length} Fällen, sonst nicht.` : plus ? "ACHTUNG: Verträge lohnen sich immer." : "ACHTUNG: Verträge lohnen sich nie."));
-      const einzel = NUR_L.flatMap(li => sk.filter(k => k !== "basis").map(k => { const rs = by(li, k), b = by(li, "basis"); return rs.map((r, i) => b[i] ? r.profit - b[i].profit : 0); })).flat();
-      if (einzel.length) console.log(`  In einzelnen Läufen: ${einzel.filter(x => x > 0).length} von ${einzel.length} Läufen mit Vertrag besser als ohne.`);
-    }
+    if (["fahrt", "kueche", "gegen"].includes(g)) keinerUeberall(g, NUR_L);
+    if (g === "lager") lagerAuswertung(sk);
     if (g === "serie") {
       const d = NUR_L.filter(li => LINIEN[li].per > 1).map(li => (out.gruppen[g][li] || []).find(r => r.k === "serie")).filter(Boolean), klar = d.filter(r => Math.abs(r.delta) > 2 * r.se);
       console.log(`\n  Linienarten mit mehreren Schiffen: Serie besser in ${d.filter(r => r.delta > 0).length} von ${d.length}, deutlich (über zwei Standardfehler) in ${klar.length}. Der Rabatt spart etwas, sonst liefert die Werft wie bei Einzelbestellungen nacheinander.`);
     }
     console.log("");
+  }
+  // 4. Kohlelager (v5.1.3): Liegetage ohne Kohle, Gewinn nach Ausbaukosten (Bau minus Restwert), Abfahrten ab dem dritten Jahr
+  function lagerAuswertung(sk) {
+    const L = {}, netto = r => (r.lager.summe - r.lager.rest) / r.jahre, nach = r => r.profit / r.jahre - netto(r), trocken = r => r.lager.schiffTage ? r.lager.trocken / r.lager.schiffTage : 0;
+    console.log("\n  Liegetage ohne Kohle (Anteil an allen Schiffstagen), Ausbau (Bau minus Restwert je Jahr), Gewinn nach Ausbau, Endstufe des Lagers:");
+    for (const li of NUR_L) {
+      const b = by(li, "basis"); if (!b.length) continue;
+      L[li] = { verbrauch: mean(b.map(r => r.lager.verbrauch / Math.max(1, r.lager.monate))) };
+      console.log(`\n  ${kurz(li)} (Verbrauch rund ${fmt(L[li].verbrauch)} t im Monat)`);
+      for (const k of sk) {
+        const rs = by(li, k); if (!rs.length) continue;
+        const d = rs.map((r, i) => b[i] ? nach(r) - nach(b[i]) : 0), stufe = mean(rs.map(r => r.lager.stufe)), dep = mean(rs.map(r => r.lager.depSpaet)), dep0 = mean(b.map(r => r.lager.depSpaet));
+        L[li][k] = { trocken: mean(rs.map(trocken)), nach: mean(rs.map(nach)), delta: mean(d), se: sd(d) / Math.sqrt(d.length), dep: dep0 ? dep / dep0 : 0, minus: rs.filter(r => r.profit < 0).length, n: rs.length, netto: mean(rs.map(netto)), stufe };
+        const x = L[li][k];
+        console.log(`    ${STRAT[k].name.padEnd(56)} liegt ${(x.trocken * 100).toFixed(2).padStart(6)} %  Ausbau ${fmt(x.netto).padStart(8)}/Jahr  Gewinn nach Ausbau ${fmt(x.nach).padStart(10)}  ${k === "basis" ? "" : "Δ " + ((x.delta >= 0 ? "+" : "") + fmt(x.delta) + " ± " + fmt(x.se)).padStart(18)}  Stufe ${stufe.toFixed(1)}${k === "lagerNie" ? "  Abfahrten ab Jahr 3: " + pc(x.dep - 1) + " gegen nichts anfassen, Verlust in " + x.minus + " von " + x.n + " Läufen" : ""}`);
+      }
+    }
+    out.gruppen.lager_pruefung = L;
+    const lis = Object.keys(L);
+    // rechtzeitig: von Hand und mit Einkäufer (Tarif) höchstens 1 % der Schiffstage ohne Kohle
+    const zuSpaet = lis.flatMap(li => ["basis", "lagerKE"].filter(k => L[li][k] && L[li][k].trocken > .01).map(k => kurz(li) + " (" + STRAT[k].name + ")"));
+    console.log("\n  " + (zuSpaet.length ? "ACHTUNG: Lager zu spät gefüllt in " + zuSpaet.join(", ") + "." : "Ziel erreicht: Von Hand und mit Einkäufer liegen die Schiffe höchstens 1 % der Tage ohne Kohle."));
+    // Ausbau: lohnt sich (Δ von „nichts anfassen“ gegen „nie ausbauen“ über zwei Standardfehler) erst ab mittlerem Verbrauch
+    const aus = lis.filter(li => L[li].lagerFix).map(li => { const f = L[li].lagerFix; return { li, v: L[li].verbrauch, d: -f.delta, se: f.se }; }).sort((a, b) => a.v - b.v);
+    if (aus.length) {
+      for (const a of aus) console.log(`  Ausbau bei Bedarf gegen nie ausbauen, ${kurz(a.li).padEnd(22)} ${fmt(a.v).padStart(7)} t im Monat: ${(a.d >= 0 ? "+" : "") + fmt(a.d)} ± ${fmt(a.se)} im Jahr${a.d > 2 * a.se ? " → lohnt sich" : a.d < -2 * a.se ? " → lohnt sich nicht" : " → kein klarer Unterschied"}`);
+      const lohnt = aus.filter(a => a.d > 2 * a.se), nicht = aus.filter(a => !(a.d > 2 * a.se)), grenzeOk = !lohnt.length || !nicht.length || Math.min(...lohnt.map(a => a.v)) >= Math.min(...nicht.map(a => a.v));
+      const ok = lohnt.length > 0 && nicht.length > 0 && nicht.some(a => a.v === aus[0].v) && grenzeOk;
+      console.log("  " + (ok ? `Ziel erreicht: Der Ausbau lohnt sich ab etwa ${fmt(Math.min(...lohnt.map(a => a.v)))} t Kohle im Monat, kleine Flotten brauchen ihn nicht.` : lohnt.length ? "ACHTUNG: Der Ausbau lohnt sich nicht erst ab mittlerer Flottengröße." : "ACHTUNG: Der Ausbau lohnt sich nirgends."));
+    }
+    // liegen bleiben: wer nie nachkauft, hat ab dem dritten Jahr kaum Abfahrten (unter 5 % von „nichts anfassen“) und macht Verlust
+    const nie = lis.filter(li => L[li].lagerNie), faehrt = nie.filter(li => L[li].lagerNie.dep > .05 || L[li].lagerNie.minus < L[li].lagerNie.n);
+    if (nie.length) console.log("  " + (faehrt.length ? "ACHTUNG: Ohne Nachkauf fahren die Schiffe weiter in " + faehrt.map(kurz).join(", ") + "." : "Ziel erreicht: Ohne Einkäufer und ohne Nachkauf bleibt die Reederei liegen – kaum Abfahrten, Verlust in jedem Lauf."));
   }
   // 1. Schwierigkeitsgrad: je Linienart der Mittelwert, zusammengezählt. Seit v5.1 zählt der Abstand der Stufen zu Leicht (wie in v5.0.1),
   // der Vergleich mit v5.0.1 (Normal) steht zur Information daneben: Die neuen Preise und Fixkosten der Hochsee verschieben die Gewinne bewusst.
