@@ -15,7 +15,7 @@ for (const [a, b] of linien) for (const ty of E.TYPE_ORDER) {
     const r = s.routes[s.routes.length - 1]; why = E.canServe(s, ty, a, b, false, []); if (why) break;
     for (const sh of s.ships) E.setLine(s, sh.id, null);
     why = E.buyNew(s, ty, "bar", null, false, { n: 1, line: r.id }); if (why) break;
-    E.lagerBuy(s, 1e9);
+    E.lagerBuy(s, 1e9); E.setStaff(s, "ke", 1); // seit v5.1.3 nur Kohle aus dem Lager: der Einkäufer hält es voll
     let k = 0, t0 = null;
     for (let g = 0; g < 4000; g++) {
       if (E.duePending(s)) { if (s.pending[0].id === "kohleknapp") k++; E.resolve(s, 0); }
